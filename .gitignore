@@ -18,6 +18,12 @@ npm-debug.log*
 dist/
 build/
 
+# generated runtime folders
+uploads/
+reports/
+temp-gemini-vision/
+temp-ocr/
+
 # OS files
 .DS_Store
 Thumbs.db
