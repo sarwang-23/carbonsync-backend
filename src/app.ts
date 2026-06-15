@@ -1638,7 +1638,7 @@ function parseJsonFromModelResponse(text: string) {
 async function convertPdfFirstPageToImage(filePath: string) {
   if (typeof convert !== "function") {
     throw new Error(
-      "PDF image conversion is disabled on Render Linux because pdf-poppler is not supported."
+      "Gemini PDF Vision fallback skipped on Render Linux because pdf-poppler is not supported. Continuing without PDF-to-image conversion."
     );
   }
 
@@ -1680,12 +1680,6 @@ async function extractInvoiceWithGeminiVision(filePath: string, mimeType?: strin
   let imageMimeType = mimeType || "image/png";
 
   if (String(mimeType || "").toLowerCase().includes("pdf")) {
-    if (typeof convert !== "function") {
-      throw new Error(
-        "Gemini PDF Vision fallback skipped on Render Linux because pdf-poppler is not supported."
-      );
-    }
-
     imagePath = await convertPdfFirstPageToImage(filePath);
     imageMimeType = "image/png";
   }
@@ -2115,9 +2109,10 @@ async function extractTextWithOCR(filePath: string, mimetype = "") {
 
   if (!isSupportedImageMime(mimetype)) {
     if (typeof convert !== "function") {
-      throw new Error(
-        "OCR PDF image conversion skipped on Render Linux because pdf-poppler is not supported. Upload a text-based PDF or image, or use Affinda/Gemini fallback."
+      console.warn(
+        "OCR PDF image conversion skipped on Render Linux because pdf-poppler is not supported. Continuing with Affinda/Gemini/deterministic fallbacks."
       );
+      return "";
     }
 
     const outputPrefix = `ocr-${Date.now()}`;
@@ -3846,7 +3841,12 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
     if (!extractedText || extractedText.trim().length < 20) {
       console.log("PDF text not found. Running OCR fallback...");
 
-      extractedText = await extractTextWithOCR(req.file.path, req.file.mimetype);
+      try {
+        extractedText = await extractTextWithOCR(req.file.path, req.file.mimetype);
+      } catch (ocrError: any) {
+        console.error("OCR extraction failed, continuing with Affinda/Gemini fallback:", ocrError?.message || ocrError);
+        extractedText = "";
+      }
 
       console.log("OCR_TEXT_LENGTH:", extractedText.length);
       console.log("OCR_TEXT_PREVIEW:", extractedText.slice(0, 1200));
