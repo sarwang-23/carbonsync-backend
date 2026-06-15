@@ -22,9 +22,14 @@ dotenv.config();
 const require = createRequire(import.meta.url);
 const pdfParseModule = require("pdf-parse");
 const pdfParse = pdfParseModule.default || pdfParseModule;
-const pdfPoppler = require("pdf-poppler");
-const convert = pdfPoppler.convert;
+let convert: any = null;
 
+if (process.platform !== "linux") {
+  const pdfPoppler = require("pdf-poppler");
+  convert = pdfPoppler.convert;
+} else {
+  console.log("pdf-poppler skipped on Linux Render environment");
+}
 const limiter = slowDown({
   windowMs: 15 * 60 * 1000, // 5 minutes
   delayAfter: 10, // allow 10 requests per `windowMs` (5 minutes) without slowing them down
@@ -1631,6 +1636,12 @@ function parseJsonFromModelResponse(text: string) {
 }
 
 async function convertPdfFirstPageToImage(filePath: string) {
+  if (!convert) {
+    throw new Error(
+      "PDF image conversion is disabled on Linux Render because pdf-poppler is not supported. Rule/OCR/Affinda extraction will continue without Gemini PDF vision fallback."
+    );
+  }
+
   const outputDir = path.join(process.cwd(), "temp-gemini-vision");
 
   if (!fs.existsSync(outputDir)) {
