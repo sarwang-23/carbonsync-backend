@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "affinda": {
+      "source": "affinda/skills",
+      "sourceType": "github",
+      "computedHash": "4feb2b0d9c7855de3ef30c0c03b91877b09d42aca4e428950da5f1daf2e1dd72"
+    }
+  }
+}

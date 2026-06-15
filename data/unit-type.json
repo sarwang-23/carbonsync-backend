@@ -1,0 +1,396 @@
+{
+    "unit_types": [
+        {
+            "unit_type": "Area",
+            "units": {
+                "area_unit": [
+                    "m2",
+                    "km2",
+                    "ft2",
+                    "ha"
+                ]
+            }
+        },
+        {
+            "unit_type": "AreaOverTime",
+            "units": {
+                "area_unit": [
+                    "m2",
+                    "km2",
+                    "ft2",
+                    "ha"
+                ],
+                "time_unit": [
+                    "ms",
+                    "s",
+                    "min",
+                    "hour",
+                    "day",
+                    "month",
+                    "year"
+                ]
+            }
+        },
+        {
+            "unit_type": "ContainerOverDistance",
+            "units": {
+                "distance_unit": [
+                    "m",
+                    "km",
+                    "ft",
+                    "mi",
+                    "nmi"
+                ]
+            }
+        },
+        {
+            "unit_type": "Data",
+            "units": {
+                "data_unit": [
+                    "MB",
+                    "GB",
+                    "TB"
+                ]
+            }
+        },
+        {
+            "unit_type": "DataOverTime",
+            "units": {
+                "data_unit": [
+                    "MB",
+                    "GB",
+                    "TB"
+                ],
+                "time_unit": [
+                    "ms",
+                    "s",
+                    "min",
+                    "hour",
+                    "day",
+                    "month",
+                    "year"
+                ]
+            }
+        },
+        {
+            "unit_type": "Distance",
+            "units": {
+                "distance_unit": [
+                    "m",
+                    "km",
+                    "ft",
+                    "mi",
+                    "nmi"
+                ]
+            }
+        },
+        {
+            "unit_type": "DistanceOverTime",
+            "units": {
+                "distance_unit": [
+                    "m",
+                    "km",
+                    "ft",
+                    "mi",
+                    "nmi"
+                ],
+                "time_unit": [
+                    "ms",
+                    "s",
+                    "min",
+                    "hour",
+                    "day",
+                    "month",
+                    "year"
+                ]
+            }
+        },
+        {
+            "unit_type": "Energy",
+            "units": {
+                "energy_unit": [
+                    "Wh",
+                    "kWh",
+                    "MWh",
+                    "MJ",
+                    "GJ",
+                    "TJ",
+                    "BTU",
+                    "therm",
+                    "MMBTU"
+                ]
+            }
+        },
+        {
+            "unit_type": "Money",
+            "units": {
+                "money_unit": [
+                    "aed",
+                    "afn",
+                    "all",
+                    "amd",
+                    "ang",
+                    "aoa",
+                    "ars",
+                    "aud",
+                    "awg",
+                    "azn",
+                    "bam",
+                    "bbd",
+                    "bdt",
+                    "bgn",
+                    "bhd",
+                    "bif",
+                    "bmd",
+                    "bnd",
+                    "bob",
+                    "brl",
+                    "bsd",
+                    "bwp",
+                    "byn",
+                    "cad",
+                    "chf",
+                    "clp",
+                    "cny",
+                    "cop",
+                    "crc",
+                    "cve",
+                    "czk",
+                    "djf",
+                    "dkk",
+                    "dop",
+                    "dzd",
+                    "egp",
+                    "etb",
+                    "eur",
+                    "fjd",
+                    "gbp",
+                    "gel",
+                    "ghs",
+                    "gip",
+                    "gmd",
+                    "gtq",
+                    "gyd",
+                    "hkd",
+                    "hnl",
+                    "huf",
+                    "idr",
+                    "ils",
+                    "inr",
+                    "iqd",
+                    "irr",
+                    "isk",
+                    "jmd",
+                    "jod",
+                    "jpy",
+                    "kes",
+                    "kgs",
+                    "khr",
+                    "kmf",
+                    "krw",
+                    "kwd",
+                    "kyd",
+                    "kzt",
+                    "lak",
+                    "lbp",
+                    "lsl",
+                    "lyd",
+                    "mad",
+                    "mdl",
+                    "mga",
+                    "mkd",
+                    "mop",
+                    "mur",
+                    "mvr",
+                    "mxn",
+                    "myr",
+                    "mzn",
+                    "nad",
+                    "nio",
+                    "nok",
+                    "npr",
+                    "nzd",
+                    "omr",
+                    "pab",
+                    "pen",
+                    "php",
+                    "pkr",
+                    "pln",
+                    "pyg",
+                    "qar",
+                    "ron",
+                    "rsd",
+                    "rub",
+                    "rwf",
+                    "sar",
+                    "scr",
+                    "sek",
+                    "sgd",
+                    "sle",
+                    "srd",
+                    "std",
+                    "szl",
+                    "thb",
+                    "tjs",
+                    "tnd",
+                    "try",
+                    "ttd",
+                    "twd",
+                    "uah",
+                    "ugx",
+                    "usd",
+                    "uyu",
+                    "uzs",
+                    "vnd",
+                    "wst",
+                    "xaf",
+                    "xcd",
+                    "xof",
+                    "xpf",
+                    "yer",
+                    "zar",
+                    "zmw"
+                ]
+            }
+        },
+        {
+            "unit_type": "Number",
+            "units": {}
+        },
+        {
+            "unit_type": "NumberOverTime",
+            "units": {
+                "time_unit": [
+                    "ms",
+                    "s",
+                    "min",
+                    "hour",
+                    "day",
+                    "month",
+                    "year"
+                ]
+            }
+        },
+        {
+            "unit_type": "PassengerOverDistance",
+            "units": {
+                "distance_unit": [
+                    "m",
+                    "km",
+                    "ft",
+                    "mi",
+                    "nmi"
+                ]
+            }
+        },
+        {
+            "unit_type": "Power",
+            "units": {
+                "power_unit": [
+                    "W",
+                    "kW",
+                    "MW"
+                ]
+            }
+        },
+        {
+            "unit_type": "Time",
+            "units": {
+                "time_unit": [
+                    "ms",
+                    "s",
+                    "min",
+                    "hour",
+                    "day",
+                    "month",
+                    "year"
+                ]
+            }
+        },
+        {
+            "unit_type": "Volume",
+            "units": {
+                "volume_unit": [
+                    "ml",
+                    "l",
+                    "m3",
+                    "cubic_foot",
+                    "gallon_us",
+                    "bbl"
+                ]
+            }
+        },
+        {
+            "unit_type": "VolumeOverDistance",
+            "units": {
+                "distance_unit": [
+                    "m",
+                    "km",
+                    "ft",
+                    "mi",
+                    "nmi"
+                ],
+                "volume_unit": [
+                    "ml",
+                    "l",
+                    "m3",
+                    "cubic_foot",
+                    "gallon_us",
+                    "bbl"
+                ]
+            }
+        },
+        {
+            "unit_type": "Weight",
+            "units": {
+                "weight_unit": [
+                    "g",
+                    "kg",
+                    "t",
+                    "ton",
+                    "lb"
+                ]
+            }
+        },
+        {
+            "unit_type": "WeightOverDistance",
+            "units": {
+                "distance_unit": [
+                    "m",
+                    "km",
+                    "ft",
+                    "mi",
+                    "nmi"
+                ],
+                "weight_unit": [
+                    "g",
+                    "kg",
+                    "t",
+                    "ton",
+                    "lb"
+                ]
+            }
+        },
+        {
+            "unit_type": "WeightOverTime",
+            "units": {
+                "time_unit": [
+                    "ms",
+                    "s",
+                    "min",
+                    "hour",
+                    "day",
+                    "month",
+                    "year"
+                ],
+                "weight_unit": [
+                    "g",
+                    "kg",
+                    "t",
+                    "ton",
+                    "lb"
+                ]
+            }
+        }
+    ]
+}

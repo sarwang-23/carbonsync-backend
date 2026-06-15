@@ -1,0 +1,33 @@
+Corrections made by ChatGPT:
+
+1. Fixed Linux/TypeScript import case issue:
+   src/app.ts now imports ./services/Report.service.js instead of ./services/report.service.js
+
+2. Added detailed Climatiq result builder in src/app.ts.
+   Postman calculation_results now includes:
+   - emission_factor
+   - emission_factor_unit
+   - activity_id
+   - source_dataset
+   - factor_year
+   - factor_region
+   - category
+   - source_lca_activity
+   - co2e_total
+   - co2e_other
+   - co2/ch4/n2o
+   - gas_breakdown_available
+   - raw_api_response
+
+3. Added detailed electricity result output for custom 0.710 kgCO2e/kWh calculations.
+
+4. Updated BRSR and CBAM report tables in src/services/Report.service.ts to include detailed factor columns:
+   Activity ID, Factor Name, Region, Year, Category, Dataset, LCA Activity, Source.
+
+5. Reduced report table font size and enabled word wrapping so wider tables fit in PDF.
+
+6. Verified the corrected project with: npm run build
+
+Note:
+- node_modules, Reports, uploads, and .env are intentionally excluded from this corrected zip.
+- Keep your existing .env file, then run npm install if needed.

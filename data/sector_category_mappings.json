@@ -1,0 +1,138 @@
+{
+  "extracted_at": "2026-04-25T21:11:20.355Z",
+  "total_records": 448323,
+  "mapping": {
+    "Restaurants and Accommodation": [
+      "Accommodation",
+      "Food and Beverage Services",
+      "Restaurants and Accommodation"
+    ],
+    "Agriculture/Hunting/Forestry/Fishing": [
+      "Agriculture/Hunting/Forestry/Fishing",
+      "Arable Farming",
+      "Fishing/Aquaculture/Hunting",
+      "Food Production",
+      "Livestock Farming",
+      "Timber and Forestry Products"
+    ],
+    "Materials and Manufacturing": [
+      "Building Materials",
+      "Ceramic Goods",
+      "Chemical Products",
+      "Fabricated Metal Products",
+      "Glass and Glass Products",
+      "Manufacturing",
+      "Metals",
+      "Mined Materials",
+      "Mining",
+      "Organic Products",
+      "Other Materials",
+      "Paper and Cardboard",
+      "Plastics and Rubber Products",
+      "Vehicle Parts"
+    ],
+    "Transport": [
+      "Air Freight",
+      "Air Travel",
+      "Commuting",
+      "Rail Freight",
+      "Rail Travel",
+      "Road Freight",
+      "Road Travel",
+      "Sea Freight",
+      "Sea Travel",
+      "Transport Services and Warehousing",
+      "Vehicles"
+    ],
+    "Information and Communication": [
+      "Information and Communication Services"
+    ],
+    "Buildings and Infrastructure": [
+      "Construction",
+      "Facility",
+      "Housing",
+      "Infrastructure",
+      "Maintenance and Repair",
+      "Pavement and Surfacing",
+      "Real Estate",
+      "Storage",
+      "Utilities"
+    ],
+    "Consumer Goods and Services": [
+      "Clothing and Footwear",
+      "Consumer Goods Rental",
+      "DIY and Gardening Equipment",
+      "Domestic Services",
+      "Food/Beverages/Tobacco",
+      "Furnishings and Household",
+      "General Retail",
+      "Health Care",
+      "Paper Products",
+      "Personal Care and Accessories",
+      "Professional Services",
+      "Recreation and Culture",
+      "Textiles",
+      "Vehicle Maintenance and Services"
+    ],
+    "Energy": [
+      "Cooling",
+      "Electricity",
+      "Energy Services",
+      "Fuel",
+      "Heat and Steam",
+      "Real Estate - Energy Consumption"
+    ],
+    "Education": [
+      "Education"
+    ],
+    "Equipment": [
+      "Electrical Equipment",
+      "Electronics",
+      "Equipment Rental",
+      "Equipment Repair",
+      "Machinery",
+      "Office Equipment"
+    ],
+    "Insurance and Financial Services": [
+      "Financial Services",
+      "Insurance Services"
+    ],
+    "Refrigerants and Fugitive Gases": [
+      "Refrigerants and Fugitive Gases"
+    ],
+    "Health and Social Care": [
+      "Health Care",
+      "Health and Social Care",
+      "Social Care"
+    ],
+    "Organizational Activities": [
+      "Government Activities",
+      "Homeworking",
+      "Non-profit Activities",
+      "Operational Activities",
+      "Organizational Activities",
+      "Professional Services",
+      "Wholesale Trade"
+    ],
+    "Land Use": [
+      "Land Use",
+      "Land Use Change"
+    ],
+    "Waste": [
+      "Construction Waste",
+      "Electrical Waste",
+      "Food and Organic Waste",
+      "General Waste",
+      "Glass Waste",
+      "Metal Waste",
+      "Paper and Cardboard Waste",
+      "Plastic Waste",
+      "Waste Management",
+      "Wood Waste"
+    ],
+    "Water": [
+      "Water Supply",
+      "Water Treatment"
+    ]
+  }
+}
