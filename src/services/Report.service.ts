@@ -542,23 +542,23 @@ function buildBRSRHtml(payload: any) {
 
       const activityValue = item.converted?.value || "-";
       const activityUnit = item.converted?.unit || "-";
-const passengers = Number(
-  item.climatiqBody?.parameters?.passengers ||
-  item.result?.passengers ||
-  1
-);
+      const passengers = Number(
+        item.climatiqBody?.parameters?.passengers ||
+        item.result?.passengers ||
+        1
+      );
 
-const activityDisplay =
-  String(item.item_name || "").toLowerCase().includes("rail")
-    ? `${activityValue} km × ${passengers} passengers = ${Number(activityValue) * passengers} passenger-km`
-    : `${activityValue} ${activityUnit}`;
-   const rawEfValue = isElectricity
-  ? item.result?.emission_factor_kwh || item.result?.emission_factor || 0.710
-  : item.result?.emission_factor || "N/A";
+      const activityDisplay =
+        String(item.item_name || "").toLowerCase().includes("rail")
+          ? `${activityValue} km × ${passengers} passengers = ${Number(activityValue) * passengers} passenger-km`
+          : `${activityValue} ${activityUnit}`;
+      const rawEfValue = isElectricity
+        ? item.result?.emission_factor_kwh || item.result?.emission_factor || 0.710
+        : item.result?.emission_factor || "N/A";
 
-const efValue = isElectricity
-  ? Number(rawEfValue).toFixed(3)
-  : rawEfValue;
+      const efValue = isElectricity
+        ? Number(rawEfValue).toFixed(3)
+        : rawEfValue;
 
       const efUnit = getEmissionFactorUnit(item, isElectricity);
 
@@ -1284,50 +1284,50 @@ async function generatePdfFromHtml(html: string, prefix: string) {
 }
 
 function buildCBAMHtml(payload: any) {
-const {
-  file,
-  extractedItems,
-  calculationResults,
-  totalKgCO2e,
-  totalTCO2e,
-} = payload;
+  const {
+    file,
+    extractedItems,
+    calculationResults,
+    totalKgCO2e,
+    totalTCO2e,
+  } = payload;
 
-const successful = calculationResults.filter((r: any) => r.success);
-const cbamContext = inferCbamContext(payload);
-const dataQuality = cbamContext.dataQuality;
+  const successful = calculationResults.filter((r: any) => r.success);
+  const cbamContext = inferCbamContext(payload);
+  const dataQuality = cbamContext.dataQuality;
 
-const currentDate = new Date().toLocaleDateString("en-IN", {
-  day: "2-digit",
-  month: "long",
-  year: "numeric",
-});
+  const currentDate = new Date().toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
 
- const rows = successful
-.map((item: any) => {
-  const isElectricity =
-    String(item.item_name || "").toLowerCase().includes("electricity") ||
-    String(item.converted?.unit || "").toLowerCase() === "kwh";
+  const rows = successful
+    .map((item: any) => {
+      const isElectricity =
+        String(item.item_name || "").toLowerCase().includes("electricity") ||
+        String(item.converted?.unit || "").toLowerCase() === "kwh";
 
-  const activityValue = item.converted?.value || "-";
-  const activityUnit = item.converted?.unit || "-";
+      const activityValue = item.converted?.value || "-";
+      const activityUnit = item.converted?.unit || "-";
 
-  const efValue = isElectricity
-    ? item.result?.emission_factor_kwh || item.result?.emission_factor || 0.710
-    : item.result?.emission_factor || "N/A";
+      const efValue = isElectricity
+        ? item.result?.emission_factor_kwh || item.result?.emission_factor || 0.710
+        : item.result?.emission_factor || "N/A";
 
-  const efUnit = getEmissionFactorUnit(item, isElectricity);
+      const efUnit = getEmissionFactorUnit(item, isElectricity);
 
-  const kgCO2e = Number(item.result?.co2e || 0);
-  const tCO2e = Number(item.result?.total_tco2e || 0);
+      const kgCO2e = Number(item.result?.co2e || 0);
+      const tCO2e = Number(item.result?.total_tco2e || 0);
 
-  const formula = isElectricity
-    ? `${activityValue} kWh × ${efValue} kgCO2e/kWh = ${truncateNumber(kgCO2e, 5)} kgCO2e`
-    : "Calculated using mapped emission factor";
+      const formula = isElectricity
+        ? `${activityValue} kWh × ${efValue} kgCO2e/kWh = ${truncateNumber(kgCO2e, 5)} kgCO2e`
+        : "Calculated using mapped emission factor";
 
-  const meta = buildReportRowMetadata(item);
-  const scopeInfo = getInvoiceScopeInfo(item);
+      const meta = buildReportRowMetadata(item);
+      const scopeInfo = getInvoiceScopeInfo(item);
 
-  return `
+      return `
     <tr>
       <td>${item.item_name || "N/A"}</td>
       <td>${scopeInfo.shortLabel}<br/><span class="tiny-note">${scopeInfo.category}</span></td>
@@ -1346,19 +1346,19 @@ const currentDate = new Date().toLocaleDateString("en-IN", {
       <td>${meta.source}</td>
     </tr>
   `;
-})
-.join("");
+    })
+    .join("");
 
- 
-const euDefaultValue = Number(totalTCO2e || 0) * 1.8;
-const actualValue = Number(totalTCO2e || 0);
-const savings = euDefaultValue - actualValue;
-const carbonPrice = 85;
-const cbamCostDefault = euDefaultValue * carbonPrice;
-const cbamCostActual = actualValue * carbonPrice;
-const cbamSaving = cbamCostDefault - cbamCostActual;
 
-return `
+  const euDefaultValue = Number(totalTCO2e || 0) * 1.8;
+  const actualValue = Number(totalTCO2e || 0);
+  const savings = euDefaultValue - actualValue;
+  const carbonPrice = 85;
+  const cbamCostDefault = euDefaultValue * carbonPrice;
+  const cbamCostActual = actualValue * carbonPrice;
+  const cbamSaving = cbamCostDefault - cbamCostActual;
+
+  return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -1875,8 +1875,122 @@ function buildPayloadWithInvoiceFallbacks(payload: any) {
   };
 }
 
+
+
+// -----------------------------------------------------------------------------
+// Rail ticket report row guard.
+// Add-on only: does not change old invoice fallback data, report design, CSS,
+// Puppeteer PDF generation, or existing non-rail calculation logic.
+// When a rail ticket has one valid Passenger Rail calculation but stale material
+// rows are also present, this keeps the PDF report limited to Passenger Rail.
+// -----------------------------------------------------------------------------
+function isPassengerRailCalculation(item: any) {
+  const text = [
+    item?.item_name,
+    item?.result?.item_name,
+    item?.result?.activity_id,
+    item?.climatiqBody?.emission_factor?.activity_id,
+    item?.result?.category,
+    item?.result?.factor_name,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    text.includes("passenger rail") ||
+    text.includes("passenger_rail") ||
+    text.includes("manual-passenger-rail") ||
+    (text.includes("rail") && text.includes("passenger"))
+  );
+}
+
+function isRailTicketPayload(payload: any) {
+  const joinedText = [
+    payload?.file?.originalname,
+    payload?.file?.filename,
+    payload?.fileName,
+    payload?.filename,
+    ...(payload?.extractedItems || []).map(
+      (item: any) => `${item?.item_name || ""} ${item?.unit || ""}`
+    ),
+    ...(payload?.calculationResults || []).map(
+      (item: any) =>
+        `${item?.item_name || ""} ${item?.result?.item_name || ""} ${item?.result?.activity_id || ""} ${item?.result?.category || ""}`
+    ),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    joinedText.includes("irctc") ||
+    joinedText.includes("e-ticket") ||
+    joinedText.includes("eticket") ||
+    joinedText.includes("electronic reservation slip") ||
+    joinedText.includes("train no") ||
+    joinedText.includes("pnr") ||
+    joinedText.includes("passenger rail") ||
+    joinedText.includes("passenger_rail")
+  );
+}
+
+function buildPayloadWithRailTicketReportRows(payload: any) {
+  const calculationResults = Array.isArray(payload?.calculationResults)
+    ? payload.calculationResults
+    : [];
+
+  const railResults = calculationResults.filter((item: any) =>
+    isPassengerRailCalculation(item)
+  );
+
+  if (!railResults.length || !isRailTicketPayload(payload)) {
+    return payload;
+  }
+
+  const extractedItems = Array.isArray(payload?.extractedItems)
+    ? payload.extractedItems
+    : [];
+
+  const railExtractedItems = extractedItems.filter((item: any) => {
+    const text = `${item?.item_name || ""} ${item?.unit || ""}`.toLowerCase();
+    return (
+      text.includes("passenger rail") ||
+      text.includes("rail") ||
+      text.includes("train") ||
+      text.includes("km")
+    );
+  });
+
+  const totalKgCO2e = railResults.reduce(
+    (sum: number, item: any) => sum + Number(item?.result?.co2e || 0),
+    0
+  );
+
+  const totalTCO2e = railResults.reduce(
+    (sum: number, item: any) =>
+      sum +
+      Number(
+        item?.result?.total_tco2e ||
+        Number(item?.result?.co2e || 0) / 1000 ||
+        0
+      ),
+    0
+  );
+
+  return {
+    ...payload,
+    extractedItems: railExtractedItems.length ? railExtractedItems : payload.extractedItems,
+    calculationResults: railResults,
+    totalKgCO2e,
+    totalTCO2e,
+    railTicketReportFilterApplied: true,
+  };
+}
+
 export async function generateInvoiceEmissionReports(payload: any) {
-  const safePayload = buildPayloadWithInvoiceFallbacks(payload);
+  const fallbackPayload = buildPayloadWithInvoiceFallbacks(payload);
+  const safePayload = buildPayloadWithRailTicketReportRows(fallbackPayload);
 
   const brsrHtml = buildBRSRHtml(safePayload);
   const cbamHtml = buildCBAMHtml(safePayload);
