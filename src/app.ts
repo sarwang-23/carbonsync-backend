@@ -4,6 +4,8 @@ import dotenv from "dotenv";
 import morgan from "morgan";
 import helmet from "helmet";
 import fs from "fs";
+import { createCanvas } from "canvas";
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import path from "path";
 import { createRequire } from "module";
 import multer from "multer";
@@ -1636,37 +1638,39 @@ function parseJsonFromModelResponse(text: string) {
 }
 
 async function convertPdfFirstPageToImage(filePath: string) {
-  if (typeof convert !== "function") {
-    throw new Error(
-      "Gemini PDF Vision fallback skipped on Render Linux because pdf-poppler is not supported. Continuing without PDF-to-image conversion."
-    );
-  }
-
   const outputDir = path.join(process.cwd(), "temp-gemini-vision");
 
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  const outputPrefix = `vision-${Date.now()}`;
+  const pdfBuffer = fs.readFileSync(filePath);
+  const uint8Array = new Uint8Array(pdfBuffer);
 
-  await convert(filePath, {
-    format: "png",
-    out_dir: outputDir,
-    out_prefix: outputPrefix,
-    page: 1,
-    scaleTo: 3000,
+  const loadingTask = (pdfjsLib as any).getDocument({
+    data: uint8Array,
+    disableWorker: true,
+    useWorkerFetch: false,
+    isEvalSupported: false,
+    useSystemFonts: true,
   });
 
-  const imageFile = fs
-    .readdirSync(outputDir)
-    .find((file) => file.startsWith(outputPrefix) && file.endsWith(".png"));
+  const pdf = await loadingTask.promise;
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 3 });
 
-  if (!imageFile) {
-    throw new Error("PDF to image conversion failed for Gemini Vision.");
-  }
+  const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+  const canvasContext = canvas.getContext("2d");
 
-  return path.join(outputDir, imageFile);
+  await page.render({
+    canvasContext: canvasContext as any,
+    viewport,
+  }).promise;
+
+  const imagePath = path.join(outputDir, `vision-${Date.now()}.png`);
+  fs.writeFileSync(imagePath, canvas.toBuffer("image/png"));
+
+  return imagePath;
 }
 
 async function extractInvoiceWithGeminiVision(filePath: string, mimeType?: string) {
@@ -2096,43 +2100,18 @@ function isSupportedImageMime(mimetype = "") {
 }
 
 async function extractTextWithOCR(filePath: string, mimetype = "") {
-  const outputDir = path.join(process.cwd(), "temp-ocr");
-
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
-  }
-
-  // Permanent fix: if the uploaded file is already an image, do NOT send it to
-  // pdf-poppler/pdftocairo. That command only works for real PDFs and throws:
-  // "Syntax Warning: May not be a PDF file" for JPEG/PNG invoices.
+  // Permanent fix: if uploaded file is already an image, pass it directly to Tesseract.
+  // If uploaded file is a scanned PDF, convert page 1 to PNG using pdfjs-dist + canvas.
+  // This works on Render Linux and does not depend on pdf-poppler/pdftocairo.
   let imagePath = filePath;
 
   if (!isSupportedImageMime(mimetype)) {
-    if (typeof convert !== "function") {
-      console.warn(
-        "OCR PDF image conversion skipped on Render Linux because pdf-poppler is not supported. Continuing with Affinda/Gemini/deterministic fallbacks."
-      );
+    try {
+      imagePath = await convertPdfFirstPageToImage(filePath);
+    } catch (error: any) {
+      console.warn("PDF to image conversion failed for OCR:", error?.message || error);
       return "";
     }
-
-    const outputPrefix = `ocr-${Date.now()}`;
-
-    await convert(filePath, {
-      format: "png",
-      out_dir: outputDir,
-      out_prefix: outputPrefix,
-      page: 1,
-    });
-
-    const imageFile = fs
-      .readdirSync(outputDir)
-      .find((file) => file.startsWith(outputPrefix) && file.endsWith(".png"));
-
-    if (!imageFile) {
-      throw new Error("OCR image conversion failed.");
-    }
-
-    imagePath = path.join(outputDir, imageFile);
   }
 
   const worker = await createWorker("eng");
