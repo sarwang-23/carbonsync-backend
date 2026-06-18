@@ -1724,14 +1724,23 @@ Schema:
 }
 
 Rules:
+- This document may be scanned, handwritten, tilted, low contrast, or image-only. Read the visible invoice table carefully.
+- Extract actual visible product/service rows only. Never return a generic item when real line items are visible.
 - For electricity bills, prefer Consumed Units, Billed Units, Net Billed Units, or kWh consumption.
-- Do not use amount, account number, bill number, reading dates, or days as kWh units.
+- Do not use amount, account number, bill number, reading dates, HSN code, serial number, PO number, invoice number, GST number, date, rate, subtotal, grand total, or days as quantity.
 - If both consumed units and billed units are available and equal, use that value.
 - For DHBVN duplicate bills, look for "Consumed Units" or "Billed Units" in the meter table.
 - For rail tickets, extract distance in km and count passengers from passenger rows.
-- For material invoices, extract actual table line items. Do not guess MS TMT Bar unless the invoice text clearly says TMT/rebar/steel bar.
-- Preserve units exactly where possible: MT, kg, pcs, m2, Sq.Mt, kWh, km.
-- Do not use rate, amount, invoice number, HSN code, account number, date, or total amount as quantity.
+- For flight tickets, extract origin/destination if visible and count actual passengers from traveller rows.
+- For material invoices, extract actual table line items from description + quantity/weight/area columns.
+- For steel invoices, look for MS TMT Bars, TMT Bar, Rebar, Rod, Steel, Weight M.T., Quantity MT. If visible as "20.000 M.T.", return quantity 20 and unit MT.
+- For timber/plywood invoices, look for plywood, laminate, veneer, flush door, size, pcs, quantity, Sq.Mt, m2. Quantity must be the area/quantity column, not amount/rate.
+- For textile invoices, preserve PCS/NOS quantity if items are in pieces. Do not convert PCS textile invoices to MT.
+- For aluminium invoices, look for aluminium/alluminium/aluminum sheet, scrap, coil, plate and preserve MT/kg/pcs/m2 where visible.
+- Preserve units exactly where possible: MT, M.T., kg, pcs, nos, m2, Sq.Mt, sqft, kWh, km. Normalize only obvious variants.
+- When handwriting overlaps printed text, choose the printed table quantity unless handwritten correction clearly replaces it.
+- If item name is visible but quantity is unreadable, return quantity null for that row instead of guessing.
+- If no line item is readable, return an empty line_items array, not a generic placeholder.
 - Use null when a value is not visible.
 `;
 
@@ -1779,6 +1788,75 @@ Rules:
   console.log("GEMINI_VISION_EXTRACTION:", parsed);
 
   return parsed;
+}
+
+function normalizeVisionUnit(unit: string) {
+  const raw = String(unit || "").trim();
+  const upper = raw.toUpperCase().replace(/\s+/g, "");
+
+  if (["MT", "M.T", "M.T.", "METRICTON", "METRICTONS", "TON", "TONS", "TONNE", "TONNES"].includes(upper)) return "MT";
+  if (["KG", "KGS", "KILOGRAM", "KILOGRAMS"].includes(upper)) return "kg";
+  if (["PCS", "PC", "NOS", "NO", "PIECE", "PIECES"].includes(upper)) return "pcs";
+  if (["SQMT", "SQ.MT", "SQ.MTR", "SQM", "M2", "M^2", "SQUAREMETER", "SQUAREMETRE", "SQUAREMETERS", "SQUAREMETRES"].includes(upper)) return "m2";
+  if (["SQFT", "SQ.FT", "SQUAREFEET", "SQUAREFOOT"].includes(upper)) return "sqft";
+  if (["KWH", "KW.H", "KWhr".toUpperCase()].includes(upper)) return "kWh";
+  if (["KM", "KMS", "KILOMETER", "KILOMETRE", "KILOMETERS", "KILOMETRES"].includes(upper)) return "km";
+
+  return normalizeMaterialUnit(raw || "unit");
+}
+
+function normalizeVisionItemName(name: string) {
+  const cleaned = cleanMaterialName(name);
+
+  if (/tmt|rebar|ms\s*bar|steel\s*(bar|rod)|m\.?s\.?\s*tmt/i.test(cleaned)) return "MS TMT Bars";
+  if (/plywood|veneer|laminat|flush\s*door|block\s*board|particle\s*board|mdf/i.test(cleaned)) return "Plywood / Laminate Flush Door";
+  if (/aluminium|aluminum|alluminium/i.test(cleaned)) return "Aluminium";
+  if (/textile|fabric|cotton|polyester|cloth|garment/i.test(cleaned)) return cleaned.startsWith("Textile") ? cleaned : `Textile Fabric - ${cleaned}`;
+  if (/cement|portland/i.test(cleaned)) return cleaned;
+  if (/coke\s*breeze/i.test(cleaned)) return "Coke Breeze";
+  if (/iron\s*ore/i.test(cleaned)) return "Iron Ore Fines";
+  if (/ferro\s*silicon/i.test(cleaned)) return "Ferro Silicon (70%)";
+  if (/limestone/i.test(cleaned)) return "Limestone";
+
+  return cleaned;
+}
+
+function isSafeVisionQuantity(quantity: any, unit: string, lineItem: any) {
+  const value = parseNumber(quantity);
+  if (typeof value !== "number" || value <= 0) return false;
+
+  const normalizedUnit = normalizeVisionUnit(unit);
+  const rate = parseNumber(lineItem?.rate);
+  const amount = parseNumber(lineItem?.amount);
+
+  // Do not accept amount/rate/grand-total values as quantity.
+  if (amount !== null && Math.abs(value - amount) < 0.000001) return false;
+  if (rate !== null && Math.abs(value - rate) < 0.000001) return false;
+
+  // Reject obvious invoice/HSN/account/date-like values.
+  if (value > 1000000) return false;
+  if (["MT", "kg"].includes(normalizedUnit) && value > 10000) return false;
+
+  return true;
+}
+
+function isUsableVisionLineItem(lineItem: any) {
+  const itemName = String(
+    lineItem?.item_name ||
+      lineItem?.description ||
+      lineItem?.name ||
+      ""
+  ).trim();
+
+  const quantity = lineItem?.quantity ?? lineItem?.qty;
+  const unit = String(lineItem?.unit || lineItem?.uom || lineItem?.unit_of_measure || "");
+
+  if (!itemName || itemName.length < 3) return false;
+  if (/generic|manual\s*review|required|unknown|invoice\s*item/i.test(itemName)) return false;
+  if (!isValidMaterialName(itemName) && !/electricity|rail|flight|transport/i.test(itemName)) return false;
+  if (!isSafeVisionQuantity(quantity, unit, lineItem)) return false;
+
+  return true;
 }
 
 function buildItemsFromGeminiExtraction(extraction: any) {
@@ -1851,15 +1929,20 @@ function buildItemsFromGeminiExtraction(extraction: any) {
   const lineItems = Array.isArray(extraction?.line_items) ? extraction.line_items : [];
 
   for (const lineItem of lineItems) {
-    const itemName = String(
+    if (!isUsableVisionLineItem(lineItem)) {
+      continue;
+    }
+
+    const rawItemName = String(
       lineItem?.item_name ||
       lineItem?.description ||
       lineItem?.name ||
       ""
     ).trim();
 
+    const itemName = normalizeVisionItemName(rawItemName);
     const quantity = parseNumber(lineItem?.quantity ?? lineItem?.qty);
-    const unit = normalizeMaterialUnit(String(lineItem?.unit || lineItem?.uom || lineItem?.unit_of_measure || ""));
+    const unit = normalizeVisionUnit(String(lineItem?.unit || lineItem?.uom || lineItem?.unit_of_measure || ""));
 
     if (itemName && typeof quantity === "number" && quantity > 0) {
       items.push({
@@ -1870,9 +1953,11 @@ function buildItemsFromGeminiExtraction(extraction: any) {
         source: "gemini_vision_line_item_extraction",
         parameters: {
           extraction_method: "gemini_vision_line_items",
+          original_item_name: rawItemName,
           rate: lineItem?.rate ?? null,
           amount: lineItem?.amount ?? null,
           evidence: extraction?.evidence || [],
+          validation_note: "Accepted only after rejecting generic names, amount/rate-as-quantity, and unsafe OCR values.",
         },
       });
     }
@@ -3818,10 +3903,9 @@ function buildUnknownScannedInvoiceFallbackItems({
 
   if (!isScannedPdfOrImage) return [];
 
-  // This is a final safety fallback for scanned/image-only invoices on Render Linux.
-  // It prevents a hard 422 when PDF text, OCR, Affinda and Gemini cannot return rows.
-  // The row is intentionally low-confidence and generic, so users can still get a
-  // report while the document is flagged for manual verification.
+  // Final safety fallback only. Do not use this while a Vision/AI extraction result
+  // has valid rows. This exists only to prevent a hard 422 for completely unreadable
+  // scanned/handwritten documents and must be shown as manual-review required.
   return [
     {
       item_name: 'Generic Scanned Invoice Item - Manual Review Required',
