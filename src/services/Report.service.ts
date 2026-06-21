@@ -540,8 +540,10 @@ function buildBRSRHtml(payload: any) {
         String(item.item_name || "").toLowerCase().includes("electricity") ||
         String(item.converted?.unit || "").toLowerCase() === "kwh";
 
-      const activityValue = item.converted?.value || "-";
-      const activityUnit = item.converted?.unit || "-";
+      const origQty = item.quantity ?? item.original_item?.quantity ?? item.raw_api_response?.original_item?.quantity;
+      const origUnit = item.unit ?? item.original_item?.unit ?? item.raw_api_response?.original_item?.unit;
+      const activityValue = (origQty !== undefined && origQty !== null && origQty !== "") ? origQty : (item.converted?.value || "-");
+      const activityUnit = (origUnit !== undefined && origUnit !== null && origUnit !== "") ? origUnit : (item.converted?.unit || "-");
       const passengers = Number(
         item.climatiqBody?.parameters?.passengers ||
         item.result?.passengers ||
@@ -1308,8 +1310,10 @@ function buildCBAMHtml(payload: any) {
         String(item.item_name || "").toLowerCase().includes("electricity") ||
         String(item.converted?.unit || "").toLowerCase() === "kwh";
 
-      const activityValue = item.converted?.value || "-";
-      const activityUnit = item.converted?.unit || "-";
+      const origQty = item.quantity ?? item.original_item?.quantity ?? item.raw_api_response?.original_item?.quantity;
+      const origUnit = item.unit ?? item.original_item?.unit ?? item.raw_api_response?.original_item?.unit;
+      const activityValue = (origQty !== undefined && origQty !== null && origQty !== "") ? origQty : (item.converted?.value || "-");
+      const activityUnit = (origUnit !== undefined && origUnit !== null && origUnit !== "") ? origUnit : (item.converted?.unit || "-");
 
       const efValue = isElectricity
         ? item.result?.emission_factor_kwh || item.result?.emission_factor || 0.710
