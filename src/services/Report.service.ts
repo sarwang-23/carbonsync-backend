@@ -102,9 +102,9 @@ function buildReportRowMetadata(item: any) {
     region: "IN / Global proxy",
     year: "2026",
     category: "Invoice-linked activity",
-    dataset: source ? `${source} mapped emission factor` : "CarbonSync mapped emission factor",
+    dataset: source ? `${source} mapped emission factor` : "CarbonSynq mapped emission factor",
     lcaActivity: "Invoice quantity based calculation",
-    source: source || "CarbonSync mapped factor",
+    source: source || "CarbonSynq mapped factor",
   };
 
   if (itemName.includes("iron ore") || activityId.includes("iron_ore")) {
@@ -155,7 +155,7 @@ function buildReportRowMetadata(item: any) {
       category: "Metals - Aluminium",
       dataset: "Climatiq mapped factor",
       lcaActivity: "Aluminium production",
-      source: source || "CarbonSync mapped factor",
+      source: source || "CarbonSynq mapped factor",
     };
   } else if (itemName.includes("textile") || itemName.includes("fabric") || itemName.includes("cotton")) {
     fallback = {
@@ -164,14 +164,14 @@ function buildReportRowMetadata(item: any) {
       category: "Textile Materials",
       dataset: "Climatiq mapped factor",
       lcaActivity: "Textile material production",
-      source: source || "CarbonSync mapped factor",
+      source: source || "CarbonSynq mapped factor",
     };
   } else if (itemName.includes("flight") || itemName.includes("air")) {
     fallback = {
       region: "IN",
       year: "2026",
       category: "Passenger Air Travel",
-      dataset: "Custom CarbonSync EF",
+      dataset: "Custom CarbonSynq EF",
       lcaActivity: "Passenger-kilometre",
       source: source || "India Region Fixed EF",
     };
@@ -180,7 +180,7 @@ function buildReportRowMetadata(item: any) {
       region: "IN",
       year: "2026",
       category: "Passenger Transport",
-      dataset: "Custom CarbonSync EF",
+      dataset: "Custom CarbonSynq EF",
       lcaActivity: "Passenger-kilometre",
       source: source || "Manual passenger rail factor",
     };
@@ -189,7 +189,7 @@ function buildReportRowMetadata(item: any) {
       region: "IN",
       year: "2026",
       category: "Electricity",
-      dataset: "Custom CarbonSync EF",
+      dataset: "Custom CarbonSynq EF",
       lcaActivity: "Electricity consumption",
       source: source || "India National Average",
     };
@@ -375,7 +375,7 @@ function inferCbamContext(payload: any) {
     extractedItems.length
   );
 
-  const demoImporter = "CarbonSync Demo EU Importer GmbH";
+  const demoImporter = "CarbonSynq Demo EU Importer GmbH";
   const demoEori = "DE123456789000";
   const demoVat = "DE987654321";
 
@@ -463,7 +463,7 @@ function inferCbamContext(payload: any) {
       euEori: demoEori,
       countryOfImport: "Germany / European Union",
       vatNumber: demoVat,
-      indianExporter: "CarbonSync Demo Supplier India Pvt. Ltd.",
+      indianExporter: "CarbonSynq Demo Supplier India Pvt. Ltd.",
       iecCode: "IEC-DEMO-000001",
       customsProcedure: "Scope 3 Category 1 purchased goods accounting record - demo CBAM workflow",
       hsCode: "CBAM material category reference",
@@ -484,7 +484,7 @@ function inferCbamContext(payload: any) {
     euEori: demoEori,
     countryOfImport: "Germany / European Union",
     vatNumber: demoVat,
-    indianExporter: "CarbonSync Demo Supplier India Pvt. Ltd.",
+    indianExporter: "CarbonSynq Demo Supplier India Pvt. Ltd.",
     iecCode: "IEC-DEMO-000001",
     customsProcedure: "Invoice-based carbon accounting workflow",
     hsCode: "General invoice activity reference",
@@ -887,7 +887,7 @@ tr:nth-child(even) td {
 
 <body>
   <div class="page">
-    <div class="green-top">CarbonSync</div>
+    <div class="green-top">CarbonSynq</div>
 
     <div class="report-pill">BRSR Core | Draft Compliance Output</div>
 
@@ -898,7 +898,7 @@ tr:nth-child(even) td {
     <div class="green-line"></div>
 
     <div class="label">Prepared for:</div>
-    <div class="value">CarbonSync Demo Client</div>
+    <div class="value">CarbonSynq Demo Client</div>
 
     <div class="label">Reporting Period:</div>
     <div class="value">Invoice Upload Based Report</div>
@@ -925,18 +925,18 @@ tr:nth-child(even) td {
     </div>
 
     <div class="footer">
-      <span>Strictly Confidential. Powered by CarbonSync AI Data Engine.</span>
+      <span>Strictly Confidential. Powered by CarbonSynq AI Data Engine.</span>
     </div>
   </div>
 
   <div class="page">
-    <div class="report-header"><span>CarbonSync Enterprise | CarbonSync Demo Client</span><span class="muted-badge">Draft Report</span></div>
+    <div class="report-header"><span>CarbonSynq Enterprise | CarbonSynq Demo Client</span><span class="muted-badge">Draft Report</span></div>
 
     <h1>Executive Summary and Emissions</h1>
     <div class="underline"></div>
 
     <p>
-      <b>Executive view:</b> CarbonSync processed the uploaded source document and generated an invoice-linked emissions inventory.
+      <b>Executive view:</b> CarbonSynq processed the uploaded source document and generated an invoice-linked emissions inventory.
       This report outlines the greenhouse gas inventory generated from uploaded invoice data.
       The workflow extracts line items from the invoice, maps each item to an emission factor,
       calculates CO2e, stores results in the database, and prepares a compliance-ready report.
@@ -995,7 +995,7 @@ tr:nth-child(even) td {
   </div>
 
   <div class="page">
-    <div class="report-header"><span>CarbonSync Enterprise | CarbonSync Demo Client</span><span class="muted-badge">Draft Report</span></div>
+    <div class="report-header"><span>CarbonSynq Enterprise | CarbonSynq Demo Client</span><span class="muted-badge">Draft Report</span></div>
 
     <h1>BRSR Core Metrics Principle 6</h1>
     <div class="underline"></div>
@@ -1076,7 +1076,7 @@ tr:nth-child(even) td {
   </div>
 
   <div class="page">
-    <div class="report-header"><span>CarbonSync Enterprise | CarbonSync Demo Client</span><span class="muted-badge">Draft Report</span></div>
+    <div class="report-header"><span>CarbonSynq Enterprise | CarbonSynq Demo Client</span><span class="muted-badge">Draft Report</span></div>
 
     <h1>Audit Trail and Methodology</h1>
     <div class="underline"></div>
@@ -1101,7 +1101,7 @@ tr:nth-child(even) td {
 
     <h2>External References & Methodologies</h2>
     <ol>
-      <li>CarbonSync Invoice OCR and Emission Mapping Workflow</li>
+      <li>CarbonSynq Invoice OCR and Emission Mapping Workflow</li>
       <li>Climatiq Emission Factor Calculation API</li>
       <li>GHG Protocol Corporate Accounting and Reporting approach</li>
       <li>SEBI BRSR-style disclosure structure</li>
@@ -1114,7 +1114,7 @@ tr:nth-child(even) td {
   </div>
 
   <div class="page">
-    <div class="report-header"><span>CarbonSync Enterprise | CarbonSync Demo Client</span><span class="muted-badge">Draft Report</span></div>
+    <div class="report-header"><span>CarbonSynq Enterprise | CarbonSynq Demo Client</span><span class="muted-badge">Draft Report</span></div>
 
     <h1>Invoice-wise Emissions Breakdown</h1>
     <div class="underline"></div>
@@ -1156,7 +1156,7 @@ tr:nth-child(even) td {
   </div>
 
   <div class="page">
-    <div class="report-header"><span>CarbonSync Enterprise | CarbonSync Demo Client</span><span class="muted-badge">Draft Report</span></div>
+    <div class="report-header"><span>CarbonSynq Enterprise | CarbonSynq Demo Client</span><span class="muted-badge">Draft Report</span></div>
 
     <h1>Item-wise Extraction Details</h1>
     <div class="underline"></div>
@@ -1201,7 +1201,7 @@ tr:nth-child(even) td {
   </div>
 
   <div class="page">
-    <div class="report-header"><span>CarbonSync Enterprise | CarbonSync Demo Client</span><span class="muted-badge">Draft Report</span></div>
+    <div class="report-header"><span>CarbonSynq Enterprise | CarbonSynq Demo Client</span><span class="muted-badge">Draft Report</span></div>
 
     <h1>Decarbonization Recommendations</h1>
     <div class="underline"></div>
@@ -1230,7 +1230,7 @@ tr:nth-child(even) td {
     </p>
 
     <div class="footer">
-      <span>Generated by CarbonSync Platform</span>
+      <span>Generated by CarbonSynq Platform</span>
       <span>Page 7</span>
     </div>
   </div>
@@ -1506,7 +1506,7 @@ word-break: break-word;
 <body>
 <div class="page">
   <div class="top-box">
-    <div class="brand">CARBONSYNC</div>
+    <div class="brand">CARBONSYNQ</div>
     <div class="subtitle">CBAM EMBEDDED CARBON REPORT</div>
   </div>
 
@@ -1519,7 +1519,7 @@ word-break: break-word;
     </tr>
     <tr>
       <td class="label">Prepared by:</td>
-      <td>CarbonSync Platform</td>
+      <td>CarbonSynq Platform</td>
       <td class="label">Status:</td>
       <td>DRAFT — System Generated</td>
     </tr>
@@ -1623,14 +1623,14 @@ word-break: break-word;
   </table>
 
   <div class="disclaimer">
-    IMPORTANT DISCLAIMER: This is a draft report generated by CarbonSync for workflow demonstration.
+    IMPORTANT DISCLAIMER: This is a draft report generated by CarbonSynq for workflow demonstration.
     CBAM declarations must be reviewed and validated before official regulatory submission.
   </div>
 </div>
 
 <div class="page">
   <div class="top-box">
-    <div class="brand">CARBONSYNC</div>
+    <div class="brand">CARBONSYNQ</div>
     <div class="subtitle">CBAM FINANCIAL IMPACT & VERIFICATION</div>
   </div>
 
@@ -1669,7 +1669,7 @@ word-break: break-word;
   </table>
 
   <p class="note">
-    Key Insight: By calculating actual emissions from uploaded invoice data, CarbonSync can reduce dependency on default values and improve CBAM cost visibility.
+    Key Insight: By calculating actual emissions from uploaded invoice data, CarbonSynq can reduce dependency on default values and improve CBAM cost visibility.
   </p>
 
   <div class="section-title">SECTION 5 — CARBON PRICE ALREADY PAID</div>
@@ -1692,7 +1692,7 @@ word-break: break-word;
   <p>
     We, the undersigned verification body, confirm that the embedded emissions data contained in this draft report
     should be independently verified before regulatory submission. Source documentation includes uploaded invoices,
-    emission factor mappings, and calculation outputs generated by CarbonSync.
+    emission factor mappings, and calculation outputs generated by CarbonSynq.
   </p>
 
   <table>
@@ -1717,7 +1717,7 @@ word-break: break-word;
   </table>
 
   <div class="disclaimer">
-    Generated by CarbonSync Platform | Draft CBAM Report | For internal review only.
+    Generated by CarbonSynq Platform | Draft CBAM Report | For internal review only.
   </div>
 </div>
 </body>
