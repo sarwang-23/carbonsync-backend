@@ -1241,7 +1241,11 @@ tr:nth-child(even) td {
 `;
 }
 
-async function generatePdfFromHtml(html: string, prefix: string) {
+async function generatePdfFromHtml(
+  html: string,
+  prefix: string,
+  browser?: any
+) {
   const reportsDir = path.join(process.cwd(), "reports");
 
   if (!fs.existsSync(reportsDir)) {
@@ -1252,30 +1256,54 @@ async function generatePdfFromHtml(html: string, prefix: string) {
   const fileName = `${reportId}.pdf`;
   const filePath = path.join(reportsDir, fileName);
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+  // IMPORTANT SPEED FIX:
+  // Do not launch Chromium separately for every report.
+  // When browser is passed from generateInvoiceEmissionReports(), both BRSR and
+  // CBAM share the same Chromium instance. This avoids two heavy launches on Render.
+  const shouldCloseBrowser = !browser;
+  const activeBrowser =
+    browser ||
+    (await puppeteer.launch({
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-zygote",
+        "--single-process",
+      ],
+    }));
 
-  const page = await browser.newPage();
+  const page = await activeBrowser.newPage();
 
-  await page.setContent(html, {
-    waitUntil: "load",
-  });
+  try {
+    await page.setContent(html, {
+      // Faster than "load" because the report HTML is fully inline.
+      // No external images/fonts/scripts need to finish loading.
+      waitUntil: "domcontentloaded",
+      timeout: 30000,
+    });
 
-  await page.pdf({
-    path: filePath,
-    format: "A4",
-    printBackground: true,
-    margin: {
-      top: "0px",
-      right: "0px",
-      bottom: "0px",
-      left: "0px",
-    },
-  });
+    await page.pdf({
+      path: filePath,
+      format: "A4",
+      printBackground: true,
+      preferCSSPageSize: true,
+      margin: {
+        top: "0px",
+        right: "0px",
+        bottom: "0px",
+        left: "0px",
+      },
+    });
+  } finally {
+    await page.close().catch(() => undefined);
 
-  await browser.close();
+    if (shouldCloseBrowser) {
+      await activeBrowser.close().catch(() => undefined);
+    }
+  }
 
   return {
     reportId,
@@ -1996,36 +2024,59 @@ export async function generateInvoiceEmissionReports(payload: any) {
   const fallbackPayload = buildPayloadWithInvoiceFallbacks(payload);
   const safePayload = buildPayloadWithRailTicketReportRows(fallbackPayload);
 
-  const brsrHtml = buildBRSRHtml(safePayload);
-  const cbamHtml = buildCBAMHtml(safePayload);
+  const reportsStart = Date.now();
 
-  const [brsrReport, cbamReport] = await Promise.all([
-    (async () => {
-      const start = Date.now();
-      try {
-        const res = await generatePdfFromHtml(brsrHtml, "CS-BRSR");
-        console.log(`[Timing] BRSR report generation time: ${Date.now() - start}ms`);
-        return res;
-      } catch (err) {
-        console.error("BRSR report generation failed:", err);
-        return { reportUrl: "" };
-      }
-    })(),
-    (async () => {
-      const start = Date.now();
-      try {
-        const res = await generatePdfFromHtml(cbamHtml, "CS-CBAM");
-        console.log(`[Timing] CBAM report generation time: ${Date.now() - start}ms`);
-        return res;
-      } catch (err) {
-        console.error("CBAM report generation failed:", err);
-        return { reportUrl: "" };
-      }
-    })()
-  ]);
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--no-zygote",
+      "--single-process",
+    ],
+  });
 
-  return {
-    brsr: brsrReport,
-    cbam: cbamReport,
-  };
+  try {
+    const brsrHtml = buildBRSRHtml(safePayload);
+    const cbamHtml = buildCBAMHtml(safePayload);
+
+    // IMPORTANT SPEED FIX:
+    // Earlier code launched Puppeteer twice: once for BRSR and once for CBAM.
+    // That is very slow on Render. Now both PDFs share one browser instance.
+    const [brsrReport, cbamReport] = await Promise.all([
+      (async () => {
+        const start = Date.now();
+        try {
+          const res = await generatePdfFromHtml(brsrHtml, "CS-BRSR", browser);
+          console.log(`[Timing] BRSR report generation time: ${Date.now() - start}ms`);
+          return res;
+        } catch (err) {
+          console.error("BRSR report generation failed:", err);
+          return { reportUrl: "" };
+        }
+      })(),
+      (async () => {
+        const start = Date.now();
+        try {
+          const res = await generatePdfFromHtml(cbamHtml, "CS-CBAM", browser);
+          console.log(`[Timing] CBAM report generation time: ${Date.now() - start}ms`);
+          return res;
+        } catch (err) {
+          console.error("CBAM report generation failed:", err);
+          return { reportUrl: "" };
+        }
+      })(),
+    ]);
+
+    console.log(`[Timing] total report generation time: ${Date.now() - reportsStart}ms`);
+
+    return {
+      brsr: brsrReport,
+      cbam: cbamReport,
+    };
+  } finally {
+    await browser.close().catch(() => undefined);
+  }
 }
