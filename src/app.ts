@@ -4713,13 +4713,13 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
     const calculationEndTime = Date.now();
     console.log(`[Timing] calculation time: ${calculationEndTime - calculationStartTime}ms`);
 
-    const reports = await generateInvoiceEmissionReports({
-      file: req.file,
-      extractedItems,
-      calculationResults,
-      totalKgCO2e,
-      totalTCO2e: totalKgCO2e / 1000,
-    });
+   // const reports = await generateInvoiceEmissionReports({
+    //  file: req.file,
+     // extractedItems,
+     // calculationResults,
+    //  totalKgCO2e,
+     // totalTCO2e: totalKgCO2e / 1000,
+  //  });
     
     const baseUrl =
       process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
@@ -4734,7 +4734,7 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
 
     return res.json({
       success: true,
-      message: "Invoice uploaded, emissions calculated and reports generated successfully.",
+     message: "Invoice uploaded and emissions calculated successfully.",
 
       // Dynamic document type:
       // ELECTRICITY_BILL, RAIL_TICKET, MATERIAL_INVOICE, GENERAL_INVOICE
@@ -4763,12 +4763,12 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
       extracted_items: extractedItems,
       calculation_results: calculationResults,
 
-      reports,
+     // reports,
 
-      report_download_urls: {
-        brsr: `${baseUrl}${reports.brsr.reportUrl}`,
-        cbam: `${baseUrl}${reports.cbam.reportUrl}`,
-      },
+     // report_download_urls: {
+     //   brsr: `${baseUrl}${reports.brsr.reportUrl}`,
+     //   cbam: `${baseUrl}${reports.cbam.reportUrl}`,
+    //  },
     });
   } catch (error: any) {
     console.error("Invoice upload error:", error);
