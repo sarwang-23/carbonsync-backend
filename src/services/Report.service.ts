@@ -1999,8 +1999,30 @@ export async function generateInvoiceEmissionReports(payload: any) {
   const brsrHtml = buildBRSRHtml(safePayload);
   const cbamHtml = buildCBAMHtml(safePayload);
 
-  const brsrReport = await generatePdfFromHtml(brsrHtml, "CS-BRSR");
-  const cbamReport = await generatePdfFromHtml(cbamHtml, "CS-CBAM");
+  const [brsrReport, cbamReport] = await Promise.all([
+    (async () => {
+      const start = Date.now();
+      try {
+        const res = await generatePdfFromHtml(brsrHtml, "CS-BRSR");
+        console.log(`[Timing] BRSR report generation time: ${Date.now() - start}ms`);
+        return res;
+      } catch (err) {
+        console.error("BRSR report generation failed:", err);
+        return { reportUrl: "" };
+      }
+    })(),
+    (async () => {
+      const start = Date.now();
+      try {
+        const res = await generatePdfFromHtml(cbamHtml, "CS-CBAM");
+        console.log(`[Timing] CBAM report generation time: ${Date.now() - start}ms`);
+        return res;
+      } catch (err) {
+        console.error("CBAM report generation failed:", err);
+        return { reportUrl: "" };
+      }
+    })()
+  ]);
 
   return {
     brsr: brsrReport,

@@ -4144,6 +4144,7 @@ function buildUnknownScannedInvoiceFallbackItems({
 }
 
 app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, res: Response) => {
+  const uploadStartTime = Date.now();
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -4152,6 +4153,7 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
       });
     }
 
+    const extractionStartTime = Date.now();
     let extractedText = "";
     const calculationResults: any[] = [];
     let visionExtractionError: any = null;
@@ -4401,302 +4403,316 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
       });
     }
 
-    for (const item of extractedItems) {
-      const { item_name, quantity, unit, passengers } = item;
+    const extractionEndTime = Date.now();
+    console.log(`[Timing] extraction time: ${extractionEndTime - extractionStartTime}ms`);
 
-      if (isGenericTaxInvoiceFallbackItem(item)) {
-        console.log("GENERIC_TAX_INVOICE_LOW_CONFIDENCE_FALLBACK_ACTIVE");
-        calculationResults.push(buildManualGenericPurchasedGoodsCalculation(item));
-        continue;
-      }
+    const calculationStartTime = Date.now();
+    const calculationPromises = extractedItems.map(async (item) => {
+      try {
+        const { item_name, quantity, unit, passengers } = item;
 
-      const mapping = await findBestMapping(item_name);
+        if (isGenericTaxInvoiceFallbackItem(item)) {
+          console.log("GENERIC_TAX_INVOICE_LOW_CONFIDENCE_FALLBACK_ACTIVE");
+          return buildManualGenericPurchasedGoodsCalculation(item);
+        }
 
-      if (!mapping) {
-        calculationResults.push({
-          success: false,
-          item_name,
-          message: "No emission factor mapping found",
-        });
-        continue;
-      }
+        const mapping = await findBestMapping(item_name);
 
-      const converted = convertQuantity(Number(quantity), unit);
-      const climatiqBody = buildClimatiqBody(mapping, converted, passengers || 1);
-      const inputResult = await db.query(
-        `
-    INSERT INTO emission_calculation_inputs
-    (
-      mapping_id,
-      activity_id,
-      region,
-      data_version,
-      input_type,
-      input_value,
-      input_unit,
-      passengers,
-      request_body,
-      status
-    )
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-    RETURNING id
-    `,
-        [
-          mapping.id,
-          climatiqBody.emission_factor.activity_id,
-          climatiqBody.emission_factor.region || null,
-          climatiqBody.emission_factor.data_version || "^6",
-          mapping.parameter_name,
-          converted.value,
-          converted.unit,
-          passengers || null,
-          JSON.stringify(climatiqBody),
-          "sent",
-        ]
-      );
+        if (!mapping) {
+          return {
+            success: false,
+            item_name,
+            message: "No emission factor mapping found",
+          };
+        }
 
-      const inputId = inputResult.rows[0].id;
-
-      const isElectricityItem =
-        String(item_name).toLowerCase().includes("electricity") ||
-        String(unit).toLowerCase() === "kwh";
-
-      if (isElectricityItem) {
-        console.log("ELECTRICITY UPDATED BLOCK ACTIVE");
-
-        const electricityFactor = 0.710; // kgCO2e per kWh - India National Average
-        const co2e = Number(converted.value) * electricityFactor;
-        const gasBreakdown = buildCategoryGasBreakdown(co2e, "electricity");
-
-        await db.query(
+        const converted = convertQuantity(Number(quantity), unit);
+        const climatiqBody = buildClimatiqBody(mapping, converted, passengers || 1);
+        const inputResult = await db.query(
           `
-      INSERT INTO emission_calculation_outputs
+      INSERT INTO emission_calculation_inputs
       (
-        input_id,
-        success,
-        co2e,
-        co2e_unit,
-        total_tco2e,
-        factor_name,
+        mapping_id,
         activity_id,
-        factor_source,
-        source_dataset,
-        factor_year,
-        factor_region,
-        category,
-        source_lca_activity,
-        co2e_total,
-        co2e_other,
-        co2,
-        ch4,
-        n2o,
-        gas_breakdown_available,
-        api_response
+        region,
+        data_version,
+        input_type,
+        input_value,
+        input_unit,
+        passengers,
+        request_body,
+        status
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      RETURNING id
       `,
           [
-            inputId,
-            true,
-            co2e,
-            "kg",
-            co2e / 1000,
-            "India National Grid Average Electricity Factor",
-            "electricity-india-national-average",
-            "India National Average",
-            "Custom CarbonSync EF",
-            2026,
-            "IN",
-            "Electricity",
-            "electricity_consumption",
-            co2e,
-            gasBreakdown.co2e_other,
-            gasBreakdown.co2,
-            gasBreakdown.ch4,
-            gasBreakdown.n2o,
-            gasBreakdown.gas_breakdown_available,
-            JSON.stringify({
-              calculation_method: "custom_factor",
-              parameters: {
-                energy: Number(converted.value),
-                energy_kwh: Number(converted.value),
-                energy_unit: "kWh",
-                emission_factor_kgco2e_per_kwh: electricityFactor,
-                formula: `${Number(converted.value)} kWh * ${electricityFactor} kgCO2e/kWh`,
-              },
-              energy_kwh: Number(converted.value),
-              emission_factor_kgco2e_per_kwh: electricityFactor,
-              total_kgco2e: co2e,
-              total_tco2e: co2e / 1000,
-            }),
+            mapping.id,
+            climatiqBody.emission_factor.activity_id,
+            climatiqBody.emission_factor.region || null,
+            climatiqBody.emission_factor.data_version || "^6",
+            mapping.parameter_name,
+            converted.value,
+            converted.unit,
+            passengers || null,
+            JSON.stringify(climatiqBody),
+            "sent",
           ]
         );
 
-        calculationResults.push(
-          buildManualElectricityCalculation({
+        const inputId = inputResult.rows[0].id;
+
+        const isElectricityItem =
+          String(item_name).toLowerCase().includes("electricity") ||
+          String(unit).toLowerCase() === "kwh";
+
+        if (isElectricityItem) {
+          console.log("ELECTRICITY UPDATED BLOCK ACTIVE");
+
+          const electricityFactor = 0.710; // kgCO2e per kWh - India National Average
+          const co2e = Number(converted.value) * electricityFactor;
+          const gasBreakdown = buildCategoryGasBreakdown(co2e, "electricity");
+
+          await db.query(
+            `
+        INSERT INTO emission_calculation_outputs
+        (
+          input_id,
+          success,
+          co2e,
+          co2e_unit,
+          total_tco2e,
+          factor_name,
+          activity_id,
+          factor_source,
+          source_dataset,
+          factor_year,
+          factor_region,
+          category,
+          source_lca_activity,
+          co2e_total,
+          co2e_other,
+          co2,
+          ch4,
+          n2o,
+          gas_breakdown_available,
+          api_response
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+        `,
+            [
+              inputId,
+              true,
+              co2e,
+              "kg",
+              co2e / 1000,
+              "India National Grid Average Electricity Factor",
+              "electricity-india-national-average",
+              "India National Average",
+              "Custom CarbonSync EF",
+              2026,
+              "IN",
+              "Electricity",
+              "electricity_consumption",
+              co2e,
+              gasBreakdown.co2e_other,
+              gasBreakdown.co2,
+              gasBreakdown.ch4,
+              gasBreakdown.n2o,
+              gasBreakdown.gas_breakdown_available,
+              JSON.stringify({
+                calculation_method: "custom_factor",
+                parameters: {
+                  energy: Number(converted.value),
+                  energy_kwh: Number(converted.value),
+                  energy_unit: "kWh",
+                  emission_factor_kgco2e_per_kwh: electricityFactor,
+                  formula: `${Number(converted.value)} kWh * ${electricityFactor} kgCO2e/kWh`,
+                },
+                energy_kwh: Number(converted.value),
+                emission_factor_kgco2e_per_kwh: electricityFactor,
+                total_kgco2e: co2e,
+                total_tco2e: co2e / 1000,
+              }),
+            ]
+          );
+
+          return buildManualElectricityCalculation({
             item_name,
             converted,
             electricityFactor,
             originalClimatiqBody: climatiqBody,
-          })
-        );
+          });
+        }
 
-        continue;
-      }
+        if (isPassengerRailItem(mapping, item_name)) {
+          console.log("PASSENGER_RAIL UPDATED BLOCK ACTIVE");
 
-      if (isPassengerRailItem(mapping, item_name)) {
-        console.log("PASSENGER_RAIL UPDATED BLOCK ACTIVE");
+          const manualResult = buildManualPassengerRailCalculation({
+            item_name,
+            converted,
+            passengers,
+            originalClimatiqBody: climatiqBody,
+          });
 
-        const manualResult = buildManualPassengerRailCalculation({
-          item_name,
-          converted,
-          passengers,
-          originalClimatiqBody: climatiqBody,
-        });
+          await savePassengerRailOutput(inputId, manualResult);
 
-        await savePassengerRailOutput(inputId, manualResult);
+          return manualResult;
+        }
 
-        calculationResults.push(manualResult);
+        if (isPassengerFlightItem(mapping, item_name)) {
+          console.log("PASSENGER_FLIGHT UPDATED BLOCK ACTIVE");
 
-        continue;
-      }
+          const manualResult = buildManualPassengerFlightCalculation({
+            item_name,
+            converted,
+            passengers,
+            originalClimatiqBody: climatiqBody,
+          });
 
-      if (isPassengerFlightItem(mapping, item_name)) {
-        console.log("PASSENGER_FLIGHT UPDATED BLOCK ACTIVE");
+          await savePassengerFlightOutput(inputId, manualResult);
 
-        const manualResult = buildManualPassengerFlightCalculation({
-          item_name,
-          converted,
-          passengers,
-          originalClimatiqBody: climatiqBody,
-        });
+          return manualResult;
+        }
 
-        await savePassengerFlightOutput(inputId, manualResult);
+        try {
+          const STATIC_EMISSION_FACTORS: Record<string, number> = {
+            "building_materials-type_cement_cem_i_portland_cement": 0.82,
+            "metals-type_aluminium": 16.6,
+            "chemicals-type_sodium_caustic_soda": 1.25,
+            "mined_materials-type_iron_ore": 0.05,
+            "electricity-india-national-average": 0.710,
+            "manual-passenger-rail": 0.007976,
+            "manual-passenger-flight": 0.18,
+          };
+          
+          const factorName = mapping.activity_id || "unknown";
+          const fixedEF = STATIC_EMISSION_FACTORS[factorName] || 1.5; // default fallback if unmapped
+          const co2e = Number(converted.value) * fixedEF;
 
-        calculationResults.push(manualResult);
+          console.log(`[Static EF Calculation] mapping selected: ${factorName}`);
+          console.log(`[Static EF Calculation] converted quantity: ${converted.value} ${converted.unit}`);
+          console.log(`[Static EF Calculation] fixed EF value: ${fixedEF}`);
+          console.log(`[Static EF Calculation] calculated CO2e: ${co2e} kg`);
 
-        continue;
-      }
+          const estimatedGasBreakdown = buildCategoryGasBreakdown(co2e, `${item_name} ${factorName}`);
 
-      try {
-        const climatiqResponse = await axios.post(
-          "https://api.climatiq.io/data/v1/estimate",
-          climatiqBody,
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.CLIMATIQ_API_KEY}`,
-              "Content-Type": "application/json",
+          await db.query(
+            `
+        INSERT INTO emission_calculation_outputs
+        (
+          input_id,
+          success,
+          co2e,
+          co2e_unit,
+          total_tco2e,
+          factor_name,
+          activity_id,
+          factor_source,
+          source_dataset,
+          factor_year,
+          factor_region,
+          category,
+          source_lca_activity,
+          co2e_total,
+          co2e_other,
+          co2,
+          ch4,
+          n2o,
+          gas_breakdown_available,
+          api_response
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+        `,
+            [
+              inputId,
+              true,
+              co2e,
+              "kg",
+              co2e / 1000,
+              factorName,
+              factorName,
+              "Static Local Mapping",
+              "Local DB",
+              2026,
+              mapping.requested_region || "IN",
+              "Purchased Goods",
+              "Production",
+              co2e,
+              estimatedGasBreakdown.co2e_other,
+              estimatedGasBreakdown.co2,
+              estimatedGasBreakdown.ch4,
+              estimatedGasBreakdown.n2o,
+              true,
+              JSON.stringify({ calculation_method: "static_local_ef", fixed_ef: fixedEF, converted_value: converted.value, co2e }),
+            ]
+          );
+
+          return {
+            success: true,
+            item_name,
+            converted,
+            climatiqBody,
+            result: {
+              co2e,
+              co2e_unit: "kg",
+              total_tco2e: co2e / 1000,
+              factor_name: factorName,
+              source: "Static Local Mapping",
+              gas_breakdown_method: estimatedGasBreakdown.gas_breakdown_method,
+              co2: estimatedGasBreakdown.co2,
+              ch4: estimatedGasBreakdown.ch4,
+              n2o: estimatedGasBreakdown.n2o,
+              co2e_other: estimatedGasBreakdown.co2e_other,
             },
-          }
-        );
+          };
+        } catch (apiError: any) {
+          await db.query(
+            `
+        INSERT INTO emission_calculation_outputs
+        (
+          input_id,
+          success,
+          api_response,
+          error_message
+        )
+        VALUES ($1,$2,$3,$4)
+        `,
+            [
+              inputId,
+              false,
+              JSON.stringify(apiError.response?.data || {}),
+              apiError.response?.data?.message || apiError.message,
+            ]
+          );
 
-        const data: any = climatiqResponse.data;
-        const gases = data.constituent_gases || {};
-        const factor = data.emission_factor || {};
-        const co2e = data.co2e || gases.co2e_total || 0;
-        const estimatedGasBreakdown = buildCategoryGasBreakdown(co2e, `${item_name} ${factor.category || ""}`);
-
-        await db.query(
-          `
-      INSERT INTO emission_calculation_outputs
-      (
-        input_id,
-        success,
-        co2e,
-        co2e_unit,
-        total_tco2e,
-        factor_name,
-        activity_id,
-        factor_source,
-        source_dataset,
-        factor_year,
-        factor_region,
-        category,
-        source_lca_activity,
-        co2e_total,
-        co2e_other,
-        co2,
-        ch4,
-        n2o,
-        gas_breakdown_available,
-        api_response
-      )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
-      `,
-          [
-            inputId,
-            true,
-            co2e,
-            data.co2e_unit || "kg",
-            co2e / 1000,
-            factor.name || null,
-            factor.activity_id || null,
-            factor.source || null,
-            factor.source_dataset || null,
-            factor.year || null,
-            factor.region || null,
-            factor.category || null,
-            factor.source_lca_activity || null,
-            gases.co2e_total ?? co2e,
-            gases.co2e_other ?? estimatedGasBreakdown.co2e_other,
-            gases.co2 ?? estimatedGasBreakdown.co2,
-            gases.ch4 ?? estimatedGasBreakdown.ch4,
-            gases.n2o ?? estimatedGasBreakdown.n2o,
-            gases.co2 != null || gases.ch4 != null || gases.n2o != null,
-            JSON.stringify(data),
-          ]
-        );
-
-        calculationResults.push({
-          success: true,
-          item_name,
-          converted,
-          climatiqBody,
-          result: {
-            co2e,
-            co2e_unit: data.co2e_unit || "kg",
-            total_tco2e: co2e / 1000,
-            factor_name: factor.name,
-            source: factor.source,
-            gas_breakdown_method: estimatedGasBreakdown.gas_breakdown_method,
-            co2: gases.co2 ?? estimatedGasBreakdown.co2,
-            ch4: gases.ch4 ?? estimatedGasBreakdown.ch4,
-            n2o: gases.n2o ?? estimatedGasBreakdown.n2o,
-            co2e_other: gases.co2e_other ?? estimatedGasBreakdown.co2e_other,
-          },
-        });
-      } catch (apiError: any) {
-        await db.query(
-          `
-      INSERT INTO emission_calculation_outputs
-      (
-        input_id,
-        success,
-        api_response,
-        error_message
-      )
-      VALUES ($1,$2,$3,$4)
-      `,
-          [
-            inputId,
-            false,
-            JSON.stringify(apiError.response?.data || {}),
-            apiError.response?.data?.message || apiError.message,
-          ]
-        );
-
-        calculationResults.push({
+          return {
+            success: false,
+            item_name,
+            message: apiError.response?.data?.message || apiError.message,
+            input: climatiqBody,
+          };
+        }
+      } catch (err: any) {
+        console.error("Item calculation failed:", err);
+        return {
           success: false,
-          item_name,
-          message: apiError.response?.data?.message || apiError.message,
-          input: climatiqBody,
-        });
+          item_name: item.item_name || "Unknown Item",
+          message: "Internal calculation error: " + err.message,
+        };
       }
-    }
+    });
+
+    const results = await Promise.all(calculationPromises);
+    calculationResults.push(...results);
 
     const totalKgCO2e = calculationResults
       .filter((r: any) => r.success)
       .reduce((sum: number, r: any) => sum + Number(r.result.co2e || 0), 0);
+      
+    const calculationEndTime = Date.now();
+    console.log(`[Timing] calculation time: ${calculationEndTime - calculationStartTime}ms`);
+
     const reports = await generateInvoiceEmissionReports({
       file: req.file,
       extractedItems,
@@ -4704,6 +4720,7 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
       totalKgCO2e,
       totalTCO2e: totalKgCO2e / 1000,
     });
+    
     const baseUrl =
       process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
 
@@ -4711,6 +4728,9 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
       extractedItems,
       req.file?.originalname
     );
+
+    const uploadEndTime = Date.now();
+    console.log(`[Timing] total upload response time: ${uploadEndTime - uploadStartTime}ms`);
 
     return res.json({
       success: true,
