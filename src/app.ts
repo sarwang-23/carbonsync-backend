@@ -4778,9 +4778,76 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
     });
   }
 });
+
+  app.post("/api/generate-invoice-report", async (req: Request, res: Response) => {
+  try {
+    const {
+      file,
+      extracted_items,
+      calculation_results,
+      total_kgco2e,
+      total_tco2e,
+    } = req.body || {};
+
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: "file is required.",
+      });
+    }
+
+    if (!Array.isArray(extracted_items) || extracted_items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "extracted_items array is required.",
+      });
+    }
+
+    if (!Array.isArray(calculation_results) || calculation_results.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "calculation_results array is required.",
+      });
+    }
+ const totalKgCO2e = Number(total_kgco2e || 0);
+    const totalTCO2e = Number(total_tco2e || totalKgCO2e / 1000);
+
+    console.time("REPORT_GENERATION");
+
+    const reports = await generateInvoiceEmissionReports({
+      file,
+      extractedItems: extracted_items,
+      calculationResults: calculation_results,
+      totalKgCO2e,
+      totalTCO2e,
+    });
+
+    console.timeEnd("REPORT_GENERATION");
+
+    const baseUrl =
+      process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
+
+    return res.json({
+      success: true,
+      message: "Reports generated successfully.",
+      reports,
+         report_download_urls: {
+        brsr: `${baseUrl}${reports.brsr.reportUrl}`,
+        cbam: `${baseUrl}${reports.cbam.reportUrl}`,
+      },
+    });
+  } catch (error: any) {
+    console.error("Generate invoice report error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Report generation failed.",
+    });
+  }
+});
+
 app.use("/api", limiter, router);
 
-app
-  .listen(port, () => {
-    console.log(`SERVER AT ${port}`);
-  });
+app.listen(port, () => {
+  console.log(`SERVER AT ${port}`);
+});
