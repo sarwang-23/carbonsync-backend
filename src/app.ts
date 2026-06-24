@@ -4845,6 +4845,290 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
     });
   }
 });
+// Batch Invoice Processing Code for src/app.ts
+// ------------------------------------------------------------
+// This is BACKEND TypeScript code, not TSX.
+// Add this code inside src/app.ts.
+// Recommended placement:
+// 1) Add the BatchJob types + batchJobs Map after multer upload config.
+// 2) Add processInvoiceViaExistingUploadApi() after helper functions.
+// 3) Add the 3 routes BEFORE: app.use("/api", limiter, router);
+// ------------------------------------------------------------
+
+type BatchInvoiceResult = {
+  success: boolean;
+  file_name: string;
+  original_file?: {
+    originalname: string;
+    filename: string;
+    path: string;
+    mimetype: string;
+    size: number;
+  };
+  message?: string;
+  total_kgco2e?: number;
+  total_tco2e?: number;
+  extracted_items?: any[];
+  calculation_results?: any[];
+  response?: any;
+  error?: any;
+  processing_time_ms?: number;
+};
+
+type BatchJob = {
+  batch_id: string;
+  status: "PROCESSING" | "COMPLETED" | "FAILED";
+  total_invoices: number;
+  processed_invoices: number;
+  successful_invoices: number;
+  failed_invoices: number;
+  pending_invoices: number;
+  progress_percent: number;
+  batch_total_kgco2e: number;
+  batch_total_tco2e: number;
+  results: BatchInvoiceResult[];
+  started_at: string;
+  completed_at: string | null;
+  error?: string | null;
+};
+
+const batchJobs = new Map<string, BatchJob>();
+
+function getInternalApiBaseUrl() {
+  return process.env.INTERNAL_API_BASE_URL || `http://127.0.0.1:${port}`;
+}
+
+function updateBatchProgress(job: BatchJob) {
+  job.pending_invoices = Math.max(0, job.total_invoices - job.processed_invoices);
+  job.progress_percent =
+    job.total_invoices > 0
+      ? Math.round((job.processed_invoices / job.total_invoices) * 100)
+      : 0;
+
+  batchJobs.set(job.batch_id, job);
+}
+
+async function processInvoiceViaExistingUploadApi(file: Express.Multer.File) {
+  const form = new FormData();
+
+  form.append("invoice", fs.createReadStream(file.path), {
+    filename: file.originalname,
+    contentType: file.mimetype,
+  });
+
+  const response = await axios.post(
+    `${getInternalApiBaseUrl()}/api/upload-invoice`,
+    form,
+    {
+      headers: form.getHeaders(),
+      timeout: 10 * 60 * 1000,
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+    }
+  );
+
+  return response.data;
+}
+
+// ------------------------------------------------------------
+// Add these routes BEFORE this line in your app.ts:
+// app.use("/api", limiter, router);
+// ------------------------------------------------------------
+
+app.post(
+  "/api/upload-invoices-batch",
+  upload.array("invoices", 100),
+  async (req: Request, res: Response) => {
+    const files = req.files as Express.Multer.File[];
+
+    if (!files || files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No invoices uploaded. Please upload at least one invoice.",
+      });
+    }
+
+    if (files.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Maximum 100 invoices allowed in one batch.",
+      });
+    }
+
+    const batchId = `BATCH-${Date.now()}`;
+
+    const job: BatchJob = {
+      batch_id: batchId,
+      status: "PROCESSING",
+      total_invoices: files.length,
+      processed_invoices: 0,
+      successful_invoices: 0,
+      failed_invoices: 0,
+      pending_invoices: files.length,
+      progress_percent: 0,
+      batch_total_kgco2e: 0,
+      batch_total_tco2e: 0,
+      results: [],
+      started_at: new Date().toISOString(),
+      completed_at: null,
+      error: null,
+    };
+
+    batchJobs.set(batchId, job);
+
+    res.json({
+      success: true,
+      message: "Batch upload accepted. Processing started.",
+      batch_id: batchId,
+      total_invoices: files.length,
+      status: "PROCESSING",
+      status_endpoint: `/api/batch-status/${batchId}`,
+      results_endpoint: `/api/batch-results/${batchId}`,
+    });
+
+    setImmediate(async () => {
+      const currentJob = batchJobs.get(batchId);
+      if (!currentJob) return;
+
+      try {
+        for (const file of files) {
+          const invoiceStart = Date.now();
+
+          try {
+            console.log(`[Batch ${batchId}] Processing: ${file.originalname}`);
+
+            const uploadResult = await processInvoiceViaExistingUploadApi(file);
+
+            const totalKg = Number(uploadResult?.total_kgco2e || 0);
+            const totalT = Number(uploadResult?.total_tco2e || totalKg / 1000);
+
+            currentJob.results.push({
+              success: true,
+              file_name: file.originalname,
+              original_file: {
+                originalname: file.originalname,
+                filename: file.filename,
+                path: file.path,
+                mimetype: file.mimetype,
+                size: file.size,
+              },
+              message: uploadResult?.message || "Invoice processed successfully.",
+              total_kgco2e: totalKg,
+              total_tco2e: totalT,
+              extracted_items: uploadResult?.extracted_items || [],
+              calculation_results: uploadResult?.calculation_results || [],
+              response: uploadResult,
+              processing_time_ms: Date.now() - invoiceStart,
+            });
+
+            currentJob.successful_invoices += 1;
+            currentJob.batch_total_kgco2e += totalKg;
+            currentJob.batch_total_tco2e += totalT;
+          } catch (error: any) {
+            console.error(
+              `[Batch ${batchId}] Failed: ${file.originalname}`,
+              error?.response?.data || error?.message || error
+            );
+
+            currentJob.results.push({
+              success: false,
+              file_name: file.originalname,
+              original_file: {
+                originalname: file.originalname,
+                filename: file.filename,
+                path: file.path,
+                mimetype: file.mimetype,
+                size: file.size,
+              },
+              message:
+                error?.response?.data?.message ||
+                error?.message ||
+                "Invoice processing failed.",
+              error: error?.response?.data || null,
+              processing_time_ms: Date.now() - invoiceStart,
+            });
+
+            currentJob.failed_invoices += 1;
+          }
+
+          currentJob.processed_invoices += 1;
+          updateBatchProgress(currentJob);
+        }
+
+        currentJob.status = "COMPLETED";
+        currentJob.completed_at = new Date().toISOString();
+        updateBatchProgress(currentJob);
+
+        console.log(`[Batch ${batchId}] Completed`);
+      } catch (batchError: any) {
+        currentJob.status = "FAILED";
+        currentJob.error = batchError?.message || "Batch processing failed.";
+        currentJob.completed_at = new Date().toISOString();
+        updateBatchProgress(currentJob);
+
+        console.error(`[Batch ${batchId}] Batch failed`, batchError);
+      }
+    });
+  }
+);
+
+app.get("/api/batch-status/:batchId", (req: Request, res: Response) => {
+  const batchId = req.params.batchId as string;
+  const job = batchJobs.get(batchId);
+
+  if (!job) {
+    return res.status(404).json({
+      success: false,
+      message: "Batch not found.",
+    });
+  }
+
+  return res.json({
+    success: true,
+    batch_id: job.batch_id,
+    status: job.status,
+    total_invoices: job.total_invoices,
+    processed_invoices: job.processed_invoices,
+    successful_invoices: job.successful_invoices,
+    failed_invoices: job.failed_invoices,
+    pending_invoices: job.pending_invoices,
+    progress_percent: job.progress_percent,
+    batch_total_kgco2e: job.batch_total_kgco2e,
+    batch_total_tco2e: job.batch_total_tco2e,
+    started_at: job.started_at,
+    completed_at: job.completed_at,
+    error: job.error || null,
+  });
+});
+
+app.get("/api/batch-results/:batchId", (req: Request, res: Response) => {
+  const batchId = req.params.batchId as string;
+  const job = batchJobs.get(batchId);
+
+  if (!job) {
+    return res.status(404).json({
+      success: false,
+      message: "Batch not found.",
+    });
+  }
+
+  return res.json({
+    success: true,
+    batch_id: job.batch_id,
+    status: job.status,
+    total_invoices: job.total_invoices,
+    processed_invoices: job.processed_invoices,
+    successful_invoices: job.successful_invoices,
+    failed_invoices: job.failed_invoices,
+    pending_invoices: job.pending_invoices,
+    progress_percent: job.progress_percent,
+    batch_total_kgco2e: job.batch_total_kgco2e,
+    batch_total_tco2e: job.batch_total_tco2e,
+    started_at: job.started_at,
+    completed_at: job.completed_at,
+    results: job.results,
+  });
+});
 
 app.use("/api", limiter, router);
 
