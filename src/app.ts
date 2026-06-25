@@ -1,5 +1,7 @@
 import express from "express";
 import type { Response, Request, NextFunction } from "express";
+import { parse } from "csv-parse/sync";
+import XLSX from "xlsx";
 import dotenv from "dotenv";
 import morgan from "morgan";
 import helmet from "helmet";
@@ -5128,7 +5130,604 @@ app.get("/api/batch-results/:batchId", (req: Request, res: Response) => {
     completed_at: job.completed_at,
     results: job.results,
   });
-});
+});// ERP Backend Code for src/app.ts
+// ------------------------------------------------------------
+// This is BACKEND TypeScript code, not TSX.
+// Backend files must be .ts, not .tsx.
+// ------------------------------------------------------------
+// Required packages:
+// npm install csv-parse xlsx
+//
+// Add these imports at the top of src/app.ts:
+// import { parse } from "csv-parse/sync";
+// import XLSX from "xlsx";
+//
+// Then paste the helper functions + route below BEFORE:
+// app.use("/api", limiter, router);
+// ------------------------------------------------------------
+
+function parseErpFile(filePath: string, originalName: string) {
+  const lowerName = String(originalName || "").toLowerCase();
+
+  if (lowerName.endsWith(".csv")) {
+    const csvText = fs.readFileSync(filePath, "utf-8");
+
+    const records = parse(csvText, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+    });
+
+    return records;
+  }
+
+  if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
+    const workbook = XLSX.readFile(filePath);
+    const firstSheetName = workbook.SheetNames[0];
+
+    if (!firstSheetName) {
+      throw new Error("Excel file does not contain any sheet.");
+    }
+
+    const worksheet = workbook.Sheets[firstSheetName];
+
+    const rows = XLSX.utils.sheet_to_json(worksheet, {
+      defval: "",
+    });
+
+    return rows;
+  }
+
+  throw new Error("Unsupported ERP file format. Please upload CSV, XLSX or XLS.");
+}
+
+function getErpRowValue(row: any, possibleKeys: string[]) {
+  const normalizedRow: Record<string, any> = {};
+
+  Object.keys(row || {}).forEach((key) => {
+    const normalizedKey = String(key)
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^\w]/g, "");
+
+    normalizedRow[normalizedKey] = row[key];
+  });
+
+  for (const key of possibleKeys) {
+    const normalizedKey = String(key)
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^\w]/g, "");
+
+    const value = normalizedRow[normalizedKey];
+
+    if (
+      value !== undefined &&
+      value !== null &&
+      String(value).trim() !== ""
+    ) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function normalizeErpUnit(unit: string) {
+  const normalized = String(unit || "").trim();
+
+  if (!normalized) return "unit";
+
+  const upper = normalized.toUpperCase().replace(/\s+/g, "");
+
+  if (["KWH", "KW.H", "KWHR", "UNIT", "UNITS"].includes(upper)) return "kWh";
+  if (["KM", "KMS", "KILOMETER", "KILOMETRE", "KILOMETERS", "KILOMETRES"].includes(upper)) return "km";
+  if (["MT", "M.T", "M.T.", "TON", "TONS", "TONNE", "TONNES"].includes(upper)) return "MT";
+  if (["KG", "KGS", "KILOGRAM", "KILOGRAMS"].includes(upper)) return "kg";
+  if (["PCS", "PC", "NOS", "NO", "PIECE", "PIECES"].includes(upper)) return "pcs";
+  if (["M2", "SQM", "SQ.MT", "SQMT", "SQ.MTR"].includes(upper)) return "m2";
+  if (["SQFT", "SQ.FT"].includes(upper)) return "sqft";
+
+  return normalized;
+}
+
+function normalizeErpRowsToInvoiceItems(rows: any[]) {
+  const items: any[] = [];
+
+  for (const row of rows) {
+    const itemName = getErpRowValue(row, [
+      "item_name",
+      "item name",
+      "product_name",
+      "product name",
+      "description",
+      "item_description",
+      "item description",
+      "goods_description",
+      "goods description",
+      "particulars",
+      "ledger_name",
+      "ledger name",
+      "expense_name",
+      "expense name",
+    ]);
+
+    const quantity = parseNumber(
+      getErpRowValue(row, [
+        "quantity",
+        "qty",
+        "billed_quantity",
+        "billed quantity",
+        "units",
+        "unit_consumed",
+        "units_consumed",
+        "consumption",
+        "energy_kwh",
+        "kwh",
+        "distance",
+        "distance_km",
+      ])
+    );
+
+    const unit =
+      getErpRowValue(row, [
+        "unit",
+        "uom",
+        "unit_of_measure",
+        "unit of measure",
+        "qty_unit",
+        "quantity_unit",
+      ]) || "unit";
+
+    const invoiceNumber = getErpRowValue(row, [
+      "invoice_number",
+      "invoice no",
+      "invoice_no",
+      "bill_number",
+      "bill no",
+      "voucher_number",
+      "voucher no",
+      "document_number",
+      "document no",
+    ]);
+
+    const invoiceDate = getErpRowValue(row, [
+      "invoice_date",
+      "invoice date",
+      "bill_date",
+      "bill date",
+      "voucher_date",
+      "voucher date",
+      "date",
+    ]);
+
+    const vendorName = getErpRowValue(row, [
+      "vendor_name",
+      "vendor",
+      "supplier",
+      "supplier_name",
+      "party_name",
+      "party name",
+      "ledger_party",
+    ]);
+
+    const amount = parseNumber(
+      getErpRowValue(row, [
+        "amount",
+        "total_amount",
+        "taxable_value",
+        "net_amount",
+        "gross_amount",
+        "value",
+        "invoice_amount",
+      ])
+    );
+
+    const region =
+      getErpRowValue(row, ["region", "country", "factor_region"]) || "IN";
+
+    const category = getErpRowValue(row, [
+      "category",
+      "item_category",
+      "expense_category",
+      "emission_category",
+    ]);
+
+    const passengers = parseNumber(
+      getErpRowValue(row, [
+        "passengers",
+        "passenger_count",
+        "travellers",
+        "travelers",
+      ])
+    );
+
+    if (!itemName || quantity === null || quantity <= 0 || !unit) {
+      continue;
+    }
+
+    items.push({
+      item_name: String(itemName).trim(),
+      quantity,
+      unit: normalizeErpUnit(String(unit).trim()),
+      passengers: passengers || undefined,
+      invoice_number: invoiceNumber || null,
+      invoice_date: invoiceDate || null,
+      vendor_name: vendorName || null,
+      amount,
+      category: category || null,
+      region,
+      confidence: "high",
+      source: "erp_export_upload",
+      parameters: {
+        extraction_method: "erp_file_upload",
+        invoice_number: invoiceNumber || null,
+        invoice_date: invoiceDate || null,
+        vendor_name: vendorName || null,
+        amount,
+        category: category || null,
+        region,
+        raw_erp_row: row,
+      },
+    });
+  }
+
+  return items;
+}
+
+async function calculateErpItem(item: any) {
+  const { item_name, quantity, unit, passengers } = item;
+
+  const mapping = await findBestMapping(item_name);
+
+  if (!mapping) {
+    return {
+      success: false,
+      item_name,
+      message: "No emission factor mapping found",
+    };
+  }
+
+  const converted = convertQuantity(Number(quantity), unit);
+  const climatiqBody = buildClimatiqBody(mapping, converted, passengers || 1);
+
+  const inputResult = await db.query(
+    `
+    INSERT INTO emission_calculation_inputs
+    (
+      mapping_id,
+      activity_id,
+      region,
+      data_version,
+      input_type,
+      input_value,
+      input_unit,
+      passengers,
+      request_body,
+      status
+    )
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+    RETURNING id
+    `,
+    [
+      mapping.id,
+      climatiqBody.emission_factor.activity_id,
+      climatiqBody.emission_factor.region || item.region || null,
+      climatiqBody.emission_factor.data_version || "^6",
+      mapping.parameter_name,
+      converted.value,
+      converted.unit,
+      passengers || null,
+      JSON.stringify({
+        ...climatiqBody,
+        erp_source: true,
+        original_erp_item: item,
+      }),
+      "sent",
+    ]
+  );
+
+  const inputId = inputResult.rows[0].id;
+
+  const isElectricityItem =
+    String(item_name).toLowerCase().includes("electricity") ||
+    String(unit).toLowerCase() === "kwh";
+
+  if (isElectricityItem) {
+    const electricityFactor = 0.710;
+    const co2e = Number(converted.value) * electricityFactor;
+    const gasBreakdown = buildCategoryGasBreakdown(co2e, "electricity");
+
+    await db.query(
+      `
+      INSERT INTO emission_calculation_outputs
+      (
+        input_id,
+        success,
+        co2e,
+        co2e_unit,
+        total_tco2e,
+        factor_name,
+        activity_id,
+        factor_source,
+        source_dataset,
+        factor_year,
+        factor_region,
+        category,
+        source_lca_activity,
+        co2e_total,
+        co2e_other,
+        co2,
+        ch4,
+        n2o,
+        gas_breakdown_available,
+        api_response
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+      `,
+      [
+        inputId,
+        true,
+        co2e,
+        "kg",
+        co2e / 1000,
+        "India National Grid Average Electricity Factor",
+        "electricity-india-national-average",
+        "India National Average",
+        "Custom CarbonSync EF",
+        2026,
+        "IN",
+        "Electricity",
+        "electricity_consumption",
+        co2e,
+        gasBreakdown.co2e_other,
+        gasBreakdown.co2,
+        gasBreakdown.ch4,
+        gasBreakdown.n2o,
+        gasBreakdown.gas_breakdown_available,
+        JSON.stringify({
+          calculation_method: "erp_custom_electricity_factor",
+          source: "erp_export_upload",
+          original_erp_item: item,
+          energy_kwh: Number(converted.value),
+          emission_factor_kgco2e_per_kwh: electricityFactor,
+          total_kgco2e: co2e,
+          total_tco2e: co2e / 1000,
+        }),
+      ]
+    );
+
+    return buildManualElectricityCalculation({
+      item_name,
+      converted,
+      electricityFactor,
+      originalClimatiqBody: climatiqBody,
+    });
+  }
+
+  if (isPassengerRailItem(mapping, item_name)) {
+    const manualResult = buildManualPassengerRailCalculation({
+      item_name,
+      converted,
+      passengers,
+      originalClimatiqBody: climatiqBody,
+    });
+
+    await savePassengerRailOutput(inputId, manualResult);
+
+    return manualResult;
+  }
+
+  if (isPassengerFlightItem(mapping, item_name)) {
+    const manualResult = buildManualPassengerFlightCalculation({
+      item_name,
+      converted,
+      passengers,
+      originalClimatiqBody: climatiqBody,
+    });
+
+    await savePassengerFlightOutput(inputId, manualResult);
+
+    return manualResult;
+  }
+
+  const STATIC_EMISSION_FACTORS: Record<string, number> = {
+    "building_materials-type_cement_cem_i_portland_cement": 0.82,
+    "metals-type_aluminium": 16.6,
+    "chemicals-type_sodium_caustic_soda": 1.25,
+    "mined_materials-type_iron_ore": 0.05,
+    "electricity-india-national-average": 0.710,
+    "manual-passenger-rail": 0.007976,
+    "manual-passenger-flight": 0.18,
+  };
+
+  const factorName = mapping.activity_id || "unknown";
+  const fixedEF = STATIC_EMISSION_FACTORS[factorName] || 1.5;
+  const co2e = Number(converted.value) * fixedEF;
+
+  const estimatedGasBreakdown = buildCategoryGasBreakdown(
+    co2e,
+    `${item_name} ${factorName}`
+  );
+
+  await db.query(
+    `
+    INSERT INTO emission_calculation_outputs
+    (
+      input_id,
+      success,
+      co2e,
+      co2e_unit,
+      total_tco2e,
+      factor_name,
+      activity_id,
+      factor_source,
+      source_dataset,
+      factor_year,
+      factor_region,
+      category,
+      source_lca_activity,
+      co2e_total,
+      co2e_other,
+      co2,
+      ch4,
+      n2o,
+      gas_breakdown_available,
+      api_response
+    )
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+    `,
+    [
+      inputId,
+      true,
+      co2e,
+      "kg",
+      co2e / 1000,
+      factorName,
+      factorName,
+      "ERP Static Local Mapping",
+      "Local DB",
+      2026,
+      item.region || mapping.requested_region || "IN",
+      item.category || "Purchased Goods",
+      "ERP purchase record",
+      co2e,
+      estimatedGasBreakdown.co2e_other,
+      estimatedGasBreakdown.co2,
+      estimatedGasBreakdown.ch4,
+      estimatedGasBreakdown.n2o,
+      true,
+      JSON.stringify({
+        calculation_method: "erp_static_local_ef",
+        source: "erp_export_upload",
+        fixed_ef: fixedEF,
+        converted_value: converted.value,
+        original_erp_item: item,
+        co2e,
+      }),
+    ]
+  );
+
+  return {
+    success: true,
+    item_name,
+    converted,
+    climatiqBody,
+    result: {
+      co2e,
+      co2e_unit: "kg",
+      total_tco2e: co2e / 1000,
+      factor_name: factorName,
+      source: "ERP Static Local Mapping",
+      gas_breakdown_method: estimatedGasBreakdown.gas_breakdown_method,
+      co2: estimatedGasBreakdown.co2,
+      ch4: estimatedGasBreakdown.ch4,
+      n2o: estimatedGasBreakdown.n2o,
+      co2e_other: estimatedGasBreakdown.co2e_other,
+    },
+  };
+}
+
+app.post(
+  "/api/erp/upload",
+  upload.single("erpFile"),
+  async (req: Request, res: Response) => {
+    const startTime = Date.now();
+
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: "ERP file is required.",
+        });
+      }
+
+      const rows = parseErpFile(req.file.path, req.file.originalname);
+      const erpItems = normalizeErpRowsToInvoiceItems(rows);
+
+      if (erpItems.length === 0) {
+        return res.status(422).json({
+          success: false,
+          message:
+            "No valid ERP rows found. Required columns: item_name, quantity, unit.",
+          file: {
+            originalname: req.file.originalname,
+            filename: req.file.filename,
+            path: req.file.path,
+            mimetype: req.file.mimetype,
+            size: req.file.size,
+          },
+          total_rows: rows.length,
+          sample_row: rows[0] || null,
+        });
+      }
+
+      const calculationResults = await Promise.all(
+        erpItems.map(async (item) => {
+          try {
+            return await calculateErpItem(item);
+          } catch (error: any) {
+            return {
+              success: false,
+              item_name: item.item_name,
+              message: error.message || "ERP item calculation failed.",
+            };
+          }
+        })
+      );
+
+      const totalKgCO2e = calculationResults
+        .filter((r: any) => r.success)
+        .reduce((sum: number, r: any) => {
+          return sum + Number(r?.result?.co2e || 0);
+        }, 0);
+
+      const successfulItems = calculationResults.filter(
+        (r: any) => r.success
+      ).length;
+
+      const failedItems = calculationResults.filter(
+        (r: any) => !r.success
+      ).length;
+
+      return res.json({
+        success: true,
+        message: "ERP file processed and emissions calculated successfully.",
+        type: "ERP_UPLOAD",
+        source: "ERP_EXPORT_FILE",
+
+        file: {
+          originalname: req.file.originalname,
+          filename: req.file.filename,
+          path: req.file.path,
+          mimetype: req.file.mimetype,
+          size: req.file.size,
+        },
+
+        total_rows: rows.length,
+        total_items: erpItems.length,
+        successful_items: successfulItems,
+        failed_items: failedItems,
+
+        total_kgco2e: totalKgCO2e,
+        total_tco2e: totalKgCO2e / 1000,
+
+        erp_items: erpItems,
+        calculation_results: calculationResults,
+
+        processing_time_ms: Date.now() - startTime,
+      });
+    } catch (error: any) {
+      console.error("ERP upload error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: error.message || "ERP upload processing failed.",
+      });
+    }
+  }
+);
+
 
 app.use("/api", limiter, router);
 
