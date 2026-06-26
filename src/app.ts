@@ -22,6 +22,7 @@ import db from "./db.js";
 import { findBestMapping } from "./services/mapping.service.js";
 import { convertQuantity } from "./services/unit.service.js";
 import { buildClimatiqBody } from "./services/climatiqBody.service.js";
+import { calculateDynamicCountryEmission } from "./services/dynamicEmissionFactor.service.js";
 dotenv.config();
 const require = createRequire(import.meta.url);
 const pdfParseModule = require("pdf-parse");
@@ -4416,6 +4417,33 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
         if (isGenericTaxInvoiceFallbackItem(item)) {
           console.log("GENERIC_TAX_INVOICE_LOW_CONFIDENCE_FALLBACK_ACTIVE");
           return buildManualGenericPurchasedGoodsCalculation(item);
+        }
+
+        // India/Malaysia dynamic Climatiq exact EF selection.
+        // If this succeeds, it returns the calculation directly. If it fails, old DB/static fallback continues.
+        try {
+          const dynamicResult = await calculateDynamicCountryEmission(
+            item,
+            extractedText,
+            req.file?.originalname || ""
+          );
+
+          if (dynamicResult?.success) {
+            console.log("DYNAMIC_COUNTRY_EF_SELECTED", {
+              item_name,
+              country: dynamicResult.country,
+              category: dynamicResult.category,
+              activity_id: dynamicResult.selected_emission_factor?.activity_id,
+              confidence: dynamicResult.confidence,
+            });
+
+            return dynamicResult;
+          }
+        } catch (dynamicError: any) {
+          console.warn(
+            "Dynamic India/Malaysia Climatiq EF failed. Falling back to local DB/static mapping:",
+            dynamicError?.response?.data || dynamicError?.message || dynamicError
+          );
         }
 
         const mapping = await findBestMapping(item_name);
