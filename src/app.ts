@@ -5998,12 +5998,7 @@ app.post(
 app.get("/api/test-climatiq", async (_req: Request, res: Response) => {
   try {
     const apiKey = process.env.CLIMATIQ_API_KEY;
-
-    console.log("CLIMATIQ_TEST_ROUTE_HIT", {
-      hasApiKey: Boolean(apiKey),
-      keyPreview: apiKey ? `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}` : null,
-      dataVersion: process.env.CLIMATIQ_DATA_VERSION || "^21",
-    });
+    const dataVersion = process.env.CLIMATIQ_DATA_VERSION || "^21";
 
     if (!apiKey) {
       return res.status(500).json({
@@ -6022,6 +6017,7 @@ app.get("/api/test-climatiq", async (_req: Request, res: Response) => {
         params: {
           query: "electricity supplied from grid",
           region: "MY",
+          data_version: dataVersion,
           results_per_page: 5,
         },
       }
@@ -6030,16 +6026,11 @@ app.get("/api/test-climatiq", async (_req: Request, res: Response) => {
     return res.status(200).json({
       success: true,
       message: "Climatiq API search call successful.",
+      data_version: dataVersion,
       result_count: searchResponse.data?.results?.length || 0,
       first_result: searchResponse.data?.results?.[0] || null,
     });
   } catch (error: any) {
-    console.error("CLIMATIQ_SEARCH_TEST_FAILED", {
-      status: error?.response?.status,
-      data: error?.response?.data,
-      message: error?.message,
-    });
-
     return res.status(500).json({
       success: false,
       error_type: "CLIMATIQ_SEARCH_TEST_FAILED",
