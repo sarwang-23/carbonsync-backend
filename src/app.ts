@@ -47,97 +47,18 @@ const port = process.env.PORT || 5000;
 const app = express();
 
 const CLIMATIQ_ONLY_MODE = process.env.CLIMATIQ_ONLY_MODE !== "false";
-console.log("APP_TS_LOADED_V6_HEALTH_AND_CLIMATIQ_TEST_ACTIVE");
+console.log("APP_TS_LOADED_V7_CLIMATIQ_TEST_BUILD_FIXED");
 
 app.get("/api/health", (_req: Request, res: Response) => {
   res.status(200).json({
     success: true,
     message: "CarbonSync backend health OK",
     mode: CLIMATIQ_ONLY_MODE ? "CLIMATIQ_ONLY" : "LEGACY_FALLBACK_ALLOWED",
+    version: "v7-climatiq-test-build-fixed",
     climatiq_key_available: Boolean(process.env.CLIMATIQ_API_KEY),
-    version: "v6-health-and-climatiq-test-active",
     time: new Date().toISOString(),
   });
 });
-
-async function handleClimatiqTest(_req: Request, res: Response) {
-  try {
-    const apiKey = process.env.CLIMATIQ_API_KEY;
-    const dataVersion = process.env.CLIMATIQ_DATA_VERSION || "^21";
-
-    console.log("CLIMATIQ_TEST_ROUTE_HIT", {
-      hasApiKey: Boolean(apiKey),
-      keyPreview: apiKey ? `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}` : null,
-      dataVersion,
-    });
-
-    if (!apiKey) {
-      return res.status(500).json({
-        success: false,
-        error_type: "CLIMATIQ_API_KEY_MISSING",
-        message: "CLIMATIQ_API_KEY is not set in environment variables.",
-      });
-    }
-
-    const searchResponse = await axios.get(
-      "https://api.climatiq.io/data/v1/search",
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-        params: {
-          query: "electricity supplied from grid",
-          region: "MY",
-          results_per_page: 5,
-        },
-        timeout: 20000,
-      }
-    );
-
-    const firstResult = searchResponse.data?.results?.[0] || null;
-
-    console.log("CLIMATIQ_SEARCH_TEST_SUCCESS", {
-      status: searchResponse.status,
-      result_count: searchResponse.data?.results?.length || 0,
-      first_result: firstResult
-        ? {
-            activity_id: firstResult.activity_id,
-            name: firstResult.name,
-            region: firstResult.region,
-            source: firstResult.source,
-            year: firstResult.year,
-            unit: firstResult.unit,
-          }
-        : null,
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: "Climatiq API search call successful.",
-      mode: CLIMATIQ_ONLY_MODE ? "CLIMATIQ_ONLY" : "LEGACY_FALLBACK_ALLOWED",
-      data_version: dataVersion,
-      result_count: searchResponse.data?.results?.length || 0,
-      first_result: firstResult,
-    });
-  } catch (error: any) {
-    console.error("CLIMATIQ_SEARCH_TEST_FAILED", {
-      status: error?.response?.status,
-      data: error?.response?.data,
-      message: error?.message,
-    });
-
-    return res.status(500).json({
-      success: false,
-      error_type: "CLIMATIQ_SEARCH_TEST_FAILED",
-      status: error?.response?.status,
-      error: error?.response?.data || error?.message || String(error),
-    });
-  }
-}
-
-app.get("/api/test-climatiq", handleClimatiqTest);
-app.post("/api/test-climatiq", handleClimatiqTest);
-
 
 
 function assertManualFallbackAllowed(fallbackName: string): void {
@@ -4696,7 +4617,7 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
               success: false,
               item_name,
               message: "Climatiq calculation did not return success. Manual/static fallback is disabled.",
-              error_type: dynamicResult?.error_type || "CLIMATIQ_DYNAMIC_RESULT_FAILED",
+              error_type: (dynamicResult as any)?.error_type || "CLIMATIQ_DYNAMIC_RESULT_FAILED",
               climatiq_result: dynamicResult,
             };
           }
@@ -6028,6 +5949,60 @@ app.post(
     }
   }
 );
+
+app.get("/api/test-climatiq", async (_req: Request, res: Response) => {
+  try {
+    const apiKey = process.env.CLIMATIQ_API_KEY;
+
+    console.log("CLIMATIQ_TEST_ROUTE_HIT", {
+      hasApiKey: Boolean(apiKey),
+      keyPreview: apiKey ? `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}` : null,
+      dataVersion: process.env.CLIMATIQ_DATA_VERSION || "^21",
+    });
+
+    if (!apiKey) {
+      return res.status(500).json({
+        success: false,
+        error_type: "CLIMATIQ_API_KEY_MISSING",
+        message: "CLIMATIQ_API_KEY is not set in environment variables.",
+      });
+    }
+
+    const searchResponse = await axios.get(
+      "https://api.climatiq.io/data/v1/search",
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+        params: {
+          query: "electricity supplied from grid",
+          region: "MY",
+          results_per_page: 5,
+        },
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Climatiq API search call successful.",
+      result_count: searchResponse.data?.results?.length || 0,
+      first_result: searchResponse.data?.results?.[0] || null,
+    });
+  } catch (error: any) {
+    console.error("CLIMATIQ_SEARCH_TEST_FAILED", {
+      status: error?.response?.status,
+      data: error?.response?.data,
+      message: error?.message,
+    });
+
+    return res.status(500).json({
+      success: false,
+      error_type: "CLIMATIQ_SEARCH_TEST_FAILED",
+      status: error?.response?.status,
+      error: error?.response?.data || error?.message || String(error),
+    });
+  }
+});
 
 app.use("/api", limiter, router);
 
