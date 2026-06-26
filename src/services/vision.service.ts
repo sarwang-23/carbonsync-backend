@@ -22,6 +22,32 @@ function toNumber(value: any): number {
     return Number.isFinite(num) ? num : 0;
 }
 
+function getEnvNumber(name: string, defaultValue: number) {
+    const value = Number(process.env[name]);
+    return Number.isFinite(value) && value > 0 ? value : defaultValue;
+}
+
+async function withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    timeoutMessage: string
+): Promise<T> {
+    let timer: NodeJS.Timeout | null = null;
+
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+                timer = setTimeout(() => {
+                    reject(new Error(timeoutMessage));
+                }, timeoutMs);
+            }),
+        ]);
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+}
+
 function extractJsonFromText(raw: string): any | null {
     const cleaned = String(raw || "")
         .replace(/```json/gi, "")
@@ -31,7 +57,7 @@ function extractJsonFromText(raw: string): any | null {
     try {
         return JSON.parse(cleaned);
     } catch {
-        // Continue with substring extraction
+        // Continue with substring extraction.
     }
 
     const firstBrace = cleaned.indexOf("{");
@@ -81,16 +107,16 @@ function findElectricityUsageFromStructured(structured: any): number {
 
     const previous = toNumber(
         electricity.previous_reading ??
-        electricity.previousReading ??
-        electricity.old_reading ??
-        electricity.oldReading
+            electricity.previousReading ??
+            electricity.old_reading ??
+            electricity.oldReading
     );
 
     const current = toNumber(
         electricity.current_reading ??
-        electricity.currentReading ??
-        electricity.new_reading ??
-        electricity.newReading
+            electricity.currentReading ??
+            electricity.new_reading ??
+            electricity.newReading
     );
 
     if (previous > 0 && current > previous) {
@@ -121,6 +147,7 @@ function findElectricityUsageFromRawText(rawText: string): number {
         /"usage_kwh"\s*:\s*(\d+(?:\.\d+)?)/i,
         /"usageKwh"\s*:\s*(\d+(?:\.\d+)?)/i,
         /"meter_difference_kwh"\s*:\s*(\d+(?:\.\d+)?)/i,
+        /"meterDifferenceKwh"\s*:\s*(\d+(?:\.\d+)?)/i,
         /(?:kegunaan|penggunaan|jumlah\s+penggunaan|usage|consumption)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:kwh)?/i,
         /(\d+(?:\.\d+)?)\s*kwh/i,
     ];
@@ -133,8 +160,8 @@ function findElectricityUsageFromRawText(rawText: string): number {
         }
     }
 
-    const previousPattern = /(?:dahulu|previous|previous_reading)"?\s*[:\-]?\s*(\d+(?:\.\d+)?)/i;
-    const currentPattern = /(?:semasa|current|current_reading)"?\s*[:\-]?\s*(\d+(?:\.\d+)?)/i;
+    const previousPattern = /(?:dahulu|previous|previous_reading|previousReading)"?\s*[:\-]?\s*(\d+(?:\.\d+)?)/i;
+    const currentPattern = /(?:semasa|current|current_reading|currentReading)"?\s*[:\-]?\s*(\d+(?:\.\d+)?)/i;
 
     const previous = toNumber(clean.match(previousPattern)?.[1]);
     const current = toNumber(clean.match(currentPattern)?.[1]);
@@ -154,14 +181,17 @@ function getGeminiModelCandidates() {
         fromEnv,
         ...fallbackList.split(","),
         "gemini-2.5-flash-lite",
-        "gemini-2.5-flash",
         "gemini-2.0-flash-lite",
+        "gemini-2.5-flash",
         "gemini-2.0-flash",
     ]
         .map((model) => model.trim())
         .filter(Boolean);
 
-    return [...new Set(candidates)];
+    const unique = [...new Set(candidates)];
+    const maxModels = getEnvNumber("GEMINI_VISION_MAX_MODELS", 2);
+
+    return unique.slice(0, maxModels);
 }
 
 function isRetryableGeminiError(error: any) {
@@ -178,7 +208,8 @@ function isRetryableGeminiError(error: any) {
         message.includes("UNAVAILABLE") ||
         message.includes("high demand") ||
         message.includes("overloaded") ||
-        message.includes("temporarily")
+        message.includes("temporarily") ||
+        message.includes("timed out")
     );
 }
 
@@ -188,9 +219,11 @@ function isRetryableGeminiError(error: any) {
  * Required env:
  * GEMINI_API_KEY=your_key
  *
- * Recommended env:
+ * Render-safe recommended env:
  * GEMINI_VISION_MODEL=gemini-2.5-flash-lite
- * GEMINI_VISION_FALLBACK_MODELS=gemini-2.5-flash,gemini-2.0-flash-lite,gemini-2.0-flash
+ * GEMINI_VISION_FALLBACK_MODELS=gemini-2.0-flash-lite
+ * GEMINI_VISION_TIMEOUT_MS=12000
+ * GEMINI_VISION_MAX_MODELS=2
  *
  * Required package:
  * npm install @google/genai
@@ -201,6 +234,18 @@ export async function extractInvoiceWithGeminiVision(input: {
     mimetype?: string;
 }): Promise<VisionExtractionResult> {
     const warnings: string[] = [];
+
+    if (process.env.DISABLE_VISION_EXTRACTION === "true") {
+        return {
+            success: false,
+            provider: "disabled",
+            rawText: "",
+            structured: null,
+            confidence: 0,
+            warnings: ["DISABLE_VISION_EXTRACTION=true. Vision fallback skipped."],
+        };
+    }
+
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -270,32 +315,37 @@ Important extraction rules:
 `;
 
         const modelCandidates = getGeminiModelCandidates();
+        const timeoutMs = getEnvNumber("GEMINI_VISION_TIMEOUT_MS", 12000);
+        const maxAttempts = getEnvNumber("GEMINI_VISION_ATTEMPTS_PER_MODEL", 1);
         let lastError: any = null;
 
         for (const modelName of modelCandidates) {
-            const maxAttempts = 2;
-
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                 try {
                     console.log("GEMINI_VISION_MODEL_ACTIVE", {
                         modelName,
                         attempt,
+                        timeoutMs,
                     });
 
-                    const result = await ai.models.generateContent({
-                        model: modelName,
-                        contents: [
-                            {
-                                inlineData: {
-                                    data: base64,
-                                    mimeType: input.mimetype || "application/pdf",
+                    const result = await withTimeout(
+                        ai.models.generateContent({
+                            model: modelName,
+                            contents: [
+                                {
+                                    inlineData: {
+                                        data: base64,
+                                        mimeType: input.mimetype || "application/pdf",
+                                    },
                                 },
-                            },
-                            {
-                                text: prompt,
-                            },
-                        ],
-                    });
+                                {
+                                    text: prompt,
+                                },
+                            ],
+                        }),
+                        timeoutMs,
+                        `Gemini Vision timed out after ${timeoutMs}ms for model ${modelName}`
+                    );
 
                     const raw = result.text || "";
                     const cleaned = raw
@@ -339,7 +389,9 @@ Important extraction rules:
                         break;
                     }
 
-                    await sleep(1000 * attempt);
+                    if (attempt < maxAttempts) {
+                        await sleep(700 * attempt);
+                    }
                 }
             }
         }
@@ -464,4 +516,3 @@ export function convertVisionStructuredToLineItems(structured: any, rawText = ""
 
     return items;
 }
-

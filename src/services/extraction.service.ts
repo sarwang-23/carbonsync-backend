@@ -3,7 +3,18 @@ import path from "path";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { extractTextWithOcr } from "./ocr.service.js";
 import { extractInvoiceWithGeminiVision, convertVisionStructuredToLineItems } from "./vision.service.js";
-
+async function withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    timeoutMessage: string
+): Promise<T> {
+    return Promise.race([
+        promise,
+        new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs)
+        ),
+    ]);
+}
 export type ExtractionMethod =
     | "pdf_text"
     | "ocr_text"
