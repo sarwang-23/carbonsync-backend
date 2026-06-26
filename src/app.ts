@@ -5974,11 +5974,12 @@ app.get("/api/test-climatiq", async (_req: Request, res: Response) => {
         headers: {
           Authorization: `Bearer ${apiKey}`,
         },
-        params: {
-          query: "electricity supplied from grid",
-          region: "MY",
-          results_per_page: 5,
-        },
+       params: {
+  query: "electricity supplied from grid",
+  region: "MY",
+  data_version: process.env.CLIMATIQ_DATA_VERSION || "^21",
+  results_per_page: 5,
+},
       }
     );
 
