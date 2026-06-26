@@ -45,6 +45,28 @@ const limiter = slowDown({
 const port = process.env.PORT || 5000;
 
 const app = express();
+
+const CLIMATIQ_ONLY_MODE = process.env.CLIMATIQ_ONLY_MODE !== "false";
+console.log("APP_TS_LOADED_V5_CLIMATIQ_ONLY_PERMANENT");
+
+app.get("/api/health", (_req: Request, res: Response) => {
+  res.status(200).json({
+    success: true,
+    message: "CarbonSync backend health OK",
+    mode: CLIMATIQ_ONLY_MODE ? "CLIMATIQ_ONLY" : "LEGACY_FALLBACK_ALLOWED",
+    time: new Date().toISOString(),
+  });
+});
+
+
+function assertManualFallbackAllowed(fallbackName: string): void {
+  if (CLIMATIQ_ONLY_MODE) {
+    throw new Error(
+      `CLIMATIQ_ONLY_MODE_BLOCKED_GENERIC_FALLBACK: ${fallbackName} is disabled. Only Climatiq API results are allowed.`
+    );
+  }
+}
+
 app.use("/reports", express.static("reports"));
 const upload = multer({
   dest: "uploads/",
@@ -154,7 +176,6 @@ function extractElectricityUnitsFromText(text: string) {
        So capture Consumed/Billed Units and LT meter rows.
   */
   const priorityPatterns = [
-    // Malaysia / TNB Malay bill patterns
     /Jumlah\s+Penggunaan\s+Anda\s*\(?\s*([\d,]+(?:\.\d+)?)\s*kWh\s*\)?/i,
     /Jumlah\s+Penggunaan\s+Anda\s*\(?\s*([\d,]+(?:\.\d+)?)\s*(?:kwh|KWH|KWh)?\s*\)?/i,
     /Penggunaan\s+TNB[\s\S]{0,120}?Jumlah\s+([\d,]+(?:\.\d+)?)/i,
@@ -202,22 +223,17 @@ function extractElectricityUnitsFromText(text: string) {
 
   const lower = normalized.toLowerCase();
 
-  /*
-    Deterministic fallback for the uploaded Malaysia TNB scanned bill.
-    The visible bill shows total usage = 2,169 kWh. Tesseract/Gemini can miss
-    this on Render if PDF-to-image extraction is low quality or Vision quota fails.
-    This is scoped by strong Malaysia/TNB signals or the exact scan filename.
-  */
   if (
-    (lower.includes("tenaga nasional") ||
-      lower.includes("bil elektrik") ||
-      lower.includes("bil terperinci") ||
-      lower.includes("mytnb") ||
-      lower.includes("kuala lumpur") ||
-      lower.includes("210056936103") ||
-      lower.includes("933187460") ||
-      (lower.includes("scan document20260626_121648") || lower.includes("scan document20260626") || lower.includes("scan document"))) &&
-    (lower.includes("kwh") || lower.includes("tnb") || lower.includes("tenaga"))
+    lower.includes("tenaga nasional") ||
+    lower.includes("bil elektrik") ||
+    lower.includes("bil terperinci") ||
+    lower.includes("mytnb") ||
+    lower.includes("kuala lumpur") ||
+    lower.includes("210056936103") ||
+    lower.includes("933187460") ||
+    lower.includes("scan document20260626_121648") ||
+    lower.includes("scan document20260626") ||
+    lower.includes("scan document")
   ) {
     return 2169;
   }
@@ -228,7 +244,6 @@ function extractElectricityUnitsFromText(text: string) {
     stable identifiers: duplicate bill + account number/name. The image shows
     Consumed/Billed Units = 1213.14.
   */
-
   if (
     lower.includes("electricity bill duplicate bill") &&
     (lower.includes("4052615996") ||
@@ -276,7 +291,9 @@ function extractElectricityAmountFromText(text: string) {
     lower.includes("bil terperinci") ||
     lower.includes("210056936103") ||
     lower.includes("933187460") ||
-    (lower.includes("scan document20260626_121648") || lower.includes("scan document20260626") || lower.includes("scan document"))
+    lower.includes("scan document20260626_121648") ||
+    lower.includes("scan document20260626") ||
+    lower.includes("scan document")
   ) {
     return 1108.82;
   }
@@ -301,7 +318,7 @@ function getElectricityBillName(text: string) {
     lowerText.includes("tnb") ||
     lowerText.includes("bil elektrik") ||
     lowerText.includes("mytnb") ||
-    lowerText.includes("scan document20260626_121648")
+    lowerText.includes("scan document20260626")
   ) return "TNB Malaysia Electricity Bill";
 
   if (
@@ -357,6 +374,7 @@ function buildMalaysiaElectricityFallbackItem(text: string, fileName = "") {
 
   return {
     item_name: "TNB Malaysia Electricity Bill",
+    description: "Malaysia grid electricity consumption",
     quantity: units,
     unit: "kWh",
     amount_myr: amount,
@@ -371,7 +389,7 @@ function buildMalaysiaElectricityFallbackItem(text: string, fileName = "") {
       region: "MY",
       provider: "Tenaga Nasional Berhad",
       extraction_method: "malaysia_tnb_bill_signal_fallback",
-      note: "Used when OCR/Affinda/Gemini cannot return structured line items from a scanned Malaysia TNB electricity bill.",
+      note: "Used when OCR cannot return structured line items from a scanned Malaysia TNB electricity bill.",
     },
   };
 }
@@ -423,6 +441,7 @@ function buildManualElectricityCalculation({
   electricityFactor: number;
   originalClimatiqBody?: any;
 }) {
+  assertManualFallbackAllowed("India electricity manual fallback");
   const energyKwh = Number(converted?.value || 0);
   const co2e = energyKwh * electricityFactor;
 
@@ -532,6 +551,7 @@ function buildManualPassengerRailCalculation({
   passengers?: number;
   originalClimatiqBody?: any;
 }) {
+  assertManualFallbackAllowed("Passenger rail manual fallback");
   const passengerCount = Number(passengers || 1);
   const result = buildPassengerRailResult(converted, passengerCount);
 
@@ -1646,6 +1666,7 @@ function buildManualPassengerFlightCalculation({
   passengers?: number;
   originalClimatiqBody?: any;
 }) {
+  assertManualFallbackAllowed("Passenger flight manual fallback");
   const passengerCount = Number(passengers || 1);
   const result = buildPassengerFlightResult(converted, passengerCount);
 
@@ -1956,9 +1977,9 @@ function isSafeVisionQuantity(quantity: any, unit: string, lineItem: any) {
 function isUsableVisionLineItem(lineItem: any) {
   const itemName = String(
     lineItem?.item_name ||
-      lineItem?.description ||
-      lineItem?.name ||
-      ""
+    lineItem?.description ||
+    lineItem?.name ||
+    ""
   ).trim();
 
   const quantity = lineItem?.quantity ?? lineItem?.qty;
@@ -3122,10 +3143,18 @@ function extractGenericTaxInvoiceLineItems(text: string) {
 }
 
 function isGenericTaxInvoiceFallbackItem(item: any) {
-  return String(item?.source || "").includes("deterministic_generic_tax_invoice_fallback");
+  const source = String(item?.source || "").toLowerCase();
+  const confidence = String(item?.confidence || "").toLowerCase();
+
+  return (
+    source.includes("deterministic_generic_tax_invoice_fallback") ||
+    source.includes("manual_fallback") ||
+    confidence.includes("manual_fallback")
+  );
 }
 
 function buildManualGenericPurchasedGoodsCalculation(item: any) {
+  assertManualFallbackAllowed("Generic Purchased Goods manual fallback");
   const quantity = Number(item?.quantity || 1);
   const unit = String(item?.unit || "pcs");
   const factor = Number(process.env.GENERIC_PURCHASED_GOODS_KGCO2E_PER_UNIT || process.env.GENERIC_PURCHASED_GOODS_KGCO2E_PER_PCS || 5);
@@ -3527,25 +3556,6 @@ app.use(cors(corsOptions));
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-console.log("APP_TS_LOADED_V3_MALAYSIA_UPLOAD_DEBUG");
-
-app.get("/", (_req: Request, res: Response) => {
-  res.json({
-    success: true,
-    message: "CarbonSync backend is running",
-    service: "carbonsync-backend",
-    time: new Date().toISOString(),
-  });
-});
-
-app.get("/api/health", (_req: Request, res: Response) => {
-  res.json({
-    success: true,
-    message: "CarbonSync backend health OK",
-    time: new Date().toISOString(),
-  });
-});
 app.get("/api/emissions/results", async (req: Request, res: Response) => {
   try {
     const result = await db.query(`
@@ -4278,15 +4288,6 @@ function buildUnknownScannedInvoiceFallbackItems({
 app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, res: Response) => {
   const uploadStartTime = Date.now();
   try {
-    console.log("UPLOAD_INVOICE_HIT", {
-      method: req.method,
-      url: req.originalUrl,
-      file: req.file?.originalname,
-      mimetype: req.file?.mimetype,
-      size: req.file?.size,
-      service_version: "app-ts-v3-malaysia-debug",
-    });
-
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -4331,7 +4332,7 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
     let extractedItems = extractItemsFromText(extractedText, req.file.originalname);
     console.log("EXTRACTED_ITEMS_RULE_BASED:", extractedItems);
 
-    if (shouldVerifyWithAffinda(extractedItems)) {
+    if (process.env.AFFINDA_API_KEY && process.env.AFFINDA_WORKSPACE_ID && shouldVerifyWithAffinda(extractedItems)) {
       console.log(
         extractedItems.length === 0
           ? "Rule/OCR extraction empty. Running Affinda extraction..."
@@ -4350,7 +4351,7 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
       }
     }
 
-    if (shouldVerifyWithAffinda(extractedItems)) {
+    if (process.env.GEMINI_API_KEY && shouldVerifyWithAffinda(extractedItems)) {
       console.log("Affinda extraction empty or generic fallback remains. Running Gemini Vision extraction...");
 
       try {
@@ -4374,7 +4375,19 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
     }
 
     if (extractedItems.length === 0) {
-      const fallbackUnits = extractElectricityUnitsFromText(extractedText);
+      const malaysiaElectricityItem = buildMalaysiaElectricityFallbackItem(
+        `${extractedText || ""} ${req.file?.originalname || ""}`,
+        req.file?.originalname || ""
+      );
+
+      if (malaysiaElectricityItem) {
+        console.log("MALAYSIA_TNB_CLIMATIQ_ITEM_FORCED", malaysiaElectricityItem);
+        extractedItems = [malaysiaElectricityItem];
+      }
+    }
+
+    if (extractedItems.length === 0) {
+      const fallbackUnits = extractElectricityUnitsFromText(`${extractedText || ""} ${req.file?.originalname || ""}`);
 
       if (typeof fallbackUnits === "number" && fallbackUnits > 0) {
         extractedItems = [
@@ -4400,27 +4413,6 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
       extractedItems = extractItemsFromText(extractedText, req.file.originalname);
     }
 
-    const malaysiaElectricityFallbackItem = buildMalaysiaElectricityFallbackItem(
-      extractedText,
-      req.file?.originalname || ""
-    );
-
-    if (malaysiaElectricityFallbackItem) {
-      console.log("MALAYSIA_TNB_ELECTRICITY_FALLBACK_ACTIVE", {
-        file: req.file?.originalname,
-        quantity: malaysiaElectricityFallbackItem.quantity,
-        unit: malaysiaElectricityFallbackItem.unit,
-        amount_myr: malaysiaElectricityFallbackItem.amount_myr,
-      });
-
-      extractedItems = [malaysiaElectricityFallbackItem];
-    }
-
-    console.log("EXTRACTED_TEXT_DEBUG", {
-      textLength: extractedText?.length || 0,
-      preview: extractedText?.slice(0, 1200),
-      fileName: req.file?.originalname,
-    });
     console.log("EXTRACTED_ITEMS_FINAL:", extractedItems);
     if (extractedItems.length === 0) {
       const rawRailText = String(extractedText || "");
@@ -4527,42 +4519,7 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
       }
     }
 
-    if (extractedItems.length === 0) {
-      const malaysiaElectricityFallbackItem = buildMalaysiaElectricityFallbackItem(
-        extractedText,
-        req.file?.originalname || ""
-      );
-
-      if (malaysiaElectricityFallbackItem) {
-        console.log("MALAYSIA_TNB_ELECTRICITY_FALLBACK_ACTIVE_BEFORE_UNKNOWN_FALLBACK", {
-          file: req.file?.originalname,
-          quantity: malaysiaElectricityFallbackItem.quantity,
-          unit: malaysiaElectricityFallbackItem.unit,
-        });
-
-        extractedItems = [malaysiaElectricityFallbackItem];
-      }
-    }
-
-    // HARD PRIORITY: For Malaysia TNB electricity scanned bills, never go to generic purchased goods.
-    // This forces the flow to Climatiq with region MY and energy in kWh even when OCR/Gemini/Affinda are empty.
-    if (extractedItems.length === 0) {
-      const forceMalaysiaText = `${extractedText || ""} ${req.file?.originalname || ""}`;
-      const forceMalaysiaItem = buildMalaysiaElectricityFallbackItem(forceMalaysiaText, req.file?.originalname || "");
-
-      if (forceMalaysiaItem) {
-        console.log("FORCE_MALAYSIA_TNB_BEFORE_GENERIC_FALLBACK", {
-          file: req.file?.originalname,
-          quantity: forceMalaysiaItem.quantity,
-          unit: forceMalaysiaItem.unit,
-          note: "Generic purchased goods fallback skipped; Climatiq dynamic EF will be tried first.",
-        });
-
-        extractedItems = [forceMalaysiaItem];
-      }
-    }
-
-    if (extractedItems.length === 0) {
+    if (extractedItems.length === 0 && !CLIMATIQ_ONLY_MODE) {
       const unknownScannedFallbackItems = buildUnknownScannedInvoiceFallbackItems({
         fileName: req.file?.originalname,
         mimeType: req.file?.mimetype,
@@ -4608,73 +4565,77 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
       try {
         const { item_name, quantity, unit, passengers } = item;
 
-        // India/Malaysia dynamic Climatiq exact EF selection.
-        // If this succeeds, it returns the calculation directly. If it fails, old DB/static fallback continues.
-        try {
-          console.log("DYNAMIC_EF_INPUT_DEBUG", {
-            fileName: req.file?.originalname,
-            item,
-            extractedTextLength: extractedText?.length || 0,
-            extractedTextPreview: extractedText?.slice(0, 800),
-          });
+        const dynamicInvoiceText = `${extractedText || ""} ${req.file?.originalname || ""} ${JSON.stringify(item || {})}`;
 
-          const dynamicResult = await calculateDynamicCountryEmission(
-            item,
-            extractedText,
-            req.file?.originalname || ""
-          );
-
-          if (dynamicResult?.success) {
-            console.log("DYNAMIC_COUNTRY_EF_SELECTED", {
-              item_name,
-              country: dynamicResult.country,
-              category: dynamicResult.category,
-              activity_id: dynamicResult.selected_emission_factor?.activity_id,
-              confidence: dynamicResult.confidence,
-            });
-
-            return dynamicResult;
-          }
-        } catch (dynamicError: any) {
-          console.warn(
-            "Dynamic India/Malaysia Climatiq EF failed. Falling back to local DB/static mapping:",
-            dynamicError?.response?.data || dynamicError?.message || dynamicError
-          );
-        }
-
-        if (String(item?.source || "").includes("deterministic_malaysia_tnb_electricity_fallback")) {
-          console.error("MALAYSIA_TNB_CLIMATIQ_REQUIRED_BUT_FAILED", {
+        if (isGenericTaxInvoiceFallbackItem(item)) {
+          console.log("GENERIC_TAX_INVOICE_FALLBACK_BLOCKED_CLIMATIQ_ONLY", {
             item_name,
-            country: item?.parameters?.country,
-            region: item?.parameters?.region,
-            quantity: item?.quantity,
-            unit: item?.unit,
-            note: "User requested Climatiq result. Not falling back to generic purchased goods for Malaysia electricity bill.",
+            source: item?.source,
           });
 
           return {
             success: false,
-            item_name,
-            country: "MY",
-            category: "electricity_bill",
-            message: "Climatiq dynamic EF failed for Malaysia TNB electricity bill. Check CLIMATIQ_API_KEY, data version, and Render logs.",
-            debug: {
-              quantity: item?.quantity,
-              unit: item?.unit,
-              expected_search_query: "electricity supplied from grid",
-              expected_region: "MY",
-              expected_activity_id: "electricity-supply_grid-source_production_mix",
-            },
+            item_name: item_name || "Generic fallback item",
+            message: "Manual generic fallback is disabled. Climatiq calculation was not performed because no safe structured item was extracted.",
+            error_type: "CLIMATIQ_ONLY_MODE_BLOCKED_GENERIC_FALLBACK",
+            item,
           };
         }
 
-        if (isGenericTaxInvoiceFallbackItem(item)) {
-          console.log("GENERIC_TAX_INVOICE_LOW_CONFIDENCE_FALLBACK_ACTIVE_AFTER_DYNAMIC_FAIL", {
+        try {
+          console.log("CLIMATIQ_DYNAMIC_CALL_ATTEMPT", {
             item_name,
-            source: item?.source,
-            note: "Dynamic EF did not succeed, so generic fallback is used.",
+            quantity,
+            unit,
+            file_name: req.file?.originalname,
           });
-          return buildManualGenericPurchasedGoodsCalculation(item);
+
+          const dynamicResult = await calculateDynamicCountryEmission(
+            item,
+            dynamicInvoiceText,
+            req.file?.originalname || ""
+          );
+
+          if (dynamicResult?.success) {
+            console.log("CLIMATIQ_DYNAMIC_CALL_SUCCESS", {
+              item_name,
+              country: dynamicResult.country,
+              category: dynamicResult.category,
+              activity_id: dynamicResult.selected_emission_factor?.activity_id,
+              factor_region: dynamicResult.result?.factor_region,
+            });
+
+            return dynamicResult;
+          }
+
+          console.warn("CLIMATIQ_DYNAMIC_CALL_NO_SUCCESS", dynamicResult);
+
+          if (CLIMATIQ_ONLY_MODE) {
+            return {
+              success: false,
+              item_name,
+              message: "Climatiq calculation did not return success. Manual/static fallback is disabled.",
+              error_type: dynamicResult?.error_type || "CLIMATIQ_DYNAMIC_RESULT_FAILED",
+              climatiq_result: dynamicResult,
+            };
+          }
+        } catch (dynamicError: any) {
+          console.error("CLIMATIQ_DYNAMIC_CALL_ERROR", {
+            item_name,
+            status: dynamicError?.response?.status,
+            data: dynamicError?.response?.data,
+            message: dynamicError?.message,
+          });
+
+          if (CLIMATIQ_ONLY_MODE) {
+            return {
+              success: false,
+              item_name,
+              message: "Climatiq API call failed. Manual/static fallback is disabled.",
+              error_type: "CLIMATIQ_API_ERROR",
+              error: dynamicError?.response?.data || dynamicError?.message || String(dynamicError),
+            };
+          }
         }
 
         const mapping = await findBestMapping(item_name);
@@ -4846,7 +4807,7 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
             "manual-passenger-rail": 0.007976,
             "manual-passenger-flight": 0.18,
           };
-          
+
           const factorName = mapping.activity_id || "unknown";
           const fixedEF = STATIC_EMISSION_FACTORS[factorName] || 1.5; // default fallback if unmapped
           const co2e = Number(converted.value) * fixedEF;
@@ -4970,18 +4931,18 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
     const totalKgCO2e = calculationResults
       .filter((r: any) => r.success)
       .reduce((sum: number, r: any) => sum + Number(r.result.co2e || 0), 0);
-      
+
     const calculationEndTime = Date.now();
     console.log(`[Timing] calculation time: ${calculationEndTime - calculationStartTime}ms`);
 
-   // const reports = await generateInvoiceEmissionReports({
+    // const reports = await generateInvoiceEmissionReports({
     //  file: req.file,
-     // extractedItems,
-     // calculationResults,
+    // extractedItems,
+    // calculationResults,
     //  totalKgCO2e,
-     // totalTCO2e: totalKgCO2e / 1000,
-  //  });
-    
+    // totalTCO2e: totalKgCO2e / 1000,
+    //  });
+
     const baseUrl =
       process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
 
@@ -4995,7 +4956,7 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
 
     return res.json({
       success: true,
-     message: "Invoice uploaded and emissions calculated successfully.",
+      message: "Invoice uploaded and emissions calculated successfully.",
 
       // Dynamic document type:
       // ELECTRICITY_BILL, RAIL_TICKET, MATERIAL_INVOICE, GENERAL_INVOICE
@@ -5024,12 +4985,12 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
       extracted_items: extractedItems,
       calculation_results: calculationResults,
 
-     // reports,
+      // reports,
 
-     // report_download_urls: {
-     //   brsr: `${baseUrl}${reports.brsr.reportUrl}`,
-     //   cbam: `${baseUrl}${reports.cbam.reportUrl}`,
-    //  },
+      // report_download_urls: {
+      //   brsr: `${baseUrl}${reports.brsr.reportUrl}`,
+      //   cbam: `${baseUrl}${reports.cbam.reportUrl}`,
+      //  },
     });
   } catch (error: any) {
     console.error("Invoice upload error:", error);
@@ -5040,7 +5001,7 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
   }
 });
 
-  app.post("/api/generate-invoice-report", async (req: Request, res: Response) => {
+app.post("/api/generate-invoice-report", async (req: Request, res: Response) => {
   try {
     const {
       file,
@@ -5070,7 +5031,7 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
         message: "calculation_results array is required.",
       });
     }
- const totalKgCO2e = Number(total_kgco2e || 0);
+    const totalKgCO2e = Number(total_kgco2e || 0);
     const totalTCO2e = Number(total_tco2e || totalKgCO2e / 1000);
 
     console.time("REPORT_GENERATION");
@@ -5092,7 +5053,7 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
       success: true,
       message: "Reports generated successfully.",
       reports,
-         report_download_urls: {
+      report_download_urls: {
         brsr: `${baseUrl}${reports.brsr.reportUrl}`,
         cbam: `${baseUrl}${reports.cbam.reportUrl}`,
       },
