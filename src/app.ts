@@ -23,6 +23,7 @@ import { findBestMapping } from "./services/mapping.service.js";
 import { convertQuantity } from "./services/unit.service.js";
 import { buildClimatiqBody } from "./services/climatiqBody.service.js";
 import { calculateDynamicCountryEmission } from "./services/dynamicEmissionFactor.service.js";
+import { extractInvoiceData } from "./services/extraction.service.js";
 dotenv.config();
 const require = createRequire(import.meta.url);
 const pdfParseModule = require("pdf-parse");
@@ -4290,6 +4291,20 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
       });
     }
 
+    const extractionResult = await extractInvoiceData({
+        filePath: req.file.path,
+        fileName: req.file.originalname,
+        mimetype: req.file.mimetype,
+    });
+
+    console.log("EXTRACTION_SERVICE_RESULT", {
+        success: extractionResult.success,
+        method: extractionResult.method,
+        textLength: extractionResult.textLength,
+        lineItems: extractionResult.line_items.length,
+        warnings: extractionResult.warnings,
+    });
+
     const extractionStartTime = Date.now();
     let extractedText = "";
     const calculationResults: any[] = [];
@@ -4324,7 +4339,11 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
       }
     }
 
-    let extractedItems = extractItemsFromText(extractedText, req.file.originalname);
+    let extractedItems = extractItemsFromText(extractedText, req.file.originalname) || [];
+
+    if (extractionResult.line_items.length > 0) {
+        extractedItems = extractionResult.line_items;
+    }
     console.log("EXTRACTED_ITEMS_RULE_BASED:", extractedItems);
 
     if (process.env.AFFINDA_API_KEY && process.env.AFFINDA_WORKSPACE_ID && shouldVerifyWithAffinda(extractedItems)) {
@@ -4976,6 +4995,14 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
 
       total_kgco2e: totalKgCO2e,
       total_tco2e: totalKgCO2e / 1000,
+
+      extraction: {
+          method: extractionResult.method,
+          confidence: extractionResult.confidence,
+          textLength: extractionResult.textLength,
+          warnings: extractionResult.warnings,
+          audit: extractionResult.audit,
+      },
 
       extracted_items: extractedItems,
       calculation_results: calculationResults,

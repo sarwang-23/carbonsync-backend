@@ -1,3 +1,27 @@
+import {
+    classifyInvoiceDocument,
+} from "./documentClassifier.service.js";
+import {
+    validateElectricityBill,
+    validateTrainTicket,
+    validateFlightTicket,
+} from "./validation.service.js";
+import {
+    calculateIndiaElectricityEmission,
+    calculateIndiaTrainEmission,
+    calculateIndiaFlightEmission,
+} from "./fixedIndiaEF.service.js";
+import {
+    searchClimatiqEmissionFactors,
+    estimateWithClimatiq,
+    selectLatestEmberElectricityFactor,
+    buildActivityParameters,
+} from "./climatiq.service.js";
+import {
+    normalizeLineItem,
+    normalizeLineItems,
+    hasValidNormalizedQuantity,
+} from "./lineItemNormalizer.service.js";
 import axios from "axios";
 import { convertQuantity } from "./unit.service.js";
 
@@ -13,13 +37,7 @@ type DetectedCategory =
     | "hotel"
     | "unknown";
 
-const SEARCH_URL = "https://api.climatiq.io/data/v1/search";
-const ESTIMATE_URL = "https://api.climatiq.io/data/v1/estimate";
-const DATA_VERSION = process.env.CLIMATIQ_DATA_VERSION || "^21";
 
-function getClimatiqDataVersion() {
-    return process.env.CLIMATIQ_DATA_VERSION || DATA_VERSION || "^21";
-}
 
 
 const INDIA_FIXED_ELECTRICITY_FACTOR = 0.710; // kgCO2e/kWh
@@ -80,190 +98,9 @@ function isIndiaFlightTicketText(text: string): boolean {
     );
 }
 
-function buildIndiaFixedElectricityCalculation(item: any, combinedText: string, originalItemName: string) {
-    const energyKwh =
-        extractElectricityKwh(combinedText) ||
-        Number(item?.parameters?.energy_kwh || item?.parameters?.energy || item?.quantity || 0);
 
-    if (!Number.isFinite(energyKwh) || energyKwh <= 0) {
-        return {
-            success: false,
-            error_type: "INDIA_FIXED_ELECTRICITY_KWH_MISSING",
-            message: "India electricity bill detected, but kWh quantity is missing.",
-            item_name: originalItemName || "India Electricity Bill",
-            country: "IN",
-            category: "electricity_bill",
-        };
-    }
 
-    const co2e = roundNumber(energyKwh * INDIA_FIXED_ELECTRICITY_FACTOR);
-    const gasBreakdown = estimateGasBreakdown(co2e, "electricity_bill");
 
-    return {
-        success: true,
-        item_name: originalItemName || "India Electricity Bill",
-        country: "IN",
-        category: "electricity_bill",
-        search_query: null,
-        converted: { value: energyKwh, unit: "kWh" },
-        climatiqBody: {
-            manual_fixed_india_factor: true,
-            emission_factor: {
-                activity_id: "electricity-india-national-average",
-                region: "IN",
-                factor_value: INDIA_FIXED_ELECTRICITY_FACTOR,
-                factor_unit: "kgCO2e/kWh",
-                data_version: "india-fixed-v1",
-            },
-            parameters: {
-                energy: energyKwh,
-                energy_unit: "kWh",
-            },
-        },
-        selected_emission_factor: {
-            id: "manual-india-electricity-0.710",
-            activity_id: "electricity-india-national-average",
-            name: "India National Grid Average Electricity Factor",
-            source: "India Region Fixed EF",
-            source_dataset: "Custom CarbonSync EF",
-            year: 2026,
-            region: "IN",
-            unit: "kg/kWh",
-            scope: ["2"],
-            source_lca_activity: "electricity_consumption",
-            mapping_score: 999,
-        },
-        alternatives: [],
-        confidence: 0.98,
-        reason: "Used India region fixed electricity EF 0.710 kgCO2e/kWh.",
-        result: {
-            co2e,
-            co2e_unit: "kg",
-            total_tco2e: co2e / 1000,
-            emission_factor: INDIA_FIXED_ELECTRICITY_FACTOR,
-            emission_factor_unit: "kgCO2e/kWh",
-            factor_name: "India National Grid Average Electricity Factor",
-            activity_id: "electricity-india-national-average",
-            source: "India Region Fixed EF",
-            source_dataset: "Custom CarbonSync EF",
-            factor_year: 2026,
-            factor_region: "IN",
-            category: "Electricity",
-            source_lca_activity: "electricity_consumption",
-            gas_breakdown_method: gasBreakdown.gas_breakdown_method,
-            co2: gasBreakdown.co2,
-            ch4: gasBreakdown.ch4,
-            n2o: gasBreakdown.n2o,
-            co2e_other: gasBreakdown.co2e_other,
-        },
-        raw_api_response: {
-            calculation_method: "fixed_india_electricity_factor",
-            energy_kwh: energyKwh,
-            emission_factor_kgco2e_per_kwh: INDIA_FIXED_ELECTRICITY_FACTOR,
-            total_kgco2e: co2e,
-            total_tco2e: co2e / 1000,
-        },
-    };
-}
-
-function buildIndiaFixedPassengerTransportCalculation(item: any, originalItemName: string, mode: "rail" | "flight") {
-    const factor = mode === "rail" ? INDIA_FIXED_PASSENGER_RAIL_FACTOR : INDIA_FIXED_PASSENGER_FLIGHT_FACTOR;
-    const distanceKm = extractDistanceKm(item);
-    const passengers = extractPassengerCount(item);
-
-    if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
-        return {
-            success: false,
-            error_type: mode === "rail" ? "INDIA_FIXED_RAIL_DISTANCE_MISSING" : "INDIA_FIXED_FLIGHT_DISTANCE_MISSING",
-            message: `India ${mode} ticket detected, but distance_km is missing.`,
-            item_name: originalItemName || (mode === "rail" ? "India Train Ticket" : "India Flight Ticket"),
-            country: "IN",
-            category: mode === "rail" ? "train_ticket" : "flight_ticket",
-        };
-    }
-
-    const passengerKm = distanceKm * passengers;
-    const co2e = roundNumber(passengerKm * factor);
-    const gasBreakdown = estimateGasBreakdown(co2e, mode === "rail" ? "passenger rail" : "passenger flight");
-    const activityId = mode === "rail" ? "manual-passenger-rail" : "manual-passenger-flight";
-    const factorName = mode === "rail" ? "India Passenger Rail Fixed Emission Factor" : "India Passenger Flight Fixed Emission Factor";
-    const categoryName = mode === "rail" ? "Passenger Rail" : "Passenger Air Travel";
-
-    return {
-        success: true,
-        item_name: originalItemName || (mode === "rail" ? "India Train Ticket" : "India Flight Ticket"),
-        country: "IN",
-        category: mode === "rail" ? "train_ticket" : "flight_ticket",
-        search_query: null,
-        converted: { value: distanceKm, unit: "km" },
-        passengers,
-        climatiqBody: {
-            manual_fixed_india_factor: true,
-            emission_factor: {
-                activity_id: activityId,
-                region: "IN",
-                factor_value: factor,
-                factor_unit: "kgCO2e/passenger-km",
-                data_version: "india-fixed-v1",
-            },
-            parameters: {
-                distance: distanceKm,
-                distance_km: distanceKm,
-                distance_unit: "km",
-                passengers,
-                passenger_km: passengerKm,
-                calculation_method: "distance_km * passengers * emission_factor",
-                formula: `${distanceKm} km * ${passengers} passenger(s) * ${factor} kgCO2e/passenger-km`,
-            },
-        },
-        selected_emission_factor: {
-            id: activityId,
-            activity_id: activityId,
-            name: factorName,
-            source: "India Region Fixed EF",
-            source_dataset: "Custom CarbonSync EF",
-            year: 2026,
-            region: "IN",
-            unit: "kgCO2e/passenger-km",
-            scope: ["3"],
-            source_lca_activity: "Passenger-kilometre",
-            mapping_score: 999,
-        },
-        alternatives: [],
-        confidence: 0.98,
-        reason: `Used India region fixed ${mode} ticket EF ${factor} kgCO2e/passenger-km.`,
-        result: {
-            co2e,
-            co2e_unit: "kg",
-            total_tco2e: co2e / 1000,
-            emission_factor: factor,
-            emission_factor_unit: "kgCO2e/passenger-km",
-            factor_name: factorName,
-            activity_id: activityId,
-            source: "India Region Fixed EF",
-            source_dataset: "Custom CarbonSync EF",
-            factor_year: 2026,
-            factor_region: "IN",
-            category: categoryName,
-            source_lca_activity: "Passenger-kilometre",
-            co2e_total: co2e,
-            gas_breakdown_method: gasBreakdown.gas_breakdown_method,
-            co2: gasBreakdown.co2,
-            ch4: gasBreakdown.ch4,
-            n2o: gasBreakdown.n2o,
-            co2e_other: gasBreakdown.co2e_other,
-        },
-        raw_api_response: {
-            calculation_method: mode === "rail" ? "fixed_india_passenger_rail_factor" : "fixed_india_passenger_flight_factor",
-            distance_km: distanceKm,
-            passengers,
-            passenger_km: passengerKm,
-            emission_factor_kgco2e_per_passenger_km: factor,
-            total_kgco2e: co2e,
-            total_tco2e: co2e / 1000,
-        },
-    };
-}
 
 function safeLower(value: any) {
     return String(value || "").toLowerCase();
@@ -518,38 +355,7 @@ export function buildClimatiqSearchQuery(category: DetectedCategory, itemName: s
     return itemName;
 }
 
-export async function searchClimatiqEmissionFactors(query: string, region: SupportedCountry, category?: string) {
-    const apiKey = process.env.CLIMATIQ_API_KEY;
-    const dataVersion = getClimatiqDataVersion();
 
-    if (!apiKey) throw new Error("CLIMATIQ_API_KEY is missing");
-
-    console.log("CLIMATIQ_SEARCH_CALL", {
-        query,
-        region,
-        category: category || null,
-        data_version: dataVersion,
-    });
-
-    const response = await axios.get(SEARCH_URL, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-        params: {
-            query,
-            region,
-            data_version: dataVersion,
-            ...(category ? { category } : {}),
-            results_per_page: 50,
-        },
-    });
-
-    console.log("CLIMATIQ_SEARCH_SUCCESS", {
-        status: response.status,
-        count: response.data?.results?.length || 0,
-        first_activity_id: response.data?.results?.[0]?.activity_id || null,
-    });
-
-    return response.data;
-}
 
 function scoreEmissionFactor(result: any, input: { region: SupportedCountry; category: DetectedCategory; unit: string; itemName: string }) {
     let score = 0;
@@ -664,66 +470,146 @@ export function selectBestEmissionFactor(results: any[], input: { region: Suppor
     };
 }
 
-function buildEstimatePayload(selectedEF: any, item: any, category: DetectedCategory, converted: any) {
-    const unit = safeLower(item.unit);
-    const dataVersion = getClimatiqDataVersion();
-    let parameters: any = {};
 
-    if (category === "electricity_bill") {
-        parameters = { energy: Number(converted.value), energy_unit: "kWh" };
-    } else if (category === "fuel") {
-        parameters = { volume: Number(item.quantity), volume_unit: unit.includes("lit") || unit === "l" || unit === "ltr" ? "l" : item.unit };
-    } else if (category === "transport_logistics") {
-        parameters = {
-            weight: Number(item.weight || item.parameters?.weight || item.quantity || 1),
-            weight_unit: item.weight_unit || item.parameters?.weight_unit || "t",
-            distance: Number(item.distance || item.parameters?.distance || 1),
-            distance_unit: item.distance_unit || item.parameters?.distance_unit || "km",
-        };
-    } else if (category === "purchased_goods" || category === "waste") {
-        parameters = { weight: Number(converted.value), weight_unit: "kg" };
-    } else if (category === "water") {
-        parameters = { volume: Number(item.quantity), volume_unit: unit === "m3" ? "m3" : item.unit };
-    } else if (category === "hotel") {
-        parameters = { number: Number(item.quantity || 1) };
-    }
-
-    return {
-        emission_factor: {
-            activity_id: selectedEF.activity_id,
-            region: selectedEF.region,
-            year: selectedEF.year,
-            data_version: dataVersion,
-        },
-        parameters,
-    };
-}
 
 export async function calculateDynamicCountryEmission(item: any, invoiceText: string, fileName = "") {
-    const originalItemName = String(item.item_name || item.description || "");
+    const normalizedInputItem = normalizeLineItem(item);
+    const originalItemName = String(
+        normalizedInputItem.item_name || item.item_name || item.description || ""
+    );
     const combinedText = `${invoiceText || ""} ${originalItemName || ""} ${fileName || ""}`;
-    const region = detectCountryFromInvoice(combinedText, fileName);
-    const category = detectInvoiceCategory(combinedText, originalItemName, item.unit);
+    const classification = classifyInvoiceDocument({
+        text: combinedText,
+        fileName,
+        itemName: originalItemName,
+        unit: String(normalizedInputItem.unit || item.unit || ""),
+    });
+
+    const region = classification.country as SupportedCountry;
+    const category = classification.category as DetectedCategory;
+
+    if (!hasValidNormalizedQuantity(normalizedInputItem) && category !== "electricity_bill") {
+        return {
+            success: false,
+            needs_review: true,
+            error_type: "INVALID_NORMALIZED_QUANTITY",
+            message: "Line item quantity or unit could not be normalized.",
+            item_name: originalItemName,
+            country: region,
+            category,
+            normalization: normalizedInputItem,
+        };
+    }
 
     // India region fixed EF rules. These three document types must not go to Climatiq.
     if (region === "IN" && category === "electricity_bill") {
-        return buildIndiaFixedElectricityCalculation(item, combinedText, originalItemName);
+        const quantity = extractElectricityKwh(combinedText) || Number(item?.parameters?.energy_kwh || item?.parameters?.energy || item?.quantity || 0);
+        
+        const validation = validateElectricityBill({
+            extractedKwh: Number(quantity || 0),
+            rawText: combinedText,
+            source: "india_fixed_electricity",
+        });
+
+        if (!validation.valid) {
+            return {
+                success: false,
+                needs_review: true,
+                error_type: "INDIA_ELECTRICITY_VALIDATION_FAILED",
+                message: "India electricity bill validation failed. Please verify extracted kWh before fixed EF calculation.",
+                item_name: originalItemName || "India Electricity Bill",
+                country: region,
+                category,
+                validation,
+            };
+        }
+
+        return calculateIndiaElectricityEmission({
+            quantity,
+            itemName: originalItemName || "India Electricity Bill",
+            description: item.description,
+            fileName,
+            validation,
+        });
     }
 
     if (region === "IN" && isIndiaTrainTicketText(combinedText)) {
-        return buildIndiaFixedPassengerTransportCalculation(item, originalItemName, "rail");
+        const distanceKm = extractDistanceKm(item);
+        const passengerCount = extractPassengerCount(item);
+
+        const validation = validateTrainTicket({
+            distanceKm,
+            passengerCount,
+            country: region,
+        });
+
+        if (!validation.valid) {
+            return {
+                success: false,
+                needs_review: true,
+                error_type: "TRAIN_VALIDATION_FAILED",
+                message: "Train ticket validation failed. Distance or passenger count is missing.",
+                item_name: originalItemName || "India Train Ticket",
+                country: region,
+                category: "train_ticket",
+                validation,
+            };
+        }
+
+        return calculateIndiaTrainEmission({
+            distanceKm,
+            passengerCount,
+            itemName: originalItemName || "India Train Ticket",
+            description: item.description,
+            fileName,
+            validation,
+        });
     }
 
     if (region === "IN" && isIndiaFlightTicketText(combinedText)) {
-        return buildIndiaFixedPassengerTransportCalculation(item, originalItemName, "flight");
+        const distanceKm = extractDistanceKm(item);
+        const passengerCount = extractPassengerCount(item);
+
+        const validation = validateFlightTicket({
+            distanceKm,
+            passengerCount,
+            origin: item.origin || item?.parameters?.origin,
+            destination: item.destination || item?.parameters?.destination,
+            country: region,
+        });
+
+        if (!validation.valid) {
+            return {
+                success: false,
+                needs_review: true,
+                error_type: "FLIGHT_VALIDATION_FAILED",
+                message: "Flight ticket validation failed. Distance or passenger count is missing.",
+                item_name: originalItemName || "India Flight Ticket",
+                country: region,
+                category: "flight_ticket",
+                validation,
+            };
+        }
+
+        return calculateIndiaFlightEmission({
+            distanceKm,
+            passengerCount,
+            itemName: originalItemName || "India Flight Ticket",
+            description: item.description,
+            fileName,
+            validation,
+        });
     }
 
     if (category === "unknown") {
         return {
             success: false,
-            message: "Dynamic EF category not detected",
+            needs_review: true,
+            error_type: "DOCUMENT_CLASSIFICATION_FAILED",
+            message: "Document category could not be detected with enough confidence.",
             item_name: originalItemName,
             country: region,
+            classification,
             detection_debug: {
                 text_preview: safeLower(combinedText).slice(0, 500),
             },
@@ -731,7 +617,12 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
     }
 
     const normalizedItem = category === "electricity_bill" ? "grid electricity" : originalItemName;
-    const normalizedItemData = { ...item };
+    const normalizedItemData = {
+        ...item,
+        quantity: normalizedInputItem.quantity || item.quantity,
+        unit: normalizedInputItem.unit !== "unknown" ? normalizedInputItem.unit : item.unit,
+        normalization: normalizedInputItem,
+    };
 
     // Scanned Malaysia TNB bills often contain usage like "Jumlah Penggunaan Anda (2,169kWh)".
     // If extraction produced amount/charges instead of consumption, force the correct kWh quantity here.
@@ -743,11 +634,33 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
             normalizedItemData.item_name = "Electricity consumption";
             normalizedItemData.description = "Electricity consumption";
         }
+        
+        // Electricity calculation se pehle validation
+        const validation = validateElectricityBill({
+            extractedKwh: Number(normalizedItemData.quantity || 0),
+            rawText: combinedText,
+            source: "dynamicEmissionFactor.service",
+        } as any);
+
+        if (!validation.valid) {
+            return {
+                success: false,
+                needs_review: true,
+                error_type: "ELECTRICITY_VALIDATION_FAILED",
+                message: "Electricity bill validation failed. Please verify extracted kWh before emission calculation.",
+                item_name: String(normalizedItemData.item_name || originalItemName || "Electricity consumption"),
+                country: region,
+                category,
+                validation,
+            };
+        }
+
+        normalizedItemData.validation = validation;
     }
 
     const itemName = String(normalizedItemData.item_name || normalizedItemData.description || normalizedItem);
     const query = buildClimatiqSearchQuery(category, itemName);
-    const searchData = await searchClimatiqEmissionFactors(query, region);
+    const searchData = await searchClimatiqEmissionFactors({ query, region, category });
     const candidates = searchData?.results || [];
 
     const best = selectBestEmissionFactor(candidates, {
@@ -775,32 +688,13 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
             ? { value: Number(normalizedItemData.quantity || 1), unit: "kWh" }
             : convertQuantity(Number(normalizedItemData.quantity || 1), normalizedItemData.unit || "kg");
 
-    const climatiqBody = buildEstimatePayload(best.selected, normalizedItemData, category, converted);
+    const parameters = buildActivityParameters(category, normalizedItemData, converted);
 
-    const apiKey = process.env.CLIMATIQ_API_KEY;
-    if (!apiKey) throw new Error("CLIMATIQ_API_KEY is missing");
-
-    console.log("CLIMATIQ_ESTIMATE_CALL", {
-        activity_id: climatiqBody.emission_factor.activity_id,
-        region: climatiqBody.emission_factor.region,
-        year: climatiqBody.emission_factor.year,
-        data_version: climatiqBody.emission_factor.data_version,
-        parameters: climatiqBody.parameters,
+    const estimateResponse = await estimateWithClimatiq({
+        selectedEF: best.selected,
+        parameters,
     });
-
-    const estimateResponse = await axios.post(ESTIMATE_URL, climatiqBody, {
-        headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-        },
-    });
-
-    console.log("CLIMATIQ_ESTIMATE_SUCCESS", {
-        status: estimateResponse.status,
-        co2e: estimateResponse.data?.co2e,
-        co2e_unit: estimateResponse.data?.co2e_unit,
-    });
-
+    const climatiqBody = estimateResponse.climatiqBody;
     const data: any = estimateResponse.data || {};
     const gases = data.constituent_gases || {};
     const co2e = Number(data.co2e || gases.co2e_total || 0);
@@ -812,6 +706,9 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
         item_name: itemName,
         country: region,
         category,
+        classification,
+        normalization: (normalizedItemData as any).normalization || null,
+        validation: (normalizedItemData as any).validation || null,
         search_query: query,
         converted,
         climatiqBody,
