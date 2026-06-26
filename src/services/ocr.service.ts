@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { pathToFileURL } from "url";
 import { createCanvas } from "canvas";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createWorker } from "tesseract.js";
@@ -14,7 +15,7 @@ export interface OcrResult {
     warnings: string[];
 }
 
-const OCR_SERVICE_VERSION = "OCR_NODE_CANVAS_FACTORY_V3_20260627";
+const OCR_SERVICE_VERSION = "OCR_CHROME_RENDER_FALLBACK_V4_20260627";
 
 function cleanText(text: string) {
     return String(text || "")
@@ -57,28 +58,18 @@ class NodeCanvasFactory {
         const canvas = createCanvas(width, height);
         const context = canvas.getContext("2d");
 
-        return {
-            canvas,
-            context,
-        };
+        return { canvas, context };
     }
 
     reset(canvasAndContext: any, width: number, height: number) {
-        if (!canvasAndContext?.canvas) {
-            throw new Error("Canvas is not specified");
-        }
-
-        if (width <= 0 || height <= 0) {
-            throw new Error("Invalid canvas size");
-        }
-
+        if (!canvasAndContext?.canvas) throw new Error("Canvas is not specified");
+        if (width <= 0 || height <= 0) throw new Error("Invalid canvas size");
         canvasAndContext.canvas.width = width;
         canvasAndContext.canvas.height = height;
     }
 
     destroy(canvasAndContext: any) {
         if (!canvasAndContext?.canvas) return;
-
         canvasAndContext.canvas.width = 0;
         canvasAndContext.canvas.height = 0;
         canvasAndContext.canvas = null;
@@ -125,7 +116,6 @@ function preprocessCanvasForOcr(canvas: any) {
 
     for (let i = 0; i < data.length; i += 4) {
         const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-
         let enhanced = (gray - 128) * 1.35 + 128;
         enhanced = enhanced > 185 ? 255 : enhanced < 95 ? 0 : enhanced;
 
@@ -148,70 +138,218 @@ function writeTempPng(buffer: Buffer) {
     return filePath;
 }
 
-async function recognizeWithMultipleInputs(worker: any, pngBuffer: Buffer, timeoutMs: number, warnings: string[]) {
+async function recognizeImagePath(worker: any, imagePath: string, timeoutMs: number) {
+    const result: any = await withTimeout(
+        worker.recognize(imagePath),
+        timeoutMs,
+        `Tesseract OCR timed out after ${timeoutMs}ms`
+    );
+
+    return {
+        text: cleanText(result?.data?.text || ""),
+        confidence: Number(result?.data?.confidence || 0),
+    };
+}
+
+async function recognizePngBuffer(worker: any, pngBuffer: Buffer, timeoutMs: number) {
     const tempPath = writeTempPng(pngBuffer);
 
     try {
-        try {
-            const result: any = await withTimeout(
-                worker.recognize(tempPath),
-                timeoutMs,
-                `Tesseract OCR timed out after ${timeoutMs}ms using tempPath`
-            );
-
-            return {
-                text: cleanText(result?.data?.text || ""),
-                confidence: Number(result?.data?.confidence || 0),
-                input_mode: "tempPath",
-            };
-        } catch (error: any) {
-            warnings.push(`OCR tempPath mode failed: ${error?.message || String(error)}`);
-        }
-
-        try {
-            const fileUrl = `file://${tempPath.replace(/\\/g, "/")}`;
-            const result: any = await withTimeout(
-                worker.recognize(fileUrl),
-                timeoutMs,
-                `Tesseract OCR timed out after ${timeoutMs}ms using fileUrl`
-            );
-
-            return {
-                text: cleanText(result?.data?.text || ""),
-                confidence: Number(result?.data?.confidence || 0),
-                input_mode: "fileUrl",
-            };
-        } catch (error: any) {
-            warnings.push(`OCR fileUrl mode failed: ${error?.message || String(error)}`);
-        }
-
-        try {
-            const dataUrl = `data:image/png;base64,${pngBuffer.toString("base64")}`;
-            const result: any = await withTimeout(
-                worker.recognize(dataUrl),
-                timeoutMs,
-                `Tesseract OCR timed out after ${timeoutMs}ms using dataUrl`
-            );
-
-            return {
-                text: cleanText(result?.data?.text || ""),
-                confidence: Number(result?.data?.confidence || 0),
-                input_mode: "dataUrl",
-            };
-        } catch (error: any) {
-            warnings.push(`OCR dataUrl mode failed: ${error?.message || String(error)}`);
-        }
-
-        return {
-            text: "",
-            confidence: 0,
-            input_mode: "all_failed",
-        };
+        return await recognizeImagePath(worker, tempPath, timeoutMs);
     } finally {
         try {
             if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
         } catch {
             // ignore temp cleanup errors
+        }
+    }
+}
+
+async function renderPdfPagesWithPdfJs(
+    filePath: string,
+    maxPages: number,
+    scale: number,
+    warnings: string[]
+): Promise<Buffer[]> {
+    const buffers: Buffer[] = [];
+
+    warnings.push("OCR pdfjs load started");
+
+    const data = new Uint8Array(fs.readFileSync(filePath));
+    const pdf = await withTimeout(
+        pdfjsLib.getDocument({
+            data,
+            disableWorker: true,
+            verbosity: 0,
+            useSystemFonts: true,
+            disableFontFace: true,
+        } as any).promise,
+        getEnvNumber("OCR_PDF_LOAD_TIMEOUT_MS", 10000),
+        "PDF load timed out"
+    );
+
+    warnings.push(`OCR pdfjs loaded pages: ${pdf.numPages}`);
+
+    const totalPages = Math.min(pdf.numPages, maxPages);
+    const canvasFactory = new NodeCanvasFactory();
+
+    for (let pageNo = 1; pageNo <= totalPages; pageNo++) {
+        warnings.push(`OCR pdfjs page ${pageNo} get started`);
+
+        const page = await pdf.getPage(pageNo);
+        const viewport = page.getViewport({ scale });
+
+        const width = Math.ceil(viewport.width);
+        const height = Math.ceil(viewport.height);
+
+        warnings.push(`OCR pdfjs page ${pageNo} viewport ${width}x${height}`);
+
+        const canvasAndContext = canvasFactory.create(width, height);
+        const canvas: any = canvasAndContext.canvas;
+        const context: any = canvasAndContext.context;
+
+        context.save();
+        context.fillStyle = "white";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.restore();
+
+        try {
+            warnings.push(`OCR pdfjs page ${pageNo} render started`);
+
+            await withTimeout(
+                page.render({
+                    canvasContext: context,
+                    viewport,
+                    canvasFactory,
+                    background: "white",
+                } as any).promise,
+                getEnvNumber("OCR_RENDER_TIMEOUT_MS", 15000),
+                `PDF page ${pageNo} render timed out`
+            );
+
+            warnings.push(`OCR pdfjs page ${pageNo} render finished`);
+
+            const processedCanvas = preprocessCanvasForOcr(canvas);
+            const imageBuffer = processedCanvas.toBuffer("image/png");
+
+            warnings.push(`OCR pdfjs page ${pageNo} rendered png bytes: ${imageBuffer.length}`);
+            buffers.push(imageBuffer);
+        } finally {
+            canvasFactory.destroy(canvasAndContext);
+        }
+    }
+
+    return buffers;
+}
+
+async function loadPuppeteer(warnings: string[]) {
+    try {
+        return await import("puppeteer");
+    } catch (error1: any) {
+        warnings.push(`puppeteer import failed: ${error1?.message || String(error1)}`);
+        try {
+            return await import("puppeteer-core");
+        } catch (error2: any) {
+            warnings.push(`puppeteer-core import failed: ${error2?.message || String(error2)}`);
+            return null;
+        }
+    }
+}
+
+function findChromeExecutable(puppeteerModule: any) {
+    const envPath =
+        process.env.PUPPETEER_EXECUTABLE_PATH ||
+        process.env.CHROME_EXECUTABLE_PATH ||
+        process.env.GOOGLE_CHROME_BIN;
+
+    if (envPath && fs.existsSync(envPath)) return envPath;
+
+    try {
+        const p = puppeteerModule?.executablePath?.();
+        if (p && fs.existsSync(p)) return p;
+    } catch {
+        // ignore
+    }
+
+    const candidates = [
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/google-chrome",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/chromium",
+    ];
+
+    return candidates.find((candidate) => fs.existsSync(candidate));
+}
+
+async function renderPdfFirstPageWithChrome(filePath: string, warnings: string[]): Promise<string | null> {
+    const puppeteerModule: any = await loadPuppeteer(warnings);
+    if (!puppeteerModule) return null;
+
+    const executablePath = findChromeExecutable(puppeteerModule);
+    warnings.push(`OCR chrome executable: ${executablePath || "puppeteer_default"}`);
+
+    let browser: any = null;
+    const pngPath = path.join(
+        os.tmpdir(),
+        `carbonsync-chrome-pdf-${Date.now()}-${Math.random().toString(16).slice(2)}.png`
+    );
+
+    try {
+        browser = await puppeteerModule.default.launch({
+            executablePath: executablePath || undefined,
+            headless: true,
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--no-zygote",
+                "--single-process",
+                "--allow-file-access-from-files",
+            ],
+        });
+
+        const page = await browser.newPage();
+
+        await page.setViewport({
+            width: getEnvNumber("OCR_CHROME_WIDTH", 1200),
+            height: getEnvNumber("OCR_CHROME_HEIGHT", 1600),
+            deviceScaleFactor: getEnvNumber("OCR_CHROME_DEVICE_SCALE", 2),
+        });
+
+        const pdfUrl = pathToFileURL(path.resolve(filePath)).href;
+        warnings.push(`OCR chrome goto pdf started`);
+
+        await page.goto(pdfUrl, {
+            waitUntil: "networkidle2",
+            timeout: getEnvNumber("OCR_CHROME_TIMEOUT_MS", 25000),
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, getEnvNumber("OCR_CHROME_WAIT_MS", 2500)));
+
+        await page.screenshot({
+            path: pngPath,
+            fullPage: false,
+            type: "png",
+        });
+
+        const size = fs.existsSync(pngPath) ? fs.statSync(pngPath).size : 0;
+        warnings.push(`OCR chrome screenshot bytes: ${size}`);
+
+        return size > 0 ? pngPath : null;
+    } catch (error: any) {
+        warnings.push(`OCR chrome render failed: ${error?.message || String(error)}`);
+        try {
+            if (fs.existsSync(pngPath)) fs.unlinkSync(pngPath);
+        } catch {
+            // ignore
+        }
+        return null;
+    } finally {
+        try {
+            if (browser) await browser.close();
+        } catch {
+            // ignore
         }
     }
 }
@@ -231,88 +369,50 @@ export async function extractTextFromPdfWithOcr(
         const scale = options.scale || getEnvNumber("OCR_SCALE", 2);
         const pageTimeoutMs = getEnvNumber("OCR_PAGE_TIMEOUT_MS", 20000);
 
-        warnings.push("OCR pdf load started");
-
-        const data = new Uint8Array(fs.readFileSync(filePath));
-        const pdf = await withTimeout(
-            pdfjsLib.getDocument({
-                data,
-                disableWorker: true,
-                verbosity: 0,
-                useSystemFonts: true,
-                disableFontFace: true,
-            } as any).promise,
-            getEnvNumber("OCR_PDF_LOAD_TIMEOUT_MS", 10000),
-            "PDF load timed out"
-        );
-
-        warnings.push(`OCR pdf loaded pages: ${pdf.numPages}`);
-
         worker = await createTesseractWorker();
         warnings.push("OCR tesseract worker created");
 
         const pageTexts: string[] = [];
         const confidences: number[] = [];
+        let pagesProcessed = 0;
 
-        const totalPages = Math.min(pdf.numPages, maxPages);
-        const canvasFactory = new NodeCanvasFactory();
+        try {
+            const imageBuffers = await renderPdfPagesWithPdfJs(filePath, maxPages, scale, warnings);
 
-        for (let pageNo = 1; pageNo <= totalPages; pageNo++) {
-            warnings.push(`OCR page ${pageNo} get started`);
+            for (let i = 0; i < imageBuffers.length; i++) {
+                const pageNo = i + 1;
+                const result = await recognizePngBuffer(worker, imageBuffers[i], pageTimeoutMs);
+                pagesProcessed += 1;
 
-            const page = await pdf.getPage(pageNo);
-            const viewport = page.getViewport({ scale });
+                warnings.push(`OCR pdfjs page ${pageNo} text length: ${result.text.length}`);
+                warnings.push(`OCR pdfjs page ${pageNo} confidence: ${result.confidence}`);
 
-            const width = Math.ceil(viewport.width);
-            const height = Math.ceil(viewport.height);
+                if (result.text) pageTexts.push(result.text);
+                if (result.confidence) confidences.push(result.confidence);
+            }
+        } catch (pdfJsError: any) {
+            warnings.push(`OCR pdfjs fatal error: ${pdfJsError?.message || String(pdfJsError)}`);
+            warnings.push("OCR trying chrome PDF render fallback");
 
-            warnings.push(`OCR page ${pageNo} viewport ${width}x${height}`);
+            const chromePngPath = await renderPdfFirstPageWithChrome(filePath, warnings);
 
-            const canvasAndContext = canvasFactory.create(width, height);
-            const canvas: any = canvasAndContext.canvas;
-            const context: any = canvasAndContext.context;
+            if (chromePngPath) {
+                try {
+                    const result = await recognizeImagePath(worker, chromePngPath, pageTimeoutMs);
+                    pagesProcessed = 1;
 
-            context.save();
-            context.fillStyle = "white";
-            context.fillRect(0, 0, canvas.width, canvas.height);
-            context.restore();
+                    warnings.push(`OCR chrome page 1 text length: ${result.text.length}`);
+                    warnings.push(`OCR chrome page 1 confidence: ${result.confidence}`);
 
-            try {
-                warnings.push(`OCR page ${pageNo} render started`);
-
-                await withTimeout(
-                    page.render({
-                        canvasContext: context,
-                        viewport,
-                        canvasFactory,
-                        background: "white",
-                    } as any).promise,
-                    getEnvNumber("OCR_RENDER_TIMEOUT_MS", 15000),
-                    `PDF page ${pageNo} render timed out`
-                );
-
-                warnings.push(`OCR page ${pageNo} render finished`);
-
-                const processedCanvas = preprocessCanvasForOcr(canvas);
-                const imageBuffer = processedCanvas.toBuffer("image/png");
-
-                warnings.push(`OCR page ${pageNo} rendered png bytes: ${imageBuffer.length}`);
-
-                const result = await recognizeWithMultipleInputs(worker, imageBuffer, pageTimeoutMs, warnings);
-                warnings.push(`OCR page ${pageNo} input mode: ${result.input_mode}`);
-
-                if (result.text) {
-                    pageTexts.push(result.text);
-                    warnings.push(`OCR page ${pageNo} text length: ${result.text.length}`);
-                } else {
-                    warnings.push(`OCR returned empty text for page ${pageNo}`);
+                    if (result.text) pageTexts.push(result.text);
+                    if (result.confidence) confidences.push(result.confidence);
+                } finally {
+                    try {
+                        if (fs.existsSync(chromePngPath)) fs.unlinkSync(chromePngPath);
+                    } catch {
+                        // ignore
+                    }
                 }
-
-                if (result.confidence) {
-                    confidences.push(result.confidence);
-                }
-            } finally {
-                canvasFactory.destroy(canvasAndContext);
             }
         }
 
@@ -326,8 +426,8 @@ export async function extractTextFromPdfWithOcr(
             success: Boolean(text),
             text,
             confidence: Number(avgConfidence.toFixed(2)),
-            pages_processed: totalPages,
-            method: "pdf_page_ocr",
+            pages_processed: pagesProcessed,
+            method: text ? "pdf_page_ocr" : "failed",
             warnings,
         };
     } catch (error: any) {
@@ -352,14 +452,16 @@ export async function extractTextFromImageWithOcr(filePath: string): Promise<Ocr
 
     try {
         worker = await createTesseractWorker();
+        warnings.push("OCR tesseract worker created");
 
-        const imageBuffer = fs.readFileSync(filePath);
-        const result = await recognizeWithMultipleInputs(
+        const result = await recognizeImagePath(
             worker,
-            imageBuffer,
-            getEnvNumber("OCR_PAGE_TIMEOUT_MS", 20000),
-            warnings
+            filePath,
+            getEnvNumber("OCR_PAGE_TIMEOUT_MS", 20000)
         );
+
+        warnings.push(`OCR image text length: ${result.text.length}`);
+        warnings.push(`OCR image confidence: ${result.confidence}`);
 
         return {
             success: Boolean(result.text),
@@ -367,7 +469,7 @@ export async function extractTextFromImageWithOcr(filePath: string): Promise<Ocr
             confidence: Number(result.confidence.toFixed(2)),
             pages_processed: 1,
             method: "image_ocr",
-            warnings: [...warnings, `OCR image input mode: ${result.input_mode}`],
+            warnings,
         };
     } catch (error: any) {
         warnings.push(`OCR fatal error: ${error?.message || String(error)}`);
