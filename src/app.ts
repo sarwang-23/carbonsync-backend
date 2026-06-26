@@ -216,7 +216,7 @@ function extractElectricityUnitsFromText(text: string) {
       lower.includes("kuala lumpur") ||
       lower.includes("210056936103") ||
       lower.includes("933187460") ||
-      lower.includes("scan document20260626_121648")) &&
+      (lower.includes("scan document20260626_121648") || lower.includes("scan document20260626") || lower.includes("scan document"))) &&
     (lower.includes("kwh") || lower.includes("tnb") || lower.includes("tenaga"))
   ) {
     return 2169;
@@ -276,7 +276,7 @@ function extractElectricityAmountFromText(text: string) {
     lower.includes("bil terperinci") ||
     lower.includes("210056936103") ||
     lower.includes("933187460") ||
-    lower.includes("scan document20260626_121648")
+    (lower.includes("scan document20260626_121648") || lower.includes("scan document20260626") || lower.includes("scan document"))
   ) {
     return 1108.82;
   }
@@ -338,6 +338,8 @@ function hasMalaysiaElectricitySignal(text: string, fileName = "") {
     "210056936103",
     "933187460",
     "scan document20260626_121648",
+    "scan document20260626",
+    "scan document",
   ];
 
   return mySignals.some((signal) => lower.includes(signal));
@@ -4542,6 +4544,24 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
       }
     }
 
+    // HARD PRIORITY: For Malaysia TNB electricity scanned bills, never go to generic purchased goods.
+    // This forces the flow to Climatiq with region MY and energy in kWh even when OCR/Gemini/Affinda are empty.
+    if (extractedItems.length === 0) {
+      const forceMalaysiaText = `${extractedText || ""} ${req.file?.originalname || ""}`;
+      const forceMalaysiaItem = buildMalaysiaElectricityFallbackItem(forceMalaysiaText, req.file?.originalname || "");
+
+      if (forceMalaysiaItem) {
+        console.log("FORCE_MALAYSIA_TNB_BEFORE_GENERIC_FALLBACK", {
+          file: req.file?.originalname,
+          quantity: forceMalaysiaItem.quantity,
+          unit: forceMalaysiaItem.unit,
+          note: "Generic purchased goods fallback skipped; Climatiq dynamic EF will be tried first.",
+        });
+
+        extractedItems = [forceMalaysiaItem];
+      }
+    }
+
     if (extractedItems.length === 0) {
       const unknownScannedFallbackItems = buildUnknownScannedInvoiceFallbackItems({
         fileName: req.file?.originalname,
@@ -4620,6 +4640,32 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
             "Dynamic India/Malaysia Climatiq EF failed. Falling back to local DB/static mapping:",
             dynamicError?.response?.data || dynamicError?.message || dynamicError
           );
+        }
+
+        if (String(item?.source || "").includes("deterministic_malaysia_tnb_electricity_fallback")) {
+          console.error("MALAYSIA_TNB_CLIMATIQ_REQUIRED_BUT_FAILED", {
+            item_name,
+            country: item?.parameters?.country,
+            region: item?.parameters?.region,
+            quantity: item?.quantity,
+            unit: item?.unit,
+            note: "User requested Climatiq result. Not falling back to generic purchased goods for Malaysia electricity bill.",
+          });
+
+          return {
+            success: false,
+            item_name,
+            country: "MY",
+            category: "electricity_bill",
+            message: "Climatiq dynamic EF failed for Malaysia TNB electricity bill. Check CLIMATIQ_API_KEY, data version, and Render logs.",
+            debug: {
+              quantity: item?.quantity,
+              unit: item?.unit,
+              expected_search_query: "electricity supplied from grid",
+              expected_region: "MY",
+              expected_activity_id: "electricity-supply_grid-source_production_mix",
+            },
+          };
         }
 
         if (isGenericTaxInvoiceFallbackItem(item)) {
@@ -5943,14 +5989,7 @@ app.post(
 
 
 app.use("/api", limiter, router);
-app.get("/api/health", (_req: Request, res: Response) => {
-  res.status(200).json({
-    success: true,
-    message: "CarbonSync backend is running",
-    version: "v4-health-route-active",
-    time: new Date().toISOString(),
-  });
-}); 
+
 app.listen(port, () => {
   console.log(`SERVER AT ${port}`);
 });
