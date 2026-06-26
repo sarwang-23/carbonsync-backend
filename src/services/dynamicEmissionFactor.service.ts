@@ -21,6 +21,250 @@ function getClimatiqDataVersion() {
     return process.env.CLIMATIQ_DATA_VERSION || DATA_VERSION || "^21";
 }
 
+
+const INDIA_FIXED_ELECTRICITY_FACTOR = 0.710; // kgCO2e/kWh
+const INDIA_FIXED_PASSENGER_RAIL_FACTOR = 0.007976; // kgCO2e/passenger-km
+const INDIA_FIXED_PASSENGER_FLIGHT_FACTOR = 0.18; // kgCO2e/passenger-km
+
+function extractPassengerCount(item: any): number {
+    const raw = item?.passengers ?? item?.passenger_count ?? item?.parameters?.passengers ?? item?.parameters?.passenger_count ?? 1;
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 && value <= 100 ? value : 1;
+}
+
+function extractDistanceKm(item: any): number {
+    const rawDistance =
+        item?.distance ??
+        item?.distance_km ??
+        item?.parameters?.distance ??
+        item?.parameters?.distance_km ??
+        item?.parameters?.distanceKm;
+
+    const distance = Number(rawDistance);
+    if (Number.isFinite(distance) && distance > 0) return distance;
+
+    const unit = safeLower(item?.unit);
+    const quantity = Number(item?.quantity || 0);
+    if (Number.isFinite(quantity) && quantity > 0 && (unit.includes("km") || unit.includes("kilometer") || unit.includes("kilometre"))) {
+        return quantity;
+    }
+
+    return Number.isFinite(quantity) && quantity > 0 ? quantity : 0;
+}
+
+function isIndiaTrainTicketText(text: string): boolean {
+    const lower = safeLower(text);
+    return (
+        lower.includes("passenger rail") ||
+        lower.includes("railway") ||
+        lower.includes("train ticket") ||
+        lower.includes("rail ticket") ||
+        lower.includes("irctc") ||
+        lower.includes("indian railways")
+    );
+}
+
+function isIndiaFlightTicketText(text: string): boolean {
+    const lower = safeLower(text);
+    return (
+        lower.includes("passenger flight") ||
+        lower.includes("flight ticket") ||
+        lower.includes("boarding pass") ||
+        lower.includes("airline") ||
+        lower.includes("airport") ||
+        lower.includes("air india") ||
+        lower.includes("indigo") ||
+        lower.includes("spicejet") ||
+        lower.includes("vistara") ||
+        lower.includes("akasa")
+    );
+}
+
+function buildIndiaFixedElectricityCalculation(item: any, combinedText: string, originalItemName: string) {
+    const energyKwh =
+        extractElectricityKwh(combinedText) ||
+        Number(item?.parameters?.energy_kwh || item?.parameters?.energy || item?.quantity || 0);
+
+    if (!Number.isFinite(energyKwh) || energyKwh <= 0) {
+        return {
+            success: false,
+            error_type: "INDIA_FIXED_ELECTRICITY_KWH_MISSING",
+            message: "India electricity bill detected, but kWh quantity is missing.",
+            item_name: originalItemName || "India Electricity Bill",
+            country: "IN",
+            category: "electricity_bill",
+        };
+    }
+
+    const co2e = roundNumber(energyKwh * INDIA_FIXED_ELECTRICITY_FACTOR);
+    const gasBreakdown = estimateGasBreakdown(co2e, "electricity_bill");
+
+    return {
+        success: true,
+        item_name: originalItemName || "India Electricity Bill",
+        country: "IN",
+        category: "electricity_bill",
+        search_query: null,
+        converted: { value: energyKwh, unit: "kWh" },
+        climatiqBody: {
+            manual_fixed_india_factor: true,
+            emission_factor: {
+                activity_id: "electricity-india-national-average",
+                region: "IN",
+                factor_value: INDIA_FIXED_ELECTRICITY_FACTOR,
+                factor_unit: "kgCO2e/kWh",
+                data_version: "india-fixed-v1",
+            },
+            parameters: {
+                energy: energyKwh,
+                energy_unit: "kWh",
+            },
+        },
+        selected_emission_factor: {
+            id: "manual-india-electricity-0.710",
+            activity_id: "electricity-india-national-average",
+            name: "India National Grid Average Electricity Factor",
+            source: "India Region Fixed EF",
+            source_dataset: "Custom CarbonSync EF",
+            year: 2026,
+            region: "IN",
+            unit: "kg/kWh",
+            scope: ["2"],
+            source_lca_activity: "electricity_consumption",
+            mapping_score: 999,
+        },
+        alternatives: [],
+        confidence: 0.98,
+        reason: "Used India region fixed electricity EF 0.710 kgCO2e/kWh.",
+        result: {
+            co2e,
+            co2e_unit: "kg",
+            total_tco2e: co2e / 1000,
+            emission_factor: INDIA_FIXED_ELECTRICITY_FACTOR,
+            emission_factor_unit: "kgCO2e/kWh",
+            factor_name: "India National Grid Average Electricity Factor",
+            activity_id: "electricity-india-national-average",
+            source: "India Region Fixed EF",
+            source_dataset: "Custom CarbonSync EF",
+            factor_year: 2026,
+            factor_region: "IN",
+            category: "Electricity",
+            source_lca_activity: "electricity_consumption",
+            gas_breakdown_method: gasBreakdown.gas_breakdown_method,
+            co2: gasBreakdown.co2,
+            ch4: gasBreakdown.ch4,
+            n2o: gasBreakdown.n2o,
+            co2e_other: gasBreakdown.co2e_other,
+        },
+        raw_api_response: {
+            calculation_method: "fixed_india_electricity_factor",
+            energy_kwh: energyKwh,
+            emission_factor_kgco2e_per_kwh: INDIA_FIXED_ELECTRICITY_FACTOR,
+            total_kgco2e: co2e,
+            total_tco2e: co2e / 1000,
+        },
+    };
+}
+
+function buildIndiaFixedPassengerTransportCalculation(item: any, originalItemName: string, mode: "rail" | "flight") {
+    const factor = mode === "rail" ? INDIA_FIXED_PASSENGER_RAIL_FACTOR : INDIA_FIXED_PASSENGER_FLIGHT_FACTOR;
+    const distanceKm = extractDistanceKm(item);
+    const passengers = extractPassengerCount(item);
+
+    if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
+        return {
+            success: false,
+            error_type: mode === "rail" ? "INDIA_FIXED_RAIL_DISTANCE_MISSING" : "INDIA_FIXED_FLIGHT_DISTANCE_MISSING",
+            message: `India ${mode} ticket detected, but distance_km is missing.`,
+            item_name: originalItemName || (mode === "rail" ? "India Train Ticket" : "India Flight Ticket"),
+            country: "IN",
+            category: mode === "rail" ? "train_ticket" : "flight_ticket",
+        };
+    }
+
+    const passengerKm = distanceKm * passengers;
+    const co2e = roundNumber(passengerKm * factor);
+    const gasBreakdown = estimateGasBreakdown(co2e, mode === "rail" ? "passenger rail" : "passenger flight");
+    const activityId = mode === "rail" ? "manual-passenger-rail" : "manual-passenger-flight";
+    const factorName = mode === "rail" ? "India Passenger Rail Fixed Emission Factor" : "India Passenger Flight Fixed Emission Factor";
+    const categoryName = mode === "rail" ? "Passenger Rail" : "Passenger Air Travel";
+
+    return {
+        success: true,
+        item_name: originalItemName || (mode === "rail" ? "India Train Ticket" : "India Flight Ticket"),
+        country: "IN",
+        category: mode === "rail" ? "train_ticket" : "flight_ticket",
+        search_query: null,
+        converted: { value: distanceKm, unit: "km" },
+        passengers,
+        climatiqBody: {
+            manual_fixed_india_factor: true,
+            emission_factor: {
+                activity_id: activityId,
+                region: "IN",
+                factor_value: factor,
+                factor_unit: "kgCO2e/passenger-km",
+                data_version: "india-fixed-v1",
+            },
+            parameters: {
+                distance: distanceKm,
+                distance_km: distanceKm,
+                distance_unit: "km",
+                passengers,
+                passenger_km: passengerKm,
+                calculation_method: "distance_km * passengers * emission_factor",
+                formula: `${distanceKm} km * ${passengers} passenger(s) * ${factor} kgCO2e/passenger-km`,
+            },
+        },
+        selected_emission_factor: {
+            id: activityId,
+            activity_id: activityId,
+            name: factorName,
+            source: "India Region Fixed EF",
+            source_dataset: "Custom CarbonSync EF",
+            year: 2026,
+            region: "IN",
+            unit: "kgCO2e/passenger-km",
+            scope: ["3"],
+            source_lca_activity: "Passenger-kilometre",
+            mapping_score: 999,
+        },
+        alternatives: [],
+        confidence: 0.98,
+        reason: `Used India region fixed ${mode} ticket EF ${factor} kgCO2e/passenger-km.`,
+        result: {
+            co2e,
+            co2e_unit: "kg",
+            total_tco2e: co2e / 1000,
+            emission_factor: factor,
+            emission_factor_unit: "kgCO2e/passenger-km",
+            factor_name: factorName,
+            activity_id: activityId,
+            source: "India Region Fixed EF",
+            source_dataset: "Custom CarbonSync EF",
+            factor_year: 2026,
+            factor_region: "IN",
+            category: categoryName,
+            source_lca_activity: "Passenger-kilometre",
+            co2e_total: co2e,
+            gas_breakdown_method: gasBreakdown.gas_breakdown_method,
+            co2: gasBreakdown.co2,
+            ch4: gasBreakdown.ch4,
+            n2o: gasBreakdown.n2o,
+            co2e_other: gasBreakdown.co2e_other,
+        },
+        raw_api_response: {
+            calculation_method: mode === "rail" ? "fixed_india_passenger_rail_factor" : "fixed_india_passenger_flight_factor",
+            distance_km: distanceKm,
+            passengers,
+            passenger_km: passengerKm,
+            emission_factor_kgco2e_per_passenger_km: factor,
+            total_kgco2e: co2e,
+            total_tco2e: co2e / 1000,
+        },
+    };
+}
+
 function safeLower(value: any) {
     return String(value || "").toLowerCase();
 }
@@ -325,40 +569,15 @@ function scoreEmissionFactor(result: any, input: { region: SupportedCountry; cat
     if (["l", "ltr", "litre", "liter", "litres", "liters"].includes(inputUnit) && (unit.includes("l") || unit.includes("litre"))) score += 20;
     if ((inputUnit === "m3" || inputUnit.includes("cubic")) && unit.includes("m3")) score += 20;
 
-   if (input.category === "electricity_bill") {
-    const year = Number(result.year || 0);
-
-    // Base electricity match
-    if (activity.includes("electricity-supply_grid")) score += 35;
-    if (unit.includes("kwh")) score += 25;
-
-    // For normal electricity bills, production mix is better than old supplier mix
-    if (activity.includes("production_mix")) score += 70;
-    if (activity.includes("supplier_mix")) score += 10;
-
-    // Prefer latest Ember production mix for grid electricity
-    if (result.source === "Ember") score += 60;
-
-    // Keep ADEME as fallback, not first preference
-    if (result.source === "ADEME") score += 5;
-
-    // Latest year should strongly win
-    if (year >= 2024) score += 80;
-    else if (year >= 2023) score += 65;
-    else if (year >= 2022) score += 50;
-    else if (year >= 2020) score += 30;
-    else if (year < 2020) score -= 40;
-
-    // Scope 2 is good, but should not beat latest production mix
-    if (result.scopes?.includes("2") || result.scopes?.includes("combined_scopes")) {
-        score += 10;
+    if (input.category === "electricity_bill") {
+        if (activity.includes("electricity-supply_grid")) score += 35;
+        if (activity.includes("production_mix")) score += 35;
+        if (result.source === "Ember") score += 15;
+        if (result.scopes?.includes("2") || result.scopes?.includes("combined_scopes")) score += 15;
+        if (activity.includes("losses")) score -= 70;
+        if (sourceLca.includes("well_to_tank")) score -= 45;
+        if (result.scopes?.includes("3.3")) score -= 25;
     }
-
-    // Avoid wrong factors
-    if (activity.includes("losses")) score -= 100;
-    if (sourceLca.includes("well_to_tank")) score -= 80;
-    if (result.scopes?.includes("3.3")) score -= 60;
-}
 
     if (input.category === "fuel") {
         if (activity.includes("fuel")) score += 25;
@@ -407,52 +626,23 @@ function scoreEmissionFactor(result: any, input: { region: SupportedCountry; cat
     return score;
 }
 
-export function selectBestEmissionFactor(
-    results: any[],
-    input: { region: SupportedCountry; category: DetectedCategory; unit: string; itemName: string }
-) {
+export function selectBestEmissionFactor(results: any[], input: { region: SupportedCountry; category: DetectedCategory; unit: string; itemName: string }) {
     const scored = (results || [])
         .filter((r) => r.region === input.region || r.region === "GLOBAL")
         .map((r) => ({ ...r, mapping_score: scoreEmissionFactor(r, input) }))
         .sort((a, b) => b.mapping_score - a.mapping_score);
 
-    if (input.category === "electricity_bill") {
-        const latestEmberProductionMix = scored
-            .filter((r) =>
-                r.region === input.region &&
-                r.source === "Ember" &&
-                String(r.activity_id || "").includes("electricity-supply_grid-source_production_mix") &&
-                String(r.unit || "").toLowerCase().includes("kwh")
-            )
-            .sort((a, b) => Number(b.year || 0) - Number(a.year || 0))[0];
-
-        if (latestEmberProductionMix) {
-            return {
-                selected: latestEmberProductionMix,
-                alternatives: scored
-                    .filter((r) => r.id !== latestEmberProductionMix.id)
-                    .slice(0, 3),
-                confidence: 0.95,
-                reason: `Selected latest ${input.region} Ember production mix for grid electricity bill.`,
-            };
-        }
-    }
-
     const selected = scored[0] || null;
-
     return {
         selected,
         alternatives: scored.slice(1, 4),
-        confidence:
-            selected?.mapping_score >= 100 ? 0.95 :
-            selected?.mapping_score >= 75 ? 0.85 :
-            selected?.mapping_score >= 50 ? 0.65 :
-            0.4,
+        confidence: selected?.mapping_score >= 100 ? 0.95 : selected?.mapping_score >= 75 ? 0.85 : selected?.mapping_score >= 50 ? 0.65 : 0.4,
         reason: selected
             ? `Selected best ${input.region} emission factor using region, unit, activity_id, source, scope and latest year scoring.`
             : "No suitable emission factor found.",
     };
 }
+
 function buildEstimatePayload(selectedEF: any, item: any, category: DetectedCategory, converted: any) {
     const unit = safeLower(item.unit);
     const dataVersion = getClimatiqDataVersion();
@@ -493,6 +683,19 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
     const combinedText = `${invoiceText || ""} ${originalItemName || ""} ${fileName || ""}`;
     const region = detectCountryFromInvoice(combinedText, fileName);
     const category = detectInvoiceCategory(combinedText, originalItemName, item.unit);
+
+    // India region fixed EF rules. These three document types must not go to Climatiq.
+    if (region === "IN" && category === "electricity_bill") {
+        return buildIndiaFixedElectricityCalculation(item, combinedText, originalItemName);
+    }
+
+    if (region === "IN" && isIndiaTrainTicketText(combinedText)) {
+        return buildIndiaFixedPassengerTransportCalculation(item, originalItemName, "rail");
+    }
+
+    if (region === "IN" && isIndiaFlightTicketText(combinedText)) {
+        return buildIndiaFixedPassengerTransportCalculation(item, originalItemName, "flight");
+    }
 
     if (category === "unknown") {
         return {
