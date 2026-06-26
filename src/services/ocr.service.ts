@@ -14,6 +14,8 @@ export interface OcrResult {
     warnings: string[];
 }
 
+const OCR_SERVICE_VERSION = "OCR_TEMP_FILE_PATH_V2_20260627";
+
 function cleanText(text: string) {
     return String(text || "")
         .replace(/\u0000/g, " ")
@@ -108,26 +110,67 @@ function writeTempPng(buffer: Buffer) {
     return filePath;
 }
 
-/**
- * Tesseract.js on Node can throw "Image or Canvas expected" when Buffer is passed directly.
- * To avoid that, this writes the PNG buffer to a temp file and recognizes the file path.
- */
-async function recognizePngBuffer(worker: any, buffer: Buffer, timeoutMs: number) {
-    const tempPath = writeTempPng(buffer);
+async function recognizeWithMultipleInputs(worker: any, pngBuffer: Buffer, timeoutMs: number, warnings: string[]) {
+    const tempPath = writeTempPng(pngBuffer);
 
     try {
-        const result: any = await withTimeout(
-            worker.recognize(tempPath),
-            timeoutMs,
-            `Tesseract OCR timed out after ${timeoutMs}ms`
-        );
+        // Try 1: file path. This is usually the most stable on Node/Render.
+        try {
+            const result: any = await withTimeout(
+                worker.recognize(tempPath),
+                timeoutMs,
+                `Tesseract OCR timed out after ${timeoutMs}ms using tempPath`
+            );
 
-        const text = cleanText(result?.data?.text || "");
-        const confidence = Number(result?.data?.confidence || 0);
+            return {
+                text: cleanText(result?.data?.text || ""),
+                confidence: Number(result?.data?.confidence || 0),
+                input_mode: "tempPath",
+            };
+        } catch (error: any) {
+            warnings.push(`OCR tempPath mode failed: ${error?.message || String(error)}`);
+        }
+
+        // Try 2: absolute file URL. Some Node/image loaders accept this when path fails.
+        try {
+            const fileUrl = `file://${tempPath.replace(/\\/g, "/")}`;
+            const result: any = await withTimeout(
+                worker.recognize(fileUrl),
+                timeoutMs,
+                `Tesseract OCR timed out after ${timeoutMs}ms using fileUrl`
+            );
+
+            return {
+                text: cleanText(result?.data?.text || ""),
+                confidence: Number(result?.data?.confidence || 0),
+                input_mode: "fileUrl",
+            };
+        } catch (error: any) {
+            warnings.push(`OCR fileUrl mode failed: ${error?.message || String(error)}`);
+        }
+
+        // Try 3: data URL. This avoids path handling problems on Render.
+        try {
+            const dataUrl = `data:image/png;base64,${pngBuffer.toString("base64")}`;
+            const result: any = await withTimeout(
+                worker.recognize(dataUrl),
+                timeoutMs,
+                `Tesseract OCR timed out after ${timeoutMs}ms using dataUrl`
+            );
+
+            return {
+                text: cleanText(result?.data?.text || ""),
+                confidence: Number(result?.data?.confidence || 0),
+                input_mode: "dataUrl",
+            };
+        } catch (error: any) {
+            warnings.push(`OCR dataUrl mode failed: ${error?.message || String(error)}`);
+        }
 
         return {
-            text,
-            confidence,
+            text: "",
+            confidence: 0,
+            input_mode: "all_failed",
         };
     } finally {
         try {
@@ -145,7 +188,7 @@ export async function extractTextFromPdfWithOcr(
         scale?: number;
     } = {}
 ): Promise<OcrResult> {
-    const warnings: string[] = [];
+    const warnings: string[] = [`${OCR_SERVICE_VERSION}`];
     let worker: any = null;
 
     try {
@@ -193,7 +236,10 @@ export async function extractTextFromPdfWithOcr(
             const processedCanvas = preprocessCanvasForOcr(canvas);
             const imageBuffer = processedCanvas.toBuffer("image/png");
 
-            const result = await recognizePngBuffer(worker, imageBuffer, pageTimeoutMs);
+            warnings.push(`OCR page ${pageNo} rendered png bytes: ${imageBuffer.length}`);
+
+            const result = await recognizeWithMultipleInputs(worker, imageBuffer, pageTimeoutMs, warnings);
+            warnings.push(`OCR page ${pageNo} input mode: ${result.input_mode}`);
 
             if (result.text) {
                 pageTexts.push(result.text);
@@ -237,29 +283,27 @@ export async function extractTextFromPdfWithOcr(
 }
 
 export async function extractTextFromImageWithOcr(filePath: string): Promise<OcrResult> {
-    const warnings: string[] = [];
+    const warnings: string[] = [`${OCR_SERVICE_VERSION}`];
     let worker: any = null;
 
     try {
         worker = await createTesseractWorker();
 
-        // Use file path directly, not Buffer, to avoid "Image or Canvas expected".
-        const result: any = await withTimeout(
-            worker.recognize(filePath),
+        const imageBuffer = fs.readFileSync(filePath);
+        const result = await recognizeWithMultipleInputs(
+            worker,
+            imageBuffer,
             getEnvNumber("OCR_PAGE_TIMEOUT_MS", 20000),
-            `Tesseract OCR timed out after ${getEnvNumber("OCR_PAGE_TIMEOUT_MS", 20000)}ms`
+            warnings
         );
 
-        const text = cleanText(result?.data?.text || "");
-        const confidence = Number(result?.data?.confidence || 0);
-
         return {
-            success: Boolean(text),
-            text,
-            confidence: Number(confidence.toFixed(2)),
+            success: Boolean(result.text),
+            text: result.text,
+            confidence: Number(result.confidence.toFixed(2)),
             pages_processed: 1,
             method: "image_ocr",
-            warnings,
+            warnings: [...warnings, `OCR image input mode: ${result.input_mode}`],
         };
     } catch (error: any) {
         warnings.push(error?.message || String(error));
@@ -295,7 +339,7 @@ export async function extractTextWithOcr(
             confidence: 0,
             pages_processed: 0,
             method: "failed",
-            warnings: ["DISABLE_OCR_EXTRACTION=true. OCR skipped."],
+            warnings: [`${OCR_SERVICE_VERSION}`, "DISABLE_OCR_EXTRACTION=true. OCR skipped."],
         };
     }
 
@@ -316,6 +360,6 @@ export async function extractTextWithOcr(
         confidence: 0,
         pages_processed: 0,
         method: "failed",
-        warnings: [`Unsupported OCR file type: ${mimetype || ext || "unknown"}`],
+        warnings: [`${OCR_SERVICE_VERSION}`, `Unsupported OCR file type: ${mimetype || ext || "unknown"}`],
     };
 }
