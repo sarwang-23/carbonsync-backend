@@ -16,8 +16,33 @@ export interface OcrResult {
 function cleanText(text: string) {
     return String(text || "")
         .replace(/\u0000/g, " ")
-        .replace(/\s+/g, " ")
+        .replace(/[^\S\r\n]+/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
         .trim();
+}
+
+function getEnvNumber(name: string, defaultValue: number) {
+    const value = Number(process.env[name]);
+    return Number.isFinite(value) && value > 0 ? value : defaultValue;
+}
+
+async function withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    timeoutMessage: string
+): Promise<T> {
+    let timer: NodeJS.Timeout | null = null;
+
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+                timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+            }),
+        ]);
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
 }
 
 async function createTesseractWorker() {
@@ -30,6 +55,15 @@ async function createTesseractWorker() {
 
     if (typeof worker.initialize === "function") {
         await worker.initialize("eng");
+    }
+
+    // Optional tuning. Works on many tesseract.js versions; ignored safely if unsupported.
+    if (typeof worker.setParameters === "function") {
+        await worker.setParameters({
+            tessedit_pageseg_mode: "6",
+            preserve_interword_spaces: "1",
+            user_defined_dpi: "220",
+        });
     }
 
     return worker;
@@ -45,8 +79,38 @@ async function terminateWorker(worker: any) {
     }
 }
 
-async function recognizeBuffer(worker: any, buffer: Buffer) {
-    const result = await worker.recognize(buffer);
+function preprocessCanvasForOcr(canvas: any) {
+    const context = canvas.getContext("2d");
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    // Basic grayscale + contrast + threshold.
+    // This helps scanned bills on free OCR without Gemini.
+    for (let i = 0; i < data.length; i += 4) {
+        const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+
+        // Contrast boost around mid-point.
+        let enhanced = (gray - 128) * 1.35 + 128;
+
+        // Light threshold, keeps anti-aliased text readable.
+        enhanced = enhanced > 185 ? 255 : enhanced < 95 ? 0 : enhanced;
+
+        data[i] = enhanced;
+        data[i + 1] = enhanced;
+        data[i + 2] = enhanced;
+    }
+
+    context.putImageData(imageData, 0, 0);
+    return canvas;
+}
+
+async function recognizeBuffer(worker: any, buffer: Buffer, timeoutMs: number) {
+    const result: any = await withTimeout(
+        worker.recognize(buffer),
+        timeoutMs,
+        `Tesseract OCR timed out after ${timeoutMs}ms`
+    );
+
     const text = cleanText(result?.data?.text || "");
     const confidence = Number(result?.data?.confidence || 0);
 
@@ -58,7 +122,10 @@ async function recognizeBuffer(worker: any, buffer: Buffer) {
 
 /**
  * Render PDF pages to images and OCR them.
- * This is useful for scanned PDF invoices where PDF text extraction returns empty/garbage.
+ * Render-safe defaults:
+ * - maxPages: env OCR_MAX_PAGES or 1
+ * - scale: env OCR_SCALE or 1.5
+ * - timeout per page: env OCR_PAGE_TIMEOUT_MS or 12000
  */
 export async function extractTextFromPdfWithOcr(
     filePath: string,
@@ -71,11 +138,16 @@ export async function extractTextFromPdfWithOcr(
     let worker: any = null;
 
     try {
-        const maxPages = options.maxPages || 3;
-        const scale = options.scale || 2;
+        const maxPages = options.maxPages || getEnvNumber("OCR_MAX_PAGES", 1);
+        const scale = options.scale || getEnvNumber("OCR_SCALE", 1.5);
+        const pageTimeoutMs = getEnvNumber("OCR_PAGE_TIMEOUT_MS", 12000);
 
         const data = new Uint8Array(fs.readFileSync(filePath));
-        const pdf = await pdfjsLib.getDocument({ data }).promise;
+        const pdf = await withTimeout(
+            pdfjsLib.getDocument({ data }).promise,
+            getEnvNumber("OCR_PDF_LOAD_TIMEOUT_MS", 10000),
+            "PDF load timed out"
+        );
 
         worker = await createTesseractWorker();
 
@@ -91,16 +163,28 @@ export async function extractTextFromPdfWithOcr(
             const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
             const context = canvas.getContext("2d");
 
-            await page.render({
-                canvasContext: context as any,
-                viewport,
-            } as any).promise;
+            // White background helps scanned PDF transparency/dark mode artifacts.
+            context.fillStyle = "white";
+            context.fillRect(0, 0, canvas.width, canvas.height);
 
-            const imageBuffer = canvas.toBuffer("image/png");
-            const result = await recognizeBuffer(worker, imageBuffer);
+            await withTimeout(
+                page.render({
+                    canvasContext: context as any,
+                    viewport,
+                } as any).promise,
+                getEnvNumber("OCR_RENDER_TIMEOUT_MS", 10000),
+                `PDF page ${pageNo} render timed out`
+            );
+
+            const processedCanvas = preprocessCanvasForOcr(canvas);
+            const imageBuffer = processedCanvas.toBuffer("image/png");
+
+            const result = await recognizeBuffer(worker, imageBuffer, pageTimeoutMs);
 
             if (result.text) {
                 pageTexts.push(result.text);
+            } else {
+                warnings.push(`OCR returned empty text for page ${pageNo}`);
             }
 
             if (result.confidence) {
@@ -149,7 +233,11 @@ export async function extractTextFromImageWithOcr(filePath: string): Promise<Ocr
         worker = await createTesseractWorker();
 
         const imageBuffer = fs.readFileSync(filePath);
-        const result = await recognizeBuffer(worker, imageBuffer);
+        const result = await recognizeBuffer(
+            worker,
+            imageBuffer,
+            getEnvNumber("OCR_PAGE_TIMEOUT_MS", 12000)
+        );
 
         return {
             success: Boolean(result.text),
@@ -188,6 +276,17 @@ export async function extractTextWithOcr(
 ): Promise<OcrResult> {
     const ext = path.extname(filePath || "").toLowerCase();
     const type = String(mimetype || "").toLowerCase();
+
+    if (process.env.DISABLE_OCR_EXTRACTION === "true") {
+        return {
+            success: false,
+            text: "",
+            confidence: 0,
+            pages_processed: 0,
+            method: "failed",
+            warnings: ["DISABLE_OCR_EXTRACTION=true. OCR skipped."],
+        };
+    }
 
     if (type.includes("pdf") || ext === ".pdf") {
         return extractTextFromPdfWithOcr(filePath, options);
