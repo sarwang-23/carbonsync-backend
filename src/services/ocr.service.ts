@@ -15,7 +15,7 @@ export interface OcrResult {
     warnings: string[];
 }
 
-const OCR_SERVICE_VERSION = "OCR_CHROME_RENDER_FALLBACK_V4_20260627";
+const OCR_SERVICE_VERSION = "OCR_CHROME_HTML_EMBED_V5_20260627";
 
 function cleanText(text: string) {
     return String(text || "")
@@ -51,9 +51,7 @@ async function withTimeout<T>(
 
 class NodeCanvasFactory {
     create(width: number, height: number) {
-        if (width <= 0 || height <= 0) {
-            throw new Error("Invalid canvas size");
-        }
+        if (width <= 0 || height <= 0) throw new Error("Invalid canvas size");
 
         const canvas = createCanvas(width, height);
         const context = canvas.getContext("2d");
@@ -64,6 +62,7 @@ class NodeCanvasFactory {
     reset(canvasAndContext: any, width: number, height: number) {
         if (!canvasAndContext?.canvas) throw new Error("Canvas is not specified");
         if (width <= 0 || height <= 0) throw new Error("Invalid canvas size");
+
         canvasAndContext.canvas.width = width;
         canvasAndContext.canvas.height = height;
     }
@@ -80,13 +79,8 @@ class NodeCanvasFactory {
 async function createTesseractWorker() {
     const worker: any = await createWorker("eng");
 
-    if (typeof worker.loadLanguage === "function") {
-        await worker.loadLanguage("eng");
-    }
-
-    if (typeof worker.initialize === "function") {
-        await worker.initialize("eng");
-    }
+    if (typeof worker.loadLanguage === "function") await worker.loadLanguage("eng");
+    if (typeof worker.initialize === "function") await worker.initialize("eng");
 
     if (typeof worker.setParameters === "function") {
         await worker.setParameters({
@@ -101,9 +95,7 @@ async function createTesseractWorker() {
 
 async function terminateWorker(worker: any) {
     try {
-        if (worker && typeof worker.terminate === "function") {
-            await worker.terminate();
-        }
+        if (worker && typeof worker.terminate === "function") await worker.terminate();
     } catch {
         // ignore terminate errors
     }
@@ -116,6 +108,7 @@ function preprocessCanvasForOcr(canvas: any) {
 
     for (let i = 0; i < data.length; i += 4) {
         const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+
         let enhanced = (gray - 128) * 1.35 + 128;
         enhanced = enhanced > 185 ? 255 : enhanced < 95 ? 0 : enhanced;
 
@@ -172,7 +165,6 @@ async function renderPdfPagesWithPdfJs(
     warnings: string[]
 ): Promise<Buffer[]> {
     const buffers: Buffer[] = [];
-
     warnings.push("OCR pdfjs load started");
 
     const data = new Uint8Array(fs.readFileSync(filePath));
@@ -281,6 +273,19 @@ function findChromeExecutable(puppeteerModule: any) {
     return candidates.find((candidate) => fs.existsSync(candidate));
 }
 
+async function screenshotPageToPng(page: any, pngPath: string, warnings: string[]) {
+    await page.screenshot({
+        path: pngPath,
+        fullPage: false,
+        type: "png",
+    });
+
+    const size = fs.existsSync(pngPath) ? fs.statSync(pngPath).size : 0;
+    warnings.push(`OCR chrome screenshot bytes: ${size}`);
+
+    return size > 0 ? pngPath : null;
+}
+
 async function renderPdfFirstPageWithChrome(filePath: string, warnings: string[]): Promise<string | null> {
     const puppeteerModule: any = await loadPuppeteer(warnings);
     if (!puppeteerModule) return null;
@@ -297,53 +302,108 @@ async function renderPdfFirstPageWithChrome(filePath: string, warnings: string[]
     try {
         browser = await puppeteerModule.default.launch({
             executablePath: executablePath || undefined,
-            headless: true,
+            headless: "new",
             args: [
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
                 "--no-zygote",
-                "--single-process",
+                "--disable-extensions",
+                "--disable-background-networking",
                 "--allow-file-access-from-files",
             ],
         });
 
         const page = await browser.newPage();
 
+        const width = getEnvNumber("OCR_CHROME_WIDTH", 1200);
+        const height = getEnvNumber("OCR_CHROME_HEIGHT", 1600);
+        const deviceScaleFactor = getEnvNumber("OCR_CHROME_DEVICE_SCALE", 2);
+
         await page.setViewport({
-            width: getEnvNumber("OCR_CHROME_WIDTH", 1200),
-            height: getEnvNumber("OCR_CHROME_HEIGHT", 1600),
-            deviceScaleFactor: getEnvNumber("OCR_CHROME_DEVICE_SCALE", 2),
+            width,
+            height,
+            deviceScaleFactor,
         });
 
         const pdfUrl = pathToFileURL(path.resolve(filePath)).href;
-        warnings.push(`OCR chrome goto pdf started`);
 
-        await page.goto(pdfUrl, {
-            waitUntil: "networkidle2",
-            timeout: getEnvNumber("OCR_CHROME_TIMEOUT_MS", 25000),
+        // Direct navigation to a PDF can fail with "Navigating frame was detached" in headless Chrome
+        // because Chrome swaps the page into its internal PDF viewer.
+        // So we use an HTML wrapper and embed the PDF instead.
+        const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: white;
+    width: ${width}px;
+    height: ${height}px;
+    overflow: hidden;
+  }
+  #wrap {
+    width: ${width}px;
+    height: ${height}px;
+    background: white;
+    overflow: hidden;
+  }
+  iframe, embed, object {
+    width: ${width}px;
+    height: ${height}px;
+    border: 0;
+    background: white;
+  }
+</style>
+</head>
+<body>
+  <div id="wrap">
+    <iframe src="${pdfUrl}#page=1&zoom=150&toolbar=0&navpanes=0&scrollbar=0"></iframe>
+  </div>
+</body>
+</html>`;
+
+        warnings.push("OCR chrome setContent pdf iframe started");
+
+        await page.setContent(html, {
+            waitUntil: "domcontentloaded",
+            timeout: getEnvNumber("OCR_CHROME_TIMEOUT_MS", 30000),
         });
 
-        await new Promise((resolve) => setTimeout(resolve, getEnvNumber("OCR_CHROME_WAIT_MS", 2500)));
+        await new Promise((resolve) => setTimeout(resolve, getEnvNumber("OCR_CHROME_WAIT_MS", 4000)));
 
-        await page.screenshot({
-            path: pngPath,
-            fullPage: false,
-            type: "png",
+        let screenshotPath = await screenshotPageToPng(page, pngPath, warnings);
+        if (screenshotPath) return screenshotPath;
+
+        // Fallback: use embed instead of iframe.
+        warnings.push("OCR chrome iframe screenshot empty, trying embed wrapper");
+
+        const htmlEmbed = html.replace(
+            /<iframe[^>]*><\/iframe>/,
+            `<embed src="${pdfUrl}#page=1&zoom=150&toolbar=0&navpanes=0&scrollbar=0" type="application/pdf" />`
+        );
+
+        await page.setContent(htmlEmbed, {
+            waitUntil: "domcontentloaded",
+            timeout: getEnvNumber("OCR_CHROME_TIMEOUT_MS", 30000),
         });
 
-        const size = fs.existsSync(pngPath) ? fs.statSync(pngPath).size : 0;
-        warnings.push(`OCR chrome screenshot bytes: ${size}`);
+        await new Promise((resolve) => setTimeout(resolve, getEnvNumber("OCR_CHROME_WAIT_MS", 4000)));
 
-        return size > 0 ? pngPath : null;
+        screenshotPath = await screenshotPageToPng(page, pngPath, warnings);
+        return screenshotPath;
     } catch (error: any) {
         warnings.push(`OCR chrome render failed: ${error?.message || String(error)}`);
+
         try {
             if (fs.existsSync(pngPath)) fs.unlinkSync(pngPath);
         } catch {
             // ignore
         }
+
         return null;
     } finally {
         try {
@@ -367,7 +427,7 @@ export async function extractTextFromPdfWithOcr(
     try {
         const maxPages = options.maxPages || getEnvNumber("OCR_MAX_PAGES", 1);
         const scale = options.scale || getEnvNumber("OCR_SCALE", 2);
-        const pageTimeoutMs = getEnvNumber("OCR_PAGE_TIMEOUT_MS", 20000);
+        const pageTimeoutMs = getEnvNumber("OCR_PAGE_TIMEOUT_MS", 25000);
 
         worker = await createTesseractWorker();
         warnings.push("OCR tesseract worker created");
@@ -392,7 +452,7 @@ export async function extractTextFromPdfWithOcr(
             }
         } catch (pdfJsError: any) {
             warnings.push(`OCR pdfjs fatal error: ${pdfJsError?.message || String(pdfJsError)}`);
-            warnings.push("OCR trying chrome PDF render fallback");
+            warnings.push("OCR trying chrome HTML PDF render fallback");
 
             const chromePngPath = await renderPdfFirstPageWithChrome(filePath, warnings);
 
@@ -457,7 +517,7 @@ export async function extractTextFromImageWithOcr(filePath: string): Promise<Ocr
         const result = await recognizeImagePath(
             worker,
             filePath,
-            getEnvNumber("OCR_PAGE_TIMEOUT_MS", 20000)
+            getEnvNumber("OCR_PAGE_TIMEOUT_MS", 25000)
         );
 
         warnings.push(`OCR image text length: ${result.text.length}`);
