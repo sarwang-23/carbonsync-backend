@@ -325,15 +325,40 @@ function scoreEmissionFactor(result: any, input: { region: SupportedCountry; cat
     if (["l", "ltr", "litre", "liter", "litres", "liters"].includes(inputUnit) && (unit.includes("l") || unit.includes("litre"))) score += 20;
     if ((inputUnit === "m3" || inputUnit.includes("cubic")) && unit.includes("m3")) score += 20;
 
-    if (input.category === "electricity_bill") {
-        if (activity.includes("electricity-supply_grid")) score += 35;
-        if (activity.includes("production_mix")) score += 35;
-        if (result.source === "Ember") score += 15;
-        if (result.scopes?.includes("2") || result.scopes?.includes("combined_scopes")) score += 15;
-        if (activity.includes("losses")) score -= 70;
-        if (sourceLca.includes("well_to_tank")) score -= 45;
-        if (result.scopes?.includes("3.3")) score -= 25;
+   if (input.category === "electricity_bill") {
+    const year = Number(result.year || 0);
+
+    // Base electricity match
+    if (activity.includes("electricity-supply_grid")) score += 35;
+    if (unit.includes("kwh")) score += 25;
+
+    // For normal electricity bills, production mix is better than old supplier mix
+    if (activity.includes("production_mix")) score += 70;
+    if (activity.includes("supplier_mix")) score += 10;
+
+    // Prefer latest Ember production mix for grid electricity
+    if (result.source === "Ember") score += 60;
+
+    // Keep ADEME as fallback, not first preference
+    if (result.source === "ADEME") score += 5;
+
+    // Latest year should strongly win
+    if (year >= 2024) score += 80;
+    else if (year >= 2023) score += 65;
+    else if (year >= 2022) score += 50;
+    else if (year >= 2020) score += 30;
+    else if (year < 2020) score -= 40;
+
+    // Scope 2 is good, but should not beat latest production mix
+    if (result.scopes?.includes("2") || result.scopes?.includes("combined_scopes")) {
+        score += 10;
     }
+
+    // Avoid wrong factors
+    if (activity.includes("losses")) score -= 100;
+    if (sourceLca.includes("well_to_tank")) score -= 80;
+    if (result.scopes?.includes("3.3")) score -= 60;
+}
 
     if (input.category === "fuel") {
         if (activity.includes("fuel")) score += 25;
@@ -382,23 +407,52 @@ function scoreEmissionFactor(result: any, input: { region: SupportedCountry; cat
     return score;
 }
 
-export function selectBestEmissionFactor(results: any[], input: { region: SupportedCountry; category: DetectedCategory; unit: string; itemName: string }) {
+export function selectBestEmissionFactor(
+    results: any[],
+    input: { region: SupportedCountry; category: DetectedCategory; unit: string; itemName: string }
+) {
     const scored = (results || [])
         .filter((r) => r.region === input.region || r.region === "GLOBAL")
         .map((r) => ({ ...r, mapping_score: scoreEmissionFactor(r, input) }))
         .sort((a, b) => b.mapping_score - a.mapping_score);
 
+    if (input.category === "electricity_bill") {
+        const latestEmberProductionMix = scored
+            .filter((r) =>
+                r.region === input.region &&
+                r.source === "Ember" &&
+                String(r.activity_id || "").includes("electricity-supply_grid-source_production_mix") &&
+                String(r.unit || "").toLowerCase().includes("kwh")
+            )
+            .sort((a, b) => Number(b.year || 0) - Number(a.year || 0))[0];
+
+        if (latestEmberProductionMix) {
+            return {
+                selected: latestEmberProductionMix,
+                alternatives: scored
+                    .filter((r) => r.id !== latestEmberProductionMix.id)
+                    .slice(0, 3),
+                confidence: 0.95,
+                reason: `Selected latest ${input.region} Ember production mix for grid electricity bill.`,
+            };
+        }
+    }
+
     const selected = scored[0] || null;
+
     return {
         selected,
         alternatives: scored.slice(1, 4),
-        confidence: selected?.mapping_score >= 100 ? 0.95 : selected?.mapping_score >= 75 ? 0.85 : selected?.mapping_score >= 50 ? 0.65 : 0.4,
+        confidence:
+            selected?.mapping_score >= 100 ? 0.95 :
+            selected?.mapping_score >= 75 ? 0.85 :
+            selected?.mapping_score >= 50 ? 0.65 :
+            0.4,
         reason: selected
             ? `Selected best ${input.region} emission factor using region, unit, activity_id, source, scope and latest year scoring.`
             : "No suitable emission factor found.",
     };
 }
-
 function buildEstimatePayload(selectedEF: any, item: any, category: DetectedCategory, converted: any) {
     const unit = safeLower(item.unit);
     const dataVersion = getClimatiqDataVersion();
