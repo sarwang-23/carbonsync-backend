@@ -15,7 +15,7 @@ export interface OcrResult {
     warnings: string[];
 }
 
-const OCR_SERVICE_VERSION = "OCR_CHROME_HTML_EMBED_V5_20260627";
+const OCR_SERVICE_VERSION = "OCR_CHROME_DATA_PDF_EMBED_V6_20260627";
 
 function cleanText(text: string) {
     return String(text || "")
@@ -328,11 +328,16 @@ async function renderPdfFirstPageWithChrome(filePath: string, warnings: string[]
         });
 
         const pdfUrl = pathToFileURL(path.resolve(filePath)).href;
+        const pdfBase64 = fs.readFileSync(filePath).toString("base64");
+        const pdfDataUrl = `data:application/pdf;base64,${pdfBase64}`;
 
-        // Direct navigation to a PDF can fail with "Navigating frame was detached" in headless Chrome
-        // because Chrome swaps the page into its internal PDF viewer.
-        // So we use an HTML wrapper and embed the PDF instead.
-        const html = `<!doctype html>
+        function buildHtml(src: string, tag: "iframe" | "embed") {
+            const element =
+                tag === "iframe"
+                    ? `<iframe src="${src}#page=1&zoom=180&toolbar=0&navpanes=0&scrollbar=0"></iframe>`
+                    : `<embed src="${src}#page=1&zoom=180&toolbar=0&navpanes=0&scrollbar=0" type="application/pdf" />`;
+
+            return `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8" />
@@ -360,40 +365,41 @@ async function renderPdfFirstPageWithChrome(filePath: string, warnings: string[]
 </style>
 </head>
 <body>
-  <div id="wrap">
-    <iframe src="${pdfUrl}#page=1&zoom=150&toolbar=0&navpanes=0&scrollbar=0"></iframe>
-  </div>
+  <div id="wrap">${element}</div>
 </body>
 </html>`;
+        }
 
-        warnings.push("OCR chrome setContent pdf iframe started");
+        async function tryHtmlScreenshot(label: string, html: string) {
+            warnings.push(`OCR chrome setContent ${label} started`);
 
-        await page.setContent(html, {
-            waitUntil: "domcontentloaded",
-            timeout: getEnvNumber("OCR_CHROME_TIMEOUT_MS", 30000),
-        });
+            await page.setContent(html, {
+                waitUntil: "domcontentloaded",
+                timeout: getEnvNumber("OCR_CHROME_TIMEOUT_MS", 30000),
+            });
 
-        await new Promise((resolve) => setTimeout(resolve, getEnvNumber("OCR_CHROME_WAIT_MS", 4000)));
+            await new Promise((resolve) => setTimeout(resolve, getEnvNumber("OCR_CHROME_WAIT_MS", 5000)));
 
-        let screenshotPath = await screenshotPageToPng(page, pngPath, warnings);
+            const screenshotPath = await screenshotPageToPng(page, pngPath, warnings);
+            warnings.push(`OCR chrome ${label} screenshot path: ${screenshotPath || "none"}`);
+
+            return screenshotPath;
+        }
+
+        // Try data URL first. Headless Chrome often blocks/ detaches local PDF viewer frames.
+        let screenshotPath = await tryHtmlScreenshot("data-pdf iframe", buildHtml(pdfDataUrl, "iframe"));
         if (screenshotPath) return screenshotPath;
 
-        // Fallback: use embed instead of iframe.
-        warnings.push("OCR chrome iframe screenshot empty, trying embed wrapper");
+        warnings.push("OCR chrome data iframe screenshot empty, trying data embed");
+        screenshotPath = await tryHtmlScreenshot("data-pdf embed", buildHtml(pdfDataUrl, "embed"));
+        if (screenshotPath) return screenshotPath;
 
-        const htmlEmbed = html.replace(
-            /<iframe[^>]*><\/iframe>/,
-            `<embed src="${pdfUrl}#page=1&zoom=150&toolbar=0&navpanes=0&scrollbar=0" type="application/pdf" />`
-        );
+        warnings.push("OCR chrome data embed screenshot empty, trying file iframe");
+        screenshotPath = await tryHtmlScreenshot("file-pdf iframe", buildHtml(pdfUrl, "iframe"));
+        if (screenshotPath) return screenshotPath;
 
-        await page.setContent(htmlEmbed, {
-            waitUntil: "domcontentloaded",
-            timeout: getEnvNumber("OCR_CHROME_TIMEOUT_MS", 30000),
-        });
-
-        await new Promise((resolve) => setTimeout(resolve, getEnvNumber("OCR_CHROME_WAIT_MS", 4000)));
-
-        screenshotPath = await screenshotPageToPng(page, pngPath, warnings);
+        warnings.push("OCR chrome file iframe screenshot empty, trying file embed");
+        screenshotPath = await tryHtmlScreenshot("file-pdf embed", buildHtml(pdfUrl, "embed"));
         return screenshotPath;
     } catch (error: any) {
         warnings.push(`OCR chrome render failed: ${error?.message || String(error)}`);
