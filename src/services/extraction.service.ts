@@ -107,8 +107,8 @@ export async function extractOcrText(filePath: string, mimetype = ""): Promise<s
 }
 
 /**
- * Vision placeholder.
- * Use Gemini Vision / Document AI later when PDF text + OCR are weak.
+ * Vision fallback.
+ * Uses Gemini Vision / Document AI when PDF text + OCR are weak.
  */
 export async function extractWithVisionPlaceholder(
     filePath: string,
@@ -130,7 +130,7 @@ export async function extractWithVisionPlaceholder(
 
     return {
         text: result.rawText || "",
-        lineItems: convertVisionStructuredToLineItems(result.structured),
+        lineItems: convertVisionStructuredToLineItems(result.structured, result.rawText),
         warnings: result.warnings || [],
         confidence: result.confidence || 0,
     };

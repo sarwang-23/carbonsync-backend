@@ -9,16 +9,151 @@ export interface VisionExtractionResult {
     warnings: string[];
 }
 
+function safeLower(value: any): string {
+    return String(value || "").toLowerCase().trim();
+}
+
+function toNumber(value: any): number {
+    const num = Number(String(value ?? "").replace(/,/g, "").replace(/[^\d.-]/g, "").trim());
+    return Number.isFinite(num) ? num : 0;
+}
+
+function extractJsonFromText(raw: string): any | null {
+    const cleaned = String(raw || "")
+        .replace(/```json/gi, "")
+        .replace(/```/g, "")
+        .trim();
+
+    try {
+        return JSON.parse(cleaned);
+    } catch {
+        // continue
+    }
+
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+        const jsonCandidate = cleaned.slice(firstBrace, lastBrace + 1);
+        try {
+            return JSON.parse(jsonCandidate);
+        } catch {
+            return null;
+        }
+    }
+
+    return null;
+}
+
+function normalizeDocumentType(value: any): string {
+    const text = safeLower(value).replace(/[\s-]+/g, "_");
+
+    if (text.includes("electric")) return "ELECTRICITY_BILL";
+    if (text.includes("train") || text.includes("rail")) return "TRAIN_TICKET";
+    if (text.includes("flight") || text.includes("boarding")) return "FLIGHT_TICKET";
+    if (text.includes("fuel") || text.includes("diesel") || text.includes("petrol")) return "FUEL_INVOICE";
+    if (text.includes("water")) return "WATER_BILL";
+    if (text.includes("waste")) return "WASTE_INVOICE";
+    if (text.includes("hotel") || text.includes("accommodation")) return "HOTEL_INVOICE";
+    if (text.includes("invoice")) return "GENERIC_INVOICE";
+
+    return String(value || "UNKNOWN").toUpperCase();
+}
+
+function findElectricityUsageFromStructured(structured: any): number {
+    const electricity = structured?.electricity || {};
+
+    const direct =
+        electricity.usage_kwh ??
+        electricity.usageKwh ??
+        electricity.kwh ??
+        electricity.consumption_kwh ??
+        electricity.consumptionKwh ??
+        electricity.total_consumption_kwh ??
+        electricity.totalConsumptionKwh ??
+        electricity.meter_difference_kwh ??
+        electricity.meterDifferenceKwh;
+
+    if (toNumber(direct) > 0) return toNumber(direct);
+
+    const previous = toNumber(
+        electricity.previous_reading ??
+        electricity.previousReading ??
+        electricity.old_reading ??
+        electricity.oldReading
+    );
+
+    const current = toNumber(
+        electricity.current_reading ??
+        electricity.currentReading ??
+        electricity.new_reading ??
+        electricity.newReading
+    );
+
+    if (previous > 0 && current > previous) {
+        return current - previous;
+    }
+
+    if (Array.isArray(structured?.line_items)) {
+        for (const item of structured.line_items) {
+            const unit = safeLower(item?.unit);
+            const name = safeLower(`${item?.item_name || ""} ${item?.description || ""}`);
+
+            if (unit.includes("kwh") || name.includes("kwh") || name.includes("electric")) {
+                const quantity = toNumber(item?.quantity);
+                if (quantity > 0) return quantity;
+            }
+        }
+    }
+
+    return 0;
+}
+
+function findElectricityUsageFromRawText(rawText: string): number {
+    const clean = String(rawText || "")
+        .replace(/,/g, "")
+        .replace(/\s+/g, " ");
+
+    const patterns = [
+        /"usage_kwh"\s*:\s*(\d+(?:\.\d+)?)/i,
+        /"usageKwh"\s*:\s*(\d+(?:\.\d+)?)/i,
+        /"meter_difference_kwh"\s*:\s*(\d+(?:\.\d+)?)/i,
+        /(?:kegunaan|penggunaan|jumlah\s+penggunaan|usage|consumption)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:kwh)?/i,
+        /(\d+(?:\.\d+)?)\s*kwh/i,
+    ];
+
+    for (const pattern of patterns) {
+        const match = clean.match(pattern);
+        if (match?.[1]) {
+            const value = toNumber(match[1]);
+            if (value > 0 && value < 100000) return value;
+        }
+    }
+
+    const previousPattern = /(?:dahulu|previous|previous_reading)"?\s*[:\-]?\s*(\d+(?:\.\d+)?)/i;
+    const currentPattern = /(?:semasa|current|current_reading)"?\s*[:\-]?\s*(\d+(?:\.\d+)?)/i;
+
+    const previous = toNumber(clean.match(previousPattern)?.[1]);
+    const current = toNumber(clean.match(currentPattern)?.[1]);
+
+    if (previous > 0 && current > previous) {
+        return current - previous;
+    }
+
+    return 0;
+}
+
 /**
  * Optional Vision fallback.
- *
- * Use this only when PDF text + OCR are weak.
  *
  * Required env:
  * GEMINI_API_KEY=your_key
  *
+ * Recommended env:
+ * GEMINI_VISION_MODEL=gemini-2.5-flash
+ *
  * Required package:
- * npm install @google/generative-ai
+ * npm install @google/genai
  */
 export async function extractInvoiceWithGeminiVision(input: {
     filePath: string;
@@ -26,7 +161,6 @@ export async function extractInvoiceWithGeminiVision(input: {
     mimetype?: string;
 }): Promise<VisionExtractionResult> {
     const warnings: string[] = [];
-
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -43,12 +177,8 @@ export async function extractInvoiceWithGeminiVision(input: {
     try {
         const { GoogleGenAI } = await import("@google/genai");
 
-        const ai = new GoogleGenAI({
-            apiKey,
-        });
-
-        const visionModelName =
-            process.env.GEMINI_VISION_MODEL || "gemini-2.5-flash";
+        const ai = new GoogleGenAI({ apiKey });
+        const visionModelName = process.env.GEMINI_VISION_MODEL || "gemini-2.5-flash";
 
         console.log("GEMINI_VISION_MODEL_ACTIVE", visionModelName);
 
@@ -60,7 +190,7 @@ You are an invoice extraction engine for carbon emission calculation.
 
 Extract visible data only. Do not guess. Do not invent values.
 
-Return JSON only with this schema:
+Return JSON only with this exact schema:
 {
   "document_type": "ELECTRICITY_BILL | TRAIN_TICKET | FLIGHT_TICKET | FUEL_INVOICE | TRANSPORT_LOGISTICS | PURCHASED_GOODS | WATER_BILL | WASTE_INVOICE | HOTEL_INVOICE | GENERIC_INVOICE | UNKNOWN",
   "country": "IN | MY | UNKNOWN",
@@ -94,11 +224,13 @@ Return JSON only with this schema:
   "warnings": string[]
 }
 
-Important rules:
+Important extraction rules:
 - For electricity bills, extract actual kWh usage. Do not use bill amount as kWh.
-- For TNB Malaysia bills, prefer Kegunaan/Jumlah Penggunaan kWh or meter difference.
+- For TNB Malaysia bills, prefer Kegunaan/Jumlah Penggunaan kWh.
+- If meter readings are visible, also extract previous_reading and current_reading.
+- If usage is not directly visible but meter readings are visible, set meter_difference_kwh = current_reading - previous_reading.
 - If a value is not visible, return null.
-- JSON only, no markdown.
+- Return JSON only. No markdown.
 `;
 
         const result = await ai.models.generateContent({
@@ -117,22 +249,22 @@ Important rules:
         });
 
         const raw = result.text || "";
-
         const cleaned = raw
             .replace(/```json/gi, "")
             .replace(/```/g, "")
             .trim();
 
-        let structured: any = null;
+        const structured = extractJsonFromText(cleaned);
 
-        try {
-            structured = JSON.parse(cleaned);
-        } catch {
-            warnings.push("Gemini returned non-JSON output. Raw text returned for debugging.");
+        if (!structured) {
+            warnings.push("Gemini returned non-JSON output. Raw text returned for fallback parsing.");
         }
 
+        console.log("GEMINI_VISION_RAW_PREVIEW", cleaned.slice(0, 500));
+        console.log("GEMINI_VISION_STRUCTURED_KEYS", structured ? Object.keys(structured) : []);
+
         return {
-            success: Boolean(structured),
+            success: Boolean(structured || cleaned),
             provider: "gemini",
             rawText: cleaned,
             structured,
@@ -151,87 +283,102 @@ Important rules:
     }
 }
 
-export function convertVisionStructuredToLineItems(structured: any) {
-    if (!structured) return [];
-
+export function convertVisionStructuredToLineItems(structured: any, rawText = "") {
     const items: any[] = [];
 
+    if (!structured && !rawText) return items;
+
+    const documentType = normalizeDocumentType(structured?.document_type || structured?.documentType || "");
+    const vendor = structured?.vendor || null;
+    const country = structured?.country || "UNKNOWN";
+    const currency = structured?.currency || structured?.line_items?.[0]?.currency || null;
+
+    const kwhFromStructured = findElectricityUsageFromStructured(structured);
+    const kwhFromRaw = findElectricityUsageFromRawText(rawText);
+    const usageKwh = kwhFromStructured || kwhFromRaw;
+
     if (
-        structured.document_type === "ELECTRICITY_BILL" &&
-        structured.electricity?.usage_kwh
+        (documentType === "ELECTRICITY_BILL" || usageKwh > 0) &&
+        usageKwh > 0
     ) {
+        const electricity = structured?.electricity || {};
+
         items.push({
             item_name:
-                structured.vendor && String(structured.vendor).toLowerCase().includes("tenaga")
+                vendor && String(vendor).toLowerCase().includes("tenaga")
                     ? "TNB Malaysia Electricity Bill"
                     : "Electricity consumption",
             description: "Grid electricity consumption extracted by Vision fallback",
-            quantity: Number(structured.electricity.usage_kwh),
+            quantity: Number(usageKwh),
             unit: "kWh",
-            amount: structured.line_items?.[0]?.amount ?? null,
-            currency: structured.currency || structured.line_items?.[0]?.currency || null,
-            confidence: structured.confidence || 0.75,
+            amount: structured?.line_items?.[0]?.amount ?? null,
+            currency,
+            confidence: structured?.confidence || 0.75,
             source: "vision_fallback",
             parameters: {
-                energy: Number(structured.electricity.usage_kwh),
-                energy_kwh: Number(structured.electricity.usage_kwh),
+                energy: Number(usageKwh),
+                energy_kwh: Number(usageKwh),
                 energy_unit: "kWh",
-                country: structured.country,
-                vendor: structured.vendor,
-                previous_reading: structured.electricity.previous_reading,
-                current_reading: structured.electricity.current_reading,
-                meter_difference_kwh: structured.electricity.meter_difference_kwh,
+                country,
+                vendor,
+                previous_reading: electricity.previous_reading ?? electricity.previousReading ?? null,
+                current_reading: electricity.current_reading ?? electricity.currentReading ?? null,
+                meter_difference_kwh: electricity.meter_difference_kwh ?? electricity.meterDifferenceKwh ?? null,
             },
         });
 
         return items;
     }
 
-    if (
-        structured.document_type === "TRAIN_TICKET" ||
-        structured.document_type === "FLIGHT_TICKET"
-    ) {
-        items.push({
-            item_name:
-                structured.document_type === "TRAIN_TICKET"
-                    ? "India Train Ticket"
-                    : "India Flight Ticket",
-            description:
-                structured.document_type === "TRAIN_TICKET"
-                    ? "Passenger rail travel extracted by Vision fallback"
-                    : "Passenger flight travel extracted by Vision fallback",
-            quantity: Number(structured.travel?.distance_km || 0),
-            unit: "passenger-km",
-            confidence: structured.confidence || 0.65,
-            source: "vision_fallback",
-            parameters: {
-                distance: Number(structured.travel?.distance_km || 0),
-                distance_km: Number(structured.travel?.distance_km || 0),
-                passenger_count: Number(structured.travel?.passenger_count || 1),
-                origin: structured.travel?.origin || null,
-                destination: structured.travel?.destination || null,
-                country: structured.country,
-            },
-        });
+    if (documentType === "TRAIN_TICKET" || documentType === "FLIGHT_TICKET") {
+        const travel = structured?.travel || {};
+        const distanceKm = Number(travel.distance_km || travel.distanceKm || 0);
 
-        return items;
+        if (distanceKm > 0) {
+            items.push({
+                item_name:
+                    documentType === "TRAIN_TICKET"
+                        ? "India Train Ticket"
+                        : "India Flight Ticket",
+                description:
+                    documentType === "TRAIN_TICKET"
+                        ? "Passenger rail travel extracted by Vision fallback"
+                        : "Passenger flight travel extracted by Vision fallback",
+                quantity: distanceKm,
+                unit: "passenger-km",
+                confidence: structured?.confidence || 0.65,
+                source: "vision_fallback",
+                parameters: {
+                    distance: distanceKm,
+                    distance_km: distanceKm,
+                    passenger_count: Number(travel.passenger_count || travel.passengerCount || 1),
+                    origin: travel.origin || null,
+                    destination: travel.destination || null,
+                    country,
+                },
+            });
+
+            return items;
+        }
     }
 
-    if (Array.isArray(structured.line_items)) {
-        return structured.line_items.map((item: any) => ({
-            item_name: item.item_name || "Invoice item",
-            description: item.description || null,
-            quantity: item.quantity,
-            unit: item.unit,
-            amount: item.amount,
-            currency: item.currency || structured.currency,
-            confidence: structured.confidence || 0.6,
-            source: "vision_fallback",
-            parameters: {
-                country: structured.country,
-                vendor: structured.vendor,
-            },
-        }));
+    if (Array.isArray(structured?.line_items)) {
+        return structured.line_items
+            .filter((item: any) => item?.quantity || item?.amount || item?.item_name)
+            .map((item: any) => ({
+                item_name: item.item_name || "Invoice item",
+                description: item.description || null,
+                quantity: item.quantity,
+                unit: item.unit,
+                amount: item.amount,
+                currency: item.currency || currency,
+                confidence: structured?.confidence || 0.6,
+                source: "vision_fallback",
+                parameters: {
+                    country,
+                    vendor,
+                },
+            }));
     }
 
     return items;
