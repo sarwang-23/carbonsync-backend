@@ -22,6 +22,16 @@ import {
     normalizeLineItems,
     hasValidNormalizedQuantity,
 } from "./lineItemNormalizer.service.js";
+import {
+    getPreMappingPolicy,
+    selectBestEmissionFactorForCalculation,
+    buildSelectedEmissionFactorSummary,
+} from "./emissionMapping.service.js";
+import {
+    buildAuditTrail,
+    calculatePipelineConfidence,
+    buildResultWarnings,
+} from "./auditTrail.service.js";
 import axios from "axios";
 import { convertQuantity } from "./unit.service.js";
 
