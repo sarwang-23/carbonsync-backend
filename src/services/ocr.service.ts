@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { createCanvas } from "canvas";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createWorker } from "tesseract.js";
@@ -48,7 +49,6 @@ async function withTimeout<T>(
 async function createTesseractWorker() {
     const worker: any = await createWorker("eng");
 
-    // Compatibility for different tesseract.js versions.
     if (typeof worker.loadLanguage === "function") {
         await worker.loadLanguage("eng");
     }
@@ -57,7 +57,6 @@ async function createTesseractWorker() {
         await worker.initialize("eng");
     }
 
-    // Optional tuning. Works on many tesseract.js versions; ignored safely if unsupported.
     if (typeof worker.setParameters === "function") {
         await worker.setParameters({
             tessedit_pageseg_mode: "6",
@@ -84,15 +83,10 @@ function preprocessCanvasForOcr(canvas: any) {
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
 
-    // Basic grayscale + contrast + threshold.
-    // This helps scanned bills on free OCR without Gemini.
     for (let i = 0; i < data.length; i += 4) {
         const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
 
-        // Contrast boost around mid-point.
         let enhanced = (gray - 128) * 1.35 + 128;
-
-        // Light threshold, keeps anti-aliased text readable.
         enhanced = enhanced > 185 ? 255 : enhanced < 95 ? 0 : enhanced;
 
         data[i] = enhanced;
@@ -104,29 +98,46 @@ function preprocessCanvasForOcr(canvas: any) {
     return canvas;
 }
 
-async function recognizeBuffer(worker: any, buffer: Buffer, timeoutMs: number) {
-    const result: any = await withTimeout(
-        worker.recognize(buffer),
-        timeoutMs,
-        `Tesseract OCR timed out after ${timeoutMs}ms`
+function writeTempPng(buffer: Buffer) {
+    const filePath = path.join(
+        os.tmpdir(),
+        `carbonsync-ocr-${Date.now()}-${Math.random().toString(16).slice(2)}.png`
     );
 
-    const text = cleanText(result?.data?.text || "");
-    const confidence = Number(result?.data?.confidence || 0);
-
-    return {
-        text,
-        confidence,
-    };
+    fs.writeFileSync(filePath, buffer);
+    return filePath;
 }
 
 /**
- * Render PDF pages to images and OCR them.
- * Render-safe defaults:
- * - maxPages: env OCR_MAX_PAGES or 1
- * - scale: env OCR_SCALE or 1.5
- * - timeout per page: env OCR_PAGE_TIMEOUT_MS or 12000
+ * Tesseract.js on Node can throw "Image or Canvas expected" when Buffer is passed directly.
+ * To avoid that, this writes the PNG buffer to a temp file and recognizes the file path.
  */
+async function recognizePngBuffer(worker: any, buffer: Buffer, timeoutMs: number) {
+    const tempPath = writeTempPng(buffer);
+
+    try {
+        const result: any = await withTimeout(
+            worker.recognize(tempPath),
+            timeoutMs,
+            `Tesseract OCR timed out after ${timeoutMs}ms`
+        );
+
+        const text = cleanText(result?.data?.text || "");
+        const confidence = Number(result?.data?.confidence || 0);
+
+        return {
+            text,
+            confidence,
+        };
+    } finally {
+        try {
+            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        } catch {
+            // ignore temp cleanup errors
+        }
+    }
+}
+
 export async function extractTextFromPdfWithOcr(
     filePath: string,
     options: {
@@ -139,12 +150,16 @@ export async function extractTextFromPdfWithOcr(
 
     try {
         const maxPages = options.maxPages || getEnvNumber("OCR_MAX_PAGES", 1);
-        const scale = options.scale || getEnvNumber("OCR_SCALE", 1.5);
-        const pageTimeoutMs = getEnvNumber("OCR_PAGE_TIMEOUT_MS", 12000);
+        const scale = options.scale || getEnvNumber("OCR_SCALE", 2);
+        const pageTimeoutMs = getEnvNumber("OCR_PAGE_TIMEOUT_MS", 20000);
 
         const data = new Uint8Array(fs.readFileSync(filePath));
         const pdf = await withTimeout(
-            pdfjsLib.getDocument({ data }).promise,
+            pdfjsLib.getDocument({
+                data,
+                disableWorker: true,
+                verbosity: 0,
+            } as any).promise,
             getEnvNumber("OCR_PDF_LOAD_TIMEOUT_MS", 10000),
             "PDF load timed out"
         );
@@ -163,7 +178,6 @@ export async function extractTextFromPdfWithOcr(
             const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
             const context = canvas.getContext("2d");
 
-            // White background helps scanned PDF transparency/dark mode artifacts.
             context.fillStyle = "white";
             context.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -172,14 +186,14 @@ export async function extractTextFromPdfWithOcr(
                     canvasContext: context as any,
                     viewport,
                 } as any).promise,
-                getEnvNumber("OCR_RENDER_TIMEOUT_MS", 10000),
+                getEnvNumber("OCR_RENDER_TIMEOUT_MS", 15000),
                 `PDF page ${pageNo} render timed out`
             );
 
             const processedCanvas = preprocessCanvasForOcr(canvas);
             const imageBuffer = processedCanvas.toBuffer("image/png");
 
-            const result = await recognizeBuffer(worker, imageBuffer, pageTimeoutMs);
+            const result = await recognizePngBuffer(worker, imageBuffer, pageTimeoutMs);
 
             if (result.text) {
                 pageTexts.push(result.text);
@@ -222,9 +236,6 @@ export async function extractTextFromPdfWithOcr(
     }
 }
 
-/**
- * OCR image files directly.
- */
 export async function extractTextFromImageWithOcr(filePath: string): Promise<OcrResult> {
     const warnings: string[] = [];
     let worker: any = null;
@@ -232,17 +243,20 @@ export async function extractTextFromImageWithOcr(filePath: string): Promise<Ocr
     try {
         worker = await createTesseractWorker();
 
-        const imageBuffer = fs.readFileSync(filePath);
-        const result = await recognizeBuffer(
-            worker,
-            imageBuffer,
-            getEnvNumber("OCR_PAGE_TIMEOUT_MS", 12000)
+        // Use file path directly, not Buffer, to avoid "Image or Canvas expected".
+        const result: any = await withTimeout(
+            worker.recognize(filePath),
+            getEnvNumber("OCR_PAGE_TIMEOUT_MS", 20000),
+            `Tesseract OCR timed out after ${getEnvNumber("OCR_PAGE_TIMEOUT_MS", 20000)}ms`
         );
 
+        const text = cleanText(result?.data?.text || "");
+        const confidence = Number(result?.data?.confidence || 0);
+
         return {
-            success: Boolean(result.text),
-            text: result.text,
-            confidence: Number(result.confidence.toFixed(2)),
+            success: Boolean(text),
+            text,
+            confidence: Number(confidence.toFixed(2)),
             pages_processed: 1,
             method: "image_ocr",
             warnings,
@@ -263,9 +277,6 @@ export async function extractTextFromImageWithOcr(filePath: string): Promise<Ocr
     }
 }
 
-/**
- * Auto OCR for PDF or image.
- */
 export async function extractTextWithOcr(
     filePath: string,
     mimetype = "",
