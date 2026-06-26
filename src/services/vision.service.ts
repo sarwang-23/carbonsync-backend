@@ -45,7 +45,7 @@ export async function extractInvoiceWithGeminiVision(input: {
 
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_VISION_MODEL || "gemini-1.5-flash",
+            model: process.env.GEMINI_VISION_MODEL || "gemini-2.0-flash",
         });
 
         const fileBuffer = fs.readFileSync(input.filePath);
