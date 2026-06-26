@@ -5943,7 +5943,14 @@ app.post(
 
 
 app.use("/api", limiter, router);
-
+app.get("/api/health", (_req: Request, res: Response) => {
+  res.status(200).json({
+    success: true,
+    message: "CarbonSync backend is running",
+    version: "v4-health-route-active",
+    time: new Date().toISOString(),
+  });
+}); 
 app.listen(port, () => {
   console.log(`SERVER AT ${port}`);
 });
