@@ -24,6 +24,7 @@ import { convertQuantity } from "./services/unit.service.js";
 import { buildClimatiqBody } from "./services/climatiqBody.service.js";
 import { calculateDynamicCountryEmission } from "./services/dynamicEmissionFactor.service.js";
 import { extractInvoiceData } from "./services/extraction.service.js";
+import { processUploadedInvoicePipeline } from "./services/invoicePipeline.service.js";
 dotenv.config();
 const require = createRequire(import.meta.url);
 const pdfParseModule = require("pdf-parse");
@@ -4287,9 +4288,33 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
     if (!req.file) {
       return res.status(400).json({
         success: false,
-        message: "Invoice file is required.",
+        message: "No invoice file uploaded.",
       });
     }
+
+    // --- NEW PIPELINE (Steps 3-5) ---
+    // Delegates extraction → normalization → emission calculation to the pipeline service.
+    // The legacy extraction/calculation code below this block is preserved but never reached.
+    const pipelineResult = await processUploadedInvoicePipeline({
+      filePath: req.file.path,
+      fileName: req.file.originalname,
+      mimetype: req.file.mimetype,
+      reportType: "BRSR",
+      reportTypes: ["BRSR", "CBAM"],
+    });
+
+    return res.status(pipelineResult.success ? 200 : 422).json({
+      ...pipelineResult,
+      file: {
+        originalname: req.file.originalname,
+        filename: req.file.filename,
+        path: req.file.path,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+      },
+    });
+
+    // --- LEGACY CODE BELOW (dead code - kept for reference/rollback) ---
 
     const extractionResult = await extractInvoiceData({
         filePath: req.file.path,

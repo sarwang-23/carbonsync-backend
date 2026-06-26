@@ -711,30 +711,71 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
     const gasBreakdown = estimateGasBreakdown(co2e, category);
     const factor = data.emission_factor || best.selected;
 
+    // Build a structured mapping object from the best selector result
+    const mapping = {
+        success: best.selected ? true : false,
+        mapping_type: best.selected?.mapping_type || (category === "electricity_bill" ? "climatiq_latest_ember_electricity" : "climatiq_dynamic"),
+        confidence: best.confidence,
+        reason: best.reason,
+        selected_emission_factor: best.selected,
+        alternatives: best.alternatives,
+        warnings: [] as string[],
+    };
+
+    // Step 2: Build result warnings
+    const selectedEF = best.selected;
+    const resultWarnings = buildResultWarnings({
+        country: region,
+        category,
+        selectedFactor: selectedEF,
+        validation: (normalizedItemData as any).validation,
+    });
+
+    // Step 3: Calculate overall pipeline confidence
+    const overallConfidence = calculatePipelineConfidence({
+        classificationConfidence: classification?.document_type_confidence,
+        normalizationConfidence: (normalizedItemData as any).normalization?.confidence,
+        validationConfidence: (normalizedItemData as any).validation?.confidence,
+        mappingConfidence: mapping?.confidence,
+    });
+
+    // Step 4: Build audit trail
+    const auditTrail = buildAuditTrail({
+        classification,
+        normalization: (normalizedItemData as any).normalization,
+        validation: (normalizedItemData as any).validation,
+        mapping,
+        calculation: {
+            co2e,
+            co2e_unit: data.co2e_unit || "kg",
+            total_tco2e: co2e / 1000,
+            factor_name: factor.name || selectedEF.name,
+            activity_id: factor.activity_id || selectedEF.activity_id,
+            source: factor.source || selectedEF.source,
+            factor_year: factor.year || selectedEF.year,
+            factor_region: factor.region || selectedEF.region,
+            category: factor.category || category,
+        },
+        warnings: resultWarnings,
+    });
+
+    // Step 5: Return with overall_confidence, warnings, audit_trail
     return {
         success: true,
         item_name: itemName,
         country: region,
         category,
+        overall_confidence: overallConfidence,
+        warnings: resultWarnings,
+        audit_trail: auditTrail,
         classification,
         normalization: (normalizedItemData as any).normalization || null,
         validation: (normalizedItemData as any).validation || null,
+        mapping,
         search_query: query,
         converted,
         climatiqBody,
-        selected_emission_factor: {
-            id: best.selected.id,
-            activity_id: best.selected.activity_id,
-            name: best.selected.name,
-            source: best.selected.source,
-            source_dataset: best.selected.source_dataset,
-            year: best.selected.year,
-            region: best.selected.region,
-            unit: best.selected.unit,
-            scope: best.selected.scopes,
-            source_lca_activity: best.selected.source_lca_activity,
-            mapping_score: best.selected.mapping_score,
-        },
+        selected_emission_factor: buildSelectedEmissionFactorSummary(selectedEF),
         alternatives: best.alternatives?.map((a: any) => ({
             id: a.id,
             activity_id: a.activity_id,
@@ -751,14 +792,14 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
             co2e,
             co2e_unit: data.co2e_unit || "kg",
             total_tco2e: co2e / 1000,
-            factor_name: factor.name || best.selected.name,
-            activity_id: factor.activity_id || best.selected.activity_id,
-            source: factor.source || best.selected.source,
-            source_dataset: factor.source_dataset || best.selected.source_dataset,
-            factor_year: factor.year || best.selected.year,
-            factor_region: factor.region || best.selected.region,
+            factor_name: factor.name || selectedEF.name,
+            activity_id: factor.activity_id || selectedEF.activity_id,
+            source: factor.source || selectedEF.source,
+            source_dataset: factor.source_dataset || selectedEF.source_dataset,
+            factor_year: factor.year || selectedEF.year,
+            factor_region: factor.region || selectedEF.region,
             category: factor.category || category,
-            source_lca_activity: factor.source_lca_activity || best.selected.source_lca_activity,
+            source_lca_activity: factor.source_lca_activity || selectedEF.source_lca_activity,
             gas_breakdown_method: gasBreakdown.gas_breakdown_method,
             co2: gases.co2 ?? gasBreakdown.co2,
             ch4: gases.ch4 ?? gasBreakdown.ch4,
