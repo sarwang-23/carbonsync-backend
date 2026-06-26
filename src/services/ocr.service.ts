@@ -14,7 +14,7 @@ export interface OcrResult {
     warnings: string[];
 }
 
-const OCR_SERVICE_VERSION = "OCR_TEMP_FILE_PATH_V2_20260627";
+const OCR_SERVICE_VERSION = "OCR_NODE_CANVAS_FACTORY_V3_20260627";
 
 function cleanText(text: string) {
     return String(text || "")
@@ -45,6 +45,44 @@ async function withTimeout<T>(
         ]);
     } finally {
         if (timer) clearTimeout(timer);
+    }
+}
+
+class NodeCanvasFactory {
+    create(width: number, height: number) {
+        if (width <= 0 || height <= 0) {
+            throw new Error("Invalid canvas size");
+        }
+
+        const canvas = createCanvas(width, height);
+        const context = canvas.getContext("2d");
+
+        return {
+            canvas,
+            context,
+        };
+    }
+
+    reset(canvasAndContext: any, width: number, height: number) {
+        if (!canvasAndContext?.canvas) {
+            throw new Error("Canvas is not specified");
+        }
+
+        if (width <= 0 || height <= 0) {
+            throw new Error("Invalid canvas size");
+        }
+
+        canvasAndContext.canvas.width = width;
+        canvasAndContext.canvas.height = height;
+    }
+
+    destroy(canvasAndContext: any) {
+        if (!canvasAndContext?.canvas) return;
+
+        canvasAndContext.canvas.width = 0;
+        canvasAndContext.canvas.height = 0;
+        canvasAndContext.canvas = null;
+        canvasAndContext.context = null;
     }
 }
 
@@ -114,7 +152,6 @@ async function recognizeWithMultipleInputs(worker: any, pngBuffer: Buffer, timeo
     const tempPath = writeTempPng(pngBuffer);
 
     try {
-        // Try 1: file path. This is usually the most stable on Node/Render.
         try {
             const result: any = await withTimeout(
                 worker.recognize(tempPath),
@@ -131,7 +168,6 @@ async function recognizeWithMultipleInputs(worker: any, pngBuffer: Buffer, timeo
             warnings.push(`OCR tempPath mode failed: ${error?.message || String(error)}`);
         }
 
-        // Try 2: absolute file URL. Some Node/image loaders accept this when path fails.
         try {
             const fileUrl = `file://${tempPath.replace(/\\/g, "/")}`;
             const result: any = await withTimeout(
@@ -149,7 +185,6 @@ async function recognizeWithMultipleInputs(worker: any, pngBuffer: Buffer, timeo
             warnings.push(`OCR fileUrl mode failed: ${error?.message || String(error)}`);
         }
 
-        // Try 3: data URL. This avoids path handling problems on Render.
         try {
             const dataUrl = `data:image/png;base64,${pngBuffer.toString("base64")}`;
             const result: any = await withTimeout(
@@ -196,59 +231,88 @@ export async function extractTextFromPdfWithOcr(
         const scale = options.scale || getEnvNumber("OCR_SCALE", 2);
         const pageTimeoutMs = getEnvNumber("OCR_PAGE_TIMEOUT_MS", 20000);
 
+        warnings.push("OCR pdf load started");
+
         const data = new Uint8Array(fs.readFileSync(filePath));
         const pdf = await withTimeout(
             pdfjsLib.getDocument({
                 data,
                 disableWorker: true,
                 verbosity: 0,
+                useSystemFonts: true,
+                disableFontFace: true,
             } as any).promise,
             getEnvNumber("OCR_PDF_LOAD_TIMEOUT_MS", 10000),
             "PDF load timed out"
         );
 
+        warnings.push(`OCR pdf loaded pages: ${pdf.numPages}`);
+
         worker = await createTesseractWorker();
+        warnings.push("OCR tesseract worker created");
 
         const pageTexts: string[] = [];
         const confidences: number[] = [];
 
         const totalPages = Math.min(pdf.numPages, maxPages);
+        const canvasFactory = new NodeCanvasFactory();
 
         for (let pageNo = 1; pageNo <= totalPages; pageNo++) {
+            warnings.push(`OCR page ${pageNo} get started`);
+
             const page = await pdf.getPage(pageNo);
             const viewport = page.getViewport({ scale });
 
-            const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-            const context = canvas.getContext("2d");
+            const width = Math.ceil(viewport.width);
+            const height = Math.ceil(viewport.height);
 
+            warnings.push(`OCR page ${pageNo} viewport ${width}x${height}`);
+
+            const canvasAndContext = canvasFactory.create(width, height);
+            const canvas: any = canvasAndContext.canvas;
+            const context: any = canvasAndContext.context;
+
+            context.save();
             context.fillStyle = "white";
             context.fillRect(0, 0, canvas.width, canvas.height);
+            context.restore();
 
-            await withTimeout(
-                page.render({
-                    canvasContext: context as any,
-                    viewport,
-                } as any).promise,
-                getEnvNumber("OCR_RENDER_TIMEOUT_MS", 15000),
-                `PDF page ${pageNo} render timed out`
-            );
+            try {
+                warnings.push(`OCR page ${pageNo} render started`);
 
-            const processedCanvas = preprocessCanvasForOcr(canvas);
-            const imageBuffer = processedCanvas.toBuffer("image/png");
+                await withTimeout(
+                    page.render({
+                        canvasContext: context,
+                        viewport,
+                        canvasFactory,
+                        background: "white",
+                    } as any).promise,
+                    getEnvNumber("OCR_RENDER_TIMEOUT_MS", 15000),
+                    `PDF page ${pageNo} render timed out`
+                );
 
-            warnings.push(`OCR page ${pageNo} rendered png bytes: ${imageBuffer.length}`);
+                warnings.push(`OCR page ${pageNo} render finished`);
 
-            const result = await recognizeWithMultipleInputs(worker, imageBuffer, pageTimeoutMs, warnings);
-            warnings.push(`OCR page ${pageNo} input mode: ${result.input_mode}`);
+                const processedCanvas = preprocessCanvasForOcr(canvas);
+                const imageBuffer = processedCanvas.toBuffer("image/png");
 
-            if (result.text) {
-                pageTexts.push(result.text);
-            } else {
-                warnings.push(`OCR returned empty text for page ${pageNo}`);
-            }
+                warnings.push(`OCR page ${pageNo} rendered png bytes: ${imageBuffer.length}`);
 
-            if (result.confidence) {
-                confidences.push(result.confidence);
+                const result = await recognizeWithMultipleInputs(worker, imageBuffer, pageTimeoutMs, warnings);
+                warnings.push(`OCR page ${pageNo} input mode: ${result.input_mode}`);
+
+                if (result.text) {
+                    pageTexts.push(result.text);
+                    warnings.push(`OCR page ${pageNo} text length: ${result.text.length}`);
+                } else {
+                    warnings.push(`OCR returned empty text for page ${pageNo}`);
+                }
+
+                if (result.confidence) {
+                    confidences.push(result.confidence);
+                }
+            } finally {
+                canvasFactory.destroy(canvasAndContext);
             }
         }
 
@@ -267,7 +331,7 @@ export async function extractTextFromPdfWithOcr(
             warnings,
         };
     } catch (error: any) {
-        warnings.push(error?.message || String(error));
+        warnings.push(`OCR fatal error: ${error?.message || String(error)}`);
 
         return {
             success: false,
@@ -306,7 +370,7 @@ export async function extractTextFromImageWithOcr(filePath: string): Promise<Ocr
             warnings: [...warnings, `OCR image input mode: ${result.input_mode}`],
         };
     } catch (error: any) {
-        warnings.push(error?.message || String(error));
+        warnings.push(`OCR fatal error: ${error?.message || String(error)}`);
 
         return {
             success: false,
