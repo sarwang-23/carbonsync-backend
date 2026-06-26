@@ -444,7 +444,7 @@ function scoreEmissionFactor(result: any, input: { region: SupportedCountry; cat
 export function selectBestEmissionFactor(results: any[], input: { region: SupportedCountry; category: DetectedCategory; unit: string; itemName: string }) {
     const scored = (results || [])
         .filter((r) => r.region === input.region || r.region === "GLOBAL")
-        .map((r) => ({ ...r, mapping_score: scoreEmissionFactor(r, input) }))
+        .map((r) => ({ ...r, mapping_score: Math.max(Number(r.mapping_score || 0), scoreEmissionFactor(r, input)) }))
         .sort((a, b) => b.mapping_score - a.mapping_score);
 
     // For non-India electricity bills, prefer latest Ember production mix when available.
@@ -670,8 +670,38 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
 
     const itemName = String(normalizedItemData.item_name || normalizedItemData.description || normalizedItem);
     const query = buildClimatiqSearchQuery(category, itemName);
-    const searchData = await searchClimatiqEmissionFactors({ query, region, category });
-    const candidates = searchData?.results || [];
+
+    // Do not pass internal category names like "electricity_bill" to Climatiq Search.
+    // Climatiq categories are different, for example "Electricity".
+    // Passing "electricity_bill" can return 0 candidates.
+    const searchData = await searchClimatiqEmissionFactors({
+        query,
+        region,
+        resultsPerPage: 50,
+    } as any);
+
+    const candidates = [...(searchData?.results || [])];
+
+    // Safety fallback: if Climatiq search returns 0 results for MY electricity,
+    // use known public Climatiq factor metadata and still call Estimate API.
+    // This avoids failing with candidates_count: 0 when the search endpoint is strict/unstable.
+    if (region === "MY" && category === "electricity_bill" && candidates.length === 0) {
+        candidates.push({
+            id: "manual-climatiq-my-electricity-ember-2024",
+            activity_id: "electricity-supply_grid-source_production_mix",
+            name: "Electricity supplied from grid - production mix",
+            source: "Ember",
+            source_dataset: "Yearly Electricity Data",
+            year: 2024,
+            region: "MY",
+            region_name: "Malaysia",
+            unit: "kg/kWh",
+            category: "Electricity",
+            scopes: ["2"],
+            source_lca_activity: "electricity_generation",
+            mapping_score: 999,
+        });
+    }
 
     const best = selectBestEmissionFactor(candidates, {
         region,
@@ -683,6 +713,8 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
     if (!best.selected) {
         return {
             success: false,
+            needs_review: true,
+            error_type: "CLIMATIQ_MAPPING_FAILED",
             message: "No suitable Climatiq emission factor found",
             item_name: itemName,
             region,
@@ -690,6 +722,14 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
             category,
             search_query: query,
             candidates_count: candidates.length,
+            candidates_preview: candidates.slice(0, 5).map((candidate: any) => ({
+                activity_id: candidate.activity_id,
+                name: candidate.name,
+                source: candidate.source,
+                year: candidate.year,
+                region: candidate.region,
+                unit: candidate.unit,
+            })),
         };
     }
 
