@@ -4638,10 +4638,10 @@ app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, r
           if (dynamicResult?.success) {
             console.log("CLIMATIQ_DYNAMIC_CALL_SUCCESS", {
               item_name,
-              country: dynamicResult.country,
-              category: dynamicResult.category,
-              activity_id: dynamicResult.selected_emission_factor?.activity_id,
-              factor_region: dynamicResult.result?.factor_region,
+              country: (dynamicResult as any).country,
+              category: (dynamicResult as any).category,
+              activity_id: (dynamicResult as any).selected_emission_factor?.activity_id,
+              factor_region: (dynamicResult as any).result?.factor_region,
             });
 
             return dynamicResult;
