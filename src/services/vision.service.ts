@@ -9,6 +9,10 @@ export interface VisionExtractionResult {
     warnings: string[];
 }
 
+function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function safeLower(value: any): string {
     return String(value || "").toLowerCase().trim();
 }
@@ -27,16 +31,15 @@ function extractJsonFromText(raw: string): any | null {
     try {
         return JSON.parse(cleaned);
     } catch {
-        // continue
+        // Continue with substring extraction
     }
 
     const firstBrace = cleaned.indexOf("{");
     const lastBrace = cleaned.lastIndexOf("}");
 
     if (firstBrace >= 0 && lastBrace > firstBrace) {
-        const jsonCandidate = cleaned.slice(firstBrace, lastBrace + 1);
         try {
-            return JSON.parse(jsonCandidate);
+            return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
         } catch {
             return null;
         }
@@ -143,14 +146,51 @@ function findElectricityUsageFromRawText(rawText: string): number {
     return 0;
 }
 
+function getGeminiModelCandidates() {
+    const fromEnv = process.env.GEMINI_VISION_MODEL || "";
+    const fallbackList = process.env.GEMINI_VISION_FALLBACK_MODELS || "";
+
+    const candidates = [
+        fromEnv,
+        ...fallbackList.split(","),
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-2.0-flash",
+    ]
+        .map((model) => model.trim())
+        .filter(Boolean);
+
+    return [...new Set(candidates)];
+}
+
+function isRetryableGeminiError(error: any) {
+    const message = String(error?.message || error || "");
+    const status = error?.status || error?.code || error?.response?.status;
+
+    return (
+        status === 429 ||
+        status === 500 ||
+        status === 502 ||
+        status === 503 ||
+        status === 504 ||
+        message.includes('"code":503') ||
+        message.includes("UNAVAILABLE") ||
+        message.includes("high demand") ||
+        message.includes("overloaded") ||
+        message.includes("temporarily")
+    );
+}
+
 /**
- * Optional Vision fallback.
+ * Optional Gemini Vision fallback.
  *
  * Required env:
  * GEMINI_API_KEY=your_key
  *
  * Recommended env:
- * GEMINI_VISION_MODEL=gemini-2.5-flash
+ * GEMINI_VISION_MODEL=gemini-2.5-flash-lite
+ * GEMINI_VISION_FALLBACK_MODELS=gemini-2.5-flash,gemini-2.0-flash-lite,gemini-2.0-flash
  *
  * Required package:
  * npm install @google/genai
@@ -178,10 +218,6 @@ export async function extractInvoiceWithGeminiVision(input: {
         const { GoogleGenAI } = await import("@google/genai");
 
         const ai = new GoogleGenAI({ apiKey });
-        const visionModelName = process.env.GEMINI_VISION_MODEL || "gemini-2.5-flash";
-
-        console.log("GEMINI_VISION_MODEL_ACTIVE", visionModelName);
-
         const fileBuffer = fs.readFileSync(input.filePath);
         const base64 = fileBuffer.toString("base64");
 
@@ -227,49 +263,97 @@ Return JSON only with this exact schema:
 Important extraction rules:
 - For electricity bills, extract actual kWh usage. Do not use bill amount as kWh.
 - For TNB Malaysia bills, prefer Kegunaan/Jumlah Penggunaan kWh.
-- If meter readings are visible, also extract previous_reading and current_reading.
+- If meter readings are visible, extract previous_reading and current_reading.
 - If usage is not directly visible but meter readings are visible, set meter_difference_kwh = current_reading - previous_reading.
 - If a value is not visible, return null.
 - Return JSON only. No markdown.
 `;
 
-        const result = await ai.models.generateContent({
-            model: visionModelName,
-            contents: [
-                {
-                    inlineData: {
-                        data: base64,
-                        mimeType: input.mimetype || "application/pdf",
-                    },
-                },
-                {
-                    text: prompt,
-                },
-            ],
-        });
+        const modelCandidates = getGeminiModelCandidates();
+        let lastError: any = null;
 
-        const raw = result.text || "";
-        const cleaned = raw
-            .replace(/```json/gi, "")
-            .replace(/```/g, "")
-            .trim();
+        for (const modelName of modelCandidates) {
+            const maxAttempts = 2;
 
-        const structured = extractJsonFromText(cleaned);
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                    console.log("GEMINI_VISION_MODEL_ACTIVE", {
+                        modelName,
+                        attempt,
+                    });
 
-        if (!structured) {
-            warnings.push("Gemini returned non-JSON output. Raw text returned for fallback parsing.");
+                    const result = await ai.models.generateContent({
+                        model: modelName,
+                        contents: [
+                            {
+                                inlineData: {
+                                    data: base64,
+                                    mimeType: input.mimetype || "application/pdf",
+                                },
+                            },
+                            {
+                                text: prompt,
+                            },
+                        ],
+                    });
+
+                    const raw = result.text || "";
+                    const cleaned = raw
+                        .replace(/```json/gi, "")
+                        .replace(/```/g, "")
+                        .trim();
+
+                    const structured = extractJsonFromText(cleaned);
+
+                    if (!structured) {
+                        warnings.push("Gemini returned non-JSON output. Raw text returned for fallback parsing.");
+                    }
+
+                    console.log("GEMINI_VISION_SUCCESS", {
+                        modelName,
+                        rawTextLength: cleaned.length,
+                        structuredKeys: structured ? Object.keys(structured) : [],
+                    });
+
+                    return {
+                        success: Boolean(structured || cleaned),
+                        provider: "gemini",
+                        rawText: cleaned,
+                        structured,
+                        confidence: Number(structured?.confidence || 0.65),
+                        warnings: [...warnings, ...(structured?.warnings || [])],
+                    };
+                } catch (error: any) {
+                    lastError = error;
+                    const message = error?.message || String(error);
+
+                    warnings.push(`Gemini model ${modelName} attempt ${attempt} failed: ${message}`);
+
+                    console.warn("GEMINI_VISION_ATTEMPT_FAILED", {
+                        modelName,
+                        attempt,
+                        message,
+                    });
+
+                    if (!isRetryableGeminiError(error)) {
+                        break;
+                    }
+
+                    await sleep(1000 * attempt);
+                }
+            }
         }
 
-        console.log("GEMINI_VISION_RAW_PREVIEW", cleaned.slice(0, 500));
-        console.log("GEMINI_VISION_STRUCTURED_KEYS", structured ? Object.keys(structured) : []);
-
         return {
-            success: Boolean(structured || cleaned),
-            provider: "gemini",
-            rawText: cleaned,
-            structured,
-            confidence: Number(structured?.confidence || 0.65),
-            warnings: [...warnings, ...(structured?.warnings || [])],
+            success: false,
+            provider: "failed",
+            rawText: "",
+            structured: null,
+            confidence: 0,
+            warnings: [
+                ...warnings,
+                `All Gemini model attempts failed. Last error: ${lastError?.message || String(lastError)}`,
+            ],
         };
     } catch (error: any) {
         return {
@@ -297,10 +381,7 @@ export function convertVisionStructuredToLineItems(structured: any, rawText = ""
     const kwhFromRaw = findElectricityUsageFromRawText(rawText);
     const usageKwh = kwhFromStructured || kwhFromRaw;
 
-    if (
-        (documentType === "ELECTRICITY_BILL" || usageKwh > 0) &&
-        usageKwh > 0
-    ) {
+    if ((documentType === "ELECTRICITY_BILL" || usageKwh > 0) && usageKwh > 0) {
         const electricity = structured?.electricity || {};
 
         items.push({
@@ -383,3 +464,4 @@ export function convertVisionStructuredToLineItems(structured: any, rawText = ""
 
     return items;
 }
+
