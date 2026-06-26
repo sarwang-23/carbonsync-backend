@@ -3,18 +3,7 @@ import path from "path";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { extractTextWithOcr } from "./ocr.service.js";
 import { extractInvoiceWithGeminiVision, convertVisionStructuredToLineItems } from "./vision.service.js";
-async function withTimeout<T>(
-    promise: Promise<T>,
-    timeoutMs: number,
-    timeoutMessage: string
-): Promise<T> {
-    return Promise.race([
-        promise,
-        new Promise<T>((_, reject) =>
-            setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs)
-        ),
-    ]);
-}
+
 export type ExtractionMethod =
     | "pdf_text"
     | "ocr_text"
@@ -99,11 +88,10 @@ export async function extractPdfText(filePath: string): Promise<string> {
  * Keep this function so your pipeline structure is ready.
  * You can connect existing Tesseract/Gemini OCR code here from app.ts.
  */
-export async function extractOcrText(filePath: string, mimetype = ""): Promise<string> {
-    const result = await extractTextWithOcr(filePath, mimetype, {
-        maxPages: 3,
-        scale: 2,
-    });
+export async function extractOcrDetailed(filePath: string, mimetype = "") {
+    // Do not hardcode maxPages/scale here.
+    // ocr.service.ts will read OCR_MAX_PAGES, OCR_SCALE, OCR_PAGE_TIMEOUT_MS from Render env.
+    const result = await extractTextWithOcr(filePath, mimetype);
 
     console.log("OCR_EXTRACTION_RESULT", {
         success: result.success,
@@ -112,14 +100,20 @@ export async function extractOcrText(filePath: string, mimetype = ""): Promise<s
         pages_processed: result.pages_processed,
         text_length: result.text.length,
         warnings: result.warnings,
+        preview: String(result.text || "").slice(0, 500),
     });
 
+    return result;
+}
+
+export async function extractOcrText(filePath: string, mimetype = ""): Promise<string> {
+    const result = await extractOcrDetailed(filePath, mimetype);
     return result.text || "";
 }
 
 /**
- * Vision fallback.
- * Uses Gemini Vision / Document AI when PDF text + OCR are weak.
+ * Vision placeholder.
+ * Use Gemini Vision / Document AI later when PDF text + OCR are weak.
  */
 export async function extractWithVisionPlaceholder(
     filePath: string,
@@ -141,7 +135,7 @@ export async function extractWithVisionPlaceholder(
 
     return {
         text: result.rawText || "",
-        lineItems: convertVisionStructuredToLineItems(result.structured, result.rawText),
+        lineItems: convertVisionStructuredToLineItems(result.structured),
         warnings: result.warnings || [],
         confidence: result.confidence || 0,
     };
@@ -442,15 +436,24 @@ export async function extractInvoiceData(input: {
     if (pdfText.length < 300) {
         try {
             extractionSteps.push("ocr_extraction_started");
-            ocrText = await extractOcrText(input.filePath, input.mimetype || "");
+            const ocrResult = await extractOcrDetailed(input.filePath, input.mimetype || "");
+            ocrText = ocrResult.text || "";
+            if (ocrResult.warnings?.length) {
+                warnings.push(...ocrResult.warnings.map((warning: any) => `OCR warning: ${warning}`));
+            }
             extractionSteps.push(`ocr_text_length_${ocrText.length}`);
+            extractionSteps.push(`ocr_pages_${ocrResult.pages_processed}`);
+            extractionSteps.push(`ocr_confidence_${ocrResult.confidence}`);
         } catch (error: any) {
             warnings.push(`OCR extraction failed: ${error?.message || String(error)}`);
             extractionSteps.push("ocr_extraction_failed");
         }
     }
 
-    if ((pdfText + " " + ocrText).trim().length < 300) {
+    if (
+        process.env.DISABLE_VISION_EXTRACTION !== "true" &&
+        (pdfText + " " + ocrText).trim().length < 300
+    ) {
         try {
             extractionSteps.push("vision_extraction_started");
             const visionResult = await extractWithVisionPlaceholder(
@@ -468,6 +471,13 @@ export async function extractInvoiceData(input: {
             warnings.push(`Vision extraction failed: ${error?.message || String(error)}`);
             extractionSteps.push("vision_extraction_failed");
         }
+    }
+
+    if (
+        process.env.DISABLE_VISION_EXTRACTION === "true" &&
+        (pdfText + " " + ocrText).trim().length < 300
+    ) {
+        warnings.push("Vision extraction disabled and OCR/PDF text is below 300 characters.");
     }
 
     const rawText = cleanText([pdfText, ocrText, visionText].filter(Boolean).join("\n"));
