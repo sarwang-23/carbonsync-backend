@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@affinda/affinda": "^7.7.1",
-    "@google/generative-ai": "^0.24.1",
+    "@google/genai": "^2.10.0",
     "@neondatabase/serverless": "^1.0.2",
     "axios": "^1.17.0",
     "canvas": "^3.2.3",

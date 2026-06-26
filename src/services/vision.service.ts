@@ -41,12 +41,16 @@ export async function extractInvoiceWithGeminiVision(input: {
     }
 
     try {
-        const { GoogleGenerativeAI } = await import("@google/generative-ai");
+        const { GoogleGenAI } = await import("@google/genai");
 
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_VISION_MODEL || "gemini-1.5-flash",
+        const ai = new GoogleGenAI({
+            apiKey,
         });
+
+        const visionModelName =
+            process.env.GEMINI_VISION_MODEL || "gemini-2.5-flash";
+
+        console.log("GEMINI_VISION_MODEL_ACTIVE", visionModelName);
 
         const fileBuffer = fs.readFileSync(input.filePath);
         const base64 = fileBuffer.toString("base64");
@@ -97,17 +101,23 @@ Important rules:
 - JSON only, no markdown.
 `;
 
-        const result = await model.generateContent([
-            {
-                inlineData: {
-                    data: base64,
-                    mimeType: input.mimetype || "application/pdf",
+        const result = await ai.models.generateContent({
+            model: visionModelName,
+            contents: [
+                {
+                    inlineData: {
+                        data: base64,
+                        mimeType: input.mimetype || "application/pdf",
+                    },
                 },
-            },
-            prompt,
-        ]);
+                {
+                    text: prompt,
+                },
+            ],
+        });
 
-        const raw = result.response.text() || "";
+        const raw = result.text || "";
+
         const cleaned = raw
             .replace(/```json/gi, "")
             .replace(/```/g, "")
