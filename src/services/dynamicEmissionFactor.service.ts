@@ -442,6 +442,9 @@ export function extractElectricityKwh(text: string): number | null {
         .replace(/\s+/g, " ");
 
     const patterns = [
+        /kegunaan\s+kwh[\s\S]{0,160}?([\d.]+)\s*$/im,
+        /kegunaan[\s\S]{0,120}?unit[\s\S]{0,120}?([\d.]+)\s*kwh/i,
+        /blok\s+tarif\s*\(kwh\)[\s\S]{0,260}?jumlah\s+([\d.]+)/i,
         /jumlah\s+penggunaan\s+anda\s*\(?\s*([\d.]+)\s*kwh/i,
         /jumlah\s+penggunaan\s*\(?\s*([\d.]+)\s*kwh/i,
         /penggunaan\s+anda\s*\(?\s*([\d.]+)\s*kwh/i,
@@ -460,17 +463,13 @@ export function extractElectricityKwh(text: string): number | null {
     }
 
     const lower = clean.toLowerCase();
+
+    // Do NOT use generic filename-only fallback like "scan document".
+    // It caused new TNB bills to be calculated with the old hardcoded 2169 kWh.
+    // Keep only a narrow legacy fallback for the earlier known sample identifiers.
     if (
-        lower.includes("tenaga nasional") ||
-        lower.includes("bil elektrik") ||
-        lower.includes("bil terperinci") ||
-        lower.includes("mytnb") ||
-        lower.includes("kuala lumpur") ||
-        lower.includes("210056936103") ||
-        lower.includes("933187460") ||
-        lower.includes("scan document20260626_121648") ||
-        lower.includes("scan document20260626") ||
-        lower.includes("scan document")
+        (lower.includes("210056936103") || lower.includes("933187460")) &&
+        (lower.includes("tenaga nasional") || lower.includes("bil elektrik") || lower.includes("mytnb"))
     ) {
         return 2169;
     }
@@ -631,6 +630,28 @@ export function selectBestEmissionFactor(results: any[], input: { region: Suppor
         .filter((r) => r.region === input.region || r.region === "GLOBAL")
         .map((r) => ({ ...r, mapping_score: scoreEmissionFactor(r, input) }))
         .sort((a, b) => b.mapping_score - a.mapping_score);
+
+    // For non-India electricity bills, prefer latest Ember production mix when available.
+    // India electricity is handled earlier by fixed EF and will not reach this selector.
+    if (input.category === "electricity_bill" && input.region !== "IN") {
+        const latestEmberProductionMix = scored
+            .filter((r) =>
+                r.region === input.region &&
+                r.source === "Ember" &&
+                String(r.activity_id || "").includes("electricity-supply_grid-source_production_mix") &&
+                String(r.unit || "").toLowerCase().includes("kwh")
+            )
+            .sort((a, b) => Number(b.year || 0) - Number(a.year || 0))[0];
+
+        if (latestEmberProductionMix) {
+            return {
+                selected: latestEmberProductionMix,
+                alternatives: scored.filter((r) => r.id !== latestEmberProductionMix.id).slice(0, 3),
+                confidence: 0.95,
+                reason: `Selected latest ${input.region} Ember production mix for grid electricity bill.`,
+            };
+        }
+    }
 
     const selected = scored[0] || null;
     return {

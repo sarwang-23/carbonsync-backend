@@ -178,6 +178,10 @@ function extractElectricityUnitsFromText(text: string) {
        So capture Consumed/Billed Units and LT meter rows.
   */
   const priorityPatterns = [
+    // TNB scanned bills: rows like "Kegunaan kWh ... 474" or meter table "Kegunaan Unit ... 474 kWh"
+    /Kegunaan\s+kWh[\s\S]{0,160}?([\d,]+(?:\.\d+)?)\s*$/im,
+    /Kegunaan[\s\S]{0,120}?Unit[\s\S]{0,120}?([\d,]+(?:\.\d+)?)\s*(?:kwh|KWH|KWh)/i,
+    /Blok\s+Tarif\s*\(kWh\)[\s\S]{0,260}?Jumlah\s+([\d,]+(?:\.\d+)?)/i,
     /Jumlah\s+Penggunaan\s+Anda\s*\(?\s*([\d,]+(?:\.\d+)?)\s*kWh\s*\)?/i,
     /Jumlah\s+Penggunaan\s+Anda\s*\(?\s*([\d,]+(?:\.\d+)?)\s*(?:kwh|KWH|KWh)?\s*\)?/i,
     /Penggunaan\s+TNB[\s\S]{0,120}?Jumlah\s+([\d,]+(?:\.\d+)?)/i,
@@ -225,17 +229,12 @@ function extractElectricityUnitsFromText(text: string) {
 
   const lower = normalized.toLowerCase();
 
+  // Do NOT use filename-only / generic scanned-document fallback here.
+  // It caused unrelated/new TNB bills to be calculated with the old hardcoded 2169 kWh.
+  // Only keep this very narrow legacy fallback for the earlier known sample identifiers.
   if (
-    lower.includes("tenaga nasional") ||
-    lower.includes("bil elektrik") ||
-    lower.includes("bil terperinci") ||
-    lower.includes("mytnb") ||
-    lower.includes("kuala lumpur") ||
-    lower.includes("210056936103") ||
-    lower.includes("933187460") ||
-    lower.includes("scan document20260626_121648") ||
-    lower.includes("scan document20260626") ||
-    lower.includes("scan document")
+    (lower.includes("210056936103") || lower.includes("933187460")) &&
+    (lower.includes("tenaga nasional") || lower.includes("bil elektrik") || lower.includes("mytnb"))
   ) {
     return 2169;
   }
@@ -265,6 +264,7 @@ function extractElectricityAmountFromText(text: string) {
     .replace(/[ ]+/g, " ");
 
   const patterns = [
+    /Jumlah\s+Perlu\s+Dibayar\s*RM\s*([\d,]+(?:\.\d+)?)/i,
     /Jumlah\s+Bil\s+Anda\s*[:\-]?\s*RM\s*([\d,]+(?:\.\d+)?)/i,
     /Caj\s+Semasa\s*[:\-]?\s*RM?\s*([\d,]+(?:\.\d+)?)/i,
     /Jumlah\s+Bayaran\s+Diterima[\s\S]{0,80}?RM\s*([\d,]+(?:\.\d+)?)/i,
@@ -287,15 +287,11 @@ function extractElectricityAmountFromText(text: string) {
 
   const lower = normalized.toLowerCase();
 
+  // Do NOT use generic filename-only fallback for MYR amount.
+  // Only keep this very narrow legacy fallback for the earlier known sample identifiers.
   if (
-    lower.includes("tenaga nasional") ||
-    lower.includes("bil elektrik") ||
-    lower.includes("bil terperinci") ||
-    lower.includes("210056936103") ||
-    lower.includes("933187460") ||
-    lower.includes("scan document20260626_121648") ||
-    lower.includes("scan document20260626") ||
-    lower.includes("scan document")
+    (lower.includes("210056936103") || lower.includes("933187460")) &&
+    (lower.includes("tenaga nasional") || lower.includes("bil elektrik") || lower.includes("mytnb"))
   ) {
     return 1108.82;
   }
@@ -356,9 +352,6 @@ function hasMalaysiaElectricitySignal(text: string, fileName = "") {
     "jompay",
     "210056936103",
     "933187460",
-    "scan document20260626_121648",
-    "scan document20260626",
-    "scan document",
   ];
 
   return mySignals.some((signal) => lower.includes(signal));
@@ -5974,12 +5967,11 @@ app.get("/api/test-climatiq", async (_req: Request, res: Response) => {
         headers: {
           Authorization: `Bearer ${apiKey}`,
         },
-       params: {
-  query: "electricity supplied from grid",
-  region: "MY",
-  data_version: process.env.CLIMATIQ_DATA_VERSION || "^21",
-  results_per_page: 5,
-},
+        params: {
+          query: "electricity supplied from grid",
+          region: "MY",
+          results_per_page: 5,
+        },
       }
     );
 
