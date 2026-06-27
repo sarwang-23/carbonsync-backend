@@ -396,6 +396,92 @@ export function extractFlightTicketLineItem(text: string): ExtractedLineItem | n
     };
 }
 
+
+export function extractGenericMaterialInvoiceLineItem(text: string): ExtractedLineItem | null {
+    const clean = String(text || "")
+        .replace(/,/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const lower = safeLower(clean);
+
+    const materialKeywords = [
+        "steel",
+        "timber",
+        "wood",
+        "plywood",
+        "aluminium",
+        "aluminum",
+        "cement",
+        "textile",
+        "fabric",
+        "iron",
+        "copper",
+        "plastic",
+    ];
+
+    const matchedMaterial = materialKeywords.find((keyword) => lower.includes(keyword));
+    if (!matchedMaterial) return null;
+
+    // Handles OCR like:
+    // "No. 1| STEEL 2MT 55,000.00 MT| 1,10,000.00 CGST..."
+    const materialPattern =
+        /(steel|timber|wood|plywood|aluminium|aluminum|cement|textile|fabric|iron|copper|plastic)\s+(\d+(?:\.\d+)?)\s*(mt|tonnes?|tons?|kg|kgs|m3|m³|cbm|pcs|pieces|nos?|sqm|m2|m²)\b.{0,80}?(\d{2,}(?:\.\d{1,2})?)?/i;
+
+    const match = clean.match(materialPattern);
+    if (!match) return null;
+
+    const material = match[1];
+    const quantity = toNumber(match[2]);
+    const unit = String(match[3] || "").toUpperCase();
+
+    if (quantity <= 0) return null;
+
+    const amountCandidates = [...clean.matchAll(/\b(\d{3,}(?:\.\d{1,2})?)\b/g)]
+        .map((m) => toNumber(m[1]))
+        .filter((n) => n > 0);
+
+    const amount =
+        amountCandidates.length > 0
+            ? amountCandidates[amountCandidates.length - 1]
+            : null;
+
+    const currency =
+        lower.includes("inr") || clean.includes("₹") || lower.includes("hindustan")
+            ? "INR"
+            : lower.includes("rm") || lower.includes("myr")
+              ? "MYR"
+              : null;
+
+    const country =
+        currency === "INR"
+            ? "IN"
+            : currency === "MYR"
+              ? "MY"
+              : "UNKNOWN";
+
+    return {
+        item_name: `${material.toUpperCase()} material invoice`,
+        description: `${material.toUpperCase()} purchased goods extracted from OCR text`,
+        quantity,
+        unit,
+        amount,
+        currency,
+        confidence: 0.78,
+        source: "generic_material_text_rules",
+        parameters: {
+            material: material.toLowerCase(),
+            quantity,
+            unit,
+            country,
+            region: country,
+            category: "purchased_goods",
+            extraction_method: "generic_material_text_rules",
+        },
+    };
+}
+
+
 /**
  * Rule-based structured line extraction.
  * This does not guess values. It only returns items when values are found.
@@ -408,6 +494,7 @@ export function extractStructuredLineItemsFromText(text: string): ExtractedLineI
         extractGenericElectricityLineItem,
         extractTrainTicketLineItem,
         extractFlightTicketLineItem,
+        extractGenericMaterialInvoiceLineItem,
     ];
 
     for (const extractor of extractors) {

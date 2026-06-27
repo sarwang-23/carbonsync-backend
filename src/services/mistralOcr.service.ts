@@ -16,6 +16,7 @@ function getEnvNumber(name: string, defaultValue: number) {
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
     let timer: NodeJS.Timeout | null = null;
+
     try {
         return await Promise.race([
             promise,
@@ -28,10 +29,14 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMes
     }
 }
 
-function cleanText(text: string) {
+function cleanTextPreserveLines(text: string) {
     return String(text || "")
         .replace(/\u0000/g, " ")
-        .replace(/\s+/g, " ")
+        .replace(/\r/g, "\n")
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n[ \t]+/g, "\n")
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
         .trim();
 }
 
@@ -47,12 +52,33 @@ function safeLower(value: any): string {
 function normalizeMistralPages(data: any) {
     const pages = Array.isArray(data?.pages) ? data.pages : [];
 
-    return cleanText(
+    return cleanTextPreserveLines(
         pages
             .map((page: any) => page?.markdown || page?.text || page?.content || "")
             .filter(Boolean)
             .join("\n\n")
     );
+}
+
+function detectCountryAndCurrency(text: string) {
+    const lower = safeLower(text);
+
+    const currency =
+        lower.includes("inr") ||
+            text.includes("₹") ||
+            lower.includes("maharashtra") ||
+            lower.includes("mumbai") ||
+            lower.includes("lucknow") ||
+            lower.includes("indian rupees")
+            ? "INR"
+            : lower.includes("rm") || lower.includes("myr") || lower.includes("malaysia")
+                ? "MYR"
+                : null;
+
+    const country =
+        currency === "INR" ? "IN" : currency === "MYR" ? "MY" : "UNKNOWN";
+
+    return { country, currency };
 }
 
 function extractTnbKwhFromText(rawText: string): number {
@@ -82,16 +108,186 @@ function extractTnbKwhFromText(rawText: string): number {
     return 0;
 }
 
+function normalizeUnit(unit: string) {
+    const lower = safeLower(unit).replace(/\./g, "");
+
+    if (lower.includes("sq") || lower.includes("m²") || lower.includes("m2")) return "m2";
+    if (lower.includes("mt")) return "tonne";
+    if (lower.includes("ton")) return "tonne";
+    if (lower.includes("kg")) return "kg";
+    if (lower.includes("m3") || lower.includes("m³") || lower.includes("cbm")) return "m3";
+    if (lower.includes("pcs") || lower.includes("piece") || lower === "no" || lower === "nos") return "pcs";
+
+    return unit || null;
+}
+
+function isMaterialDescription(description: string) {
+    return /(timber|wood|pinewood|plywood|veneer|laminate|laminates|flush\s*door|door|board|mosaic|steel|aluminium|aluminum|cement|textile|fabric|iron|copper|plastic)/i.test(
+        description || ""
+    );
+}
+
+function parseMarkdownTableLineItems(text: string) {
+    const { country, currency } = detectCountryAndCurrency(text);
+    const lineItems: any[] = [];
+
+    const rows = String(text || "")
+        .split(/\n+/)
+        .map((row) => row.trim())
+        .filter((row) => row.includes("|"));
+
+    for (const row of rows) {
+        if (/^\|\s*-+/.test(row)) continue;
+
+        const cells = row
+            .split("|")
+            .map((cell) => cell.trim())
+            .filter((cell) => cell.length > 0);
+
+        // Expected Mistral table:
+        // Sl No | Description | Size | Pcs | Quantity | Rate | per | Amount
+        if (cells.length < 7) continue;
+
+        const slNo = toNumber(cells[0]);
+        const description = cells[1] || "";
+
+        if (!slNo || !isMaterialDescription(description)) continue;
+
+        const size = cells[2] || null;
+        const pcs = toNumber(cells[3]);
+        const quantity = toNumber(cells[4]);
+        const rate = toNumber(cells[5]);
+        const unit = normalizeUnit(cells[6] || "");
+        const amount = toNumber(cells[7]);
+
+        if (quantity <= 0) continue;
+
+        lineItems.push({
+            item_name: description.slice(0, 120),
+            description,
+            quantity,
+            unit,
+            amount: amount || null,
+            currency,
+            confidence: 0.84,
+            source: "mistral_markdown_table_rules",
+            parameters: {
+                material: safeLower(description),
+                size,
+                pcs: pcs || null,
+                rate: rate || null,
+                country,
+                region: country,
+                category: "purchased_goods",
+                extraction_method: "mistral_markdown_table_rules",
+            },
+        });
+    }
+
+    return lineItems;
+}
+
+function parseFlattenedTableLineItems(text: string) {
+    const { country, currency } = detectCountryAndCurrency(text);
+    const lineItems: any[] = [];
+    const flat = String(text || "").replace(/\n/g, " ");
+
+    const rowRegex =
+        /\|\s*(\d+)\s*\|\s*([^|]+?(?:timber|wood|pinewood|plywood|veneer|laminate|laminates|flush\s*door|door|board|mosaic|steel|aluminium|aluminum|cement|textile|fabric|iron|copper|plastic)[^|]*?)\s*\|\s*([^|]*?)\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*([\d,.]+)\s*\|\s*([\d,.]+)\s*\|\s*([^|]+?)\s*\|\s*([\d,.]+)\s*\|/gi;
+
+    let match: RegExpExecArray | null;
+
+    while ((match = rowRegex.exec(flat)) !== null) {
+        const description = cleanTextPreserveLines(match[2]);
+        const size = cleanTextPreserveLines(match[3]);
+        const pcs = toNumber(match[4]);
+        const quantity = toNumber(match[5]);
+        const rate = toNumber(match[6]);
+        const unit = normalizeUnit(match[7]);
+        const amount = toNumber(match[8]);
+
+        if (quantity <= 0) continue;
+
+        lineItems.push({
+            item_name: description.slice(0, 120),
+            description,
+            quantity,
+            unit,
+            amount: amount || null,
+            currency,
+            confidence: 0.82,
+            source: "mistral_flattened_table_rules",
+            parameters: {
+                material: safeLower(description),
+                size: size || null,
+                pcs: pcs || null,
+                rate: rate || null,
+                country,
+                region: country,
+                category: "purchased_goods",
+                extraction_method: "mistral_flattened_table_rules",
+            },
+        });
+    }
+
+    return lineItems;
+}
+
+function parseSimpleMaterialLineItem(text: string) {
+    const { country, currency } = detectCountryAndCurrency(text);
+    const clean = String(text || "").replace(/,/g, "").replace(/\s+/g, " ").trim();
+
+    const materialPattern =
+        /(steel|timber|wood|plywood|aluminium|aluminum|cement|textile|fabric|iron|copper|plastic)\s+(\d+(?:\.\d+)?)\s*(mt|tonnes?|tons?|kg|kgs|m3|m³|cbm|pcs|pieces|nos?|sqm|sq\.?\s*mr\.?|m2|m²)\b.{0,100}?(\d{2,}(?:\.\d{1,2})?)?/i;
+
+    const match = clean.match(materialPattern);
+    if (!match) return [];
+
+    const material = match[1];
+    const quantity = toNumber(match[2]);
+    const unit = normalizeUnit(match[3]);
+
+    if (quantity <= 0) return [];
+
+    const amountCandidates = [...clean.matchAll(/\b(\d{3,}(?:\.\d{1,2})?)\b/g)]
+        .map((m) => toNumber(m[1]))
+        .filter((n) => n > 0);
+
+    return [
+        {
+            item_name: `${material.toUpperCase()} material invoice`,
+            description: `${material.toUpperCase()} purchased goods extracted from OCR text`,
+            quantity,
+            unit,
+            amount: amountCandidates.length ? amountCandidates[amountCandidates.length - 1] : null,
+            currency,
+            confidence: 0.76,
+            source: "simple_material_text_rules",
+            parameters: {
+                material: material.toLowerCase(),
+                country,
+                region: country,
+                category: "purchased_goods",
+                extraction_method: "simple_material_text_rules",
+            },
+        },
+    ];
+}
+
 function parseStructuredFromMistralText(text: string) {
     const lower = safeLower(text);
+    const { country, currency } = detectCountryAndCurrency(text);
+
     const kwh = extractTnbKwhFromText(text);
 
     if (
         kwh > 0 &&
-        (lower.includes("tenaga nasional") ||
+        (
+            lower.includes("tenaga nasional") ||
             lower.includes("tnb") ||
             lower.includes("bil elektrik") ||
-            lower.includes("kwh"))
+            lower.includes("kwh")
+        )
     ) {
         return {
             document_type: "ELECTRICITY_BILL",
@@ -119,53 +315,32 @@ function parseStructuredFromMistralText(text: string) {
         };
     }
 
-    const line_items: any[] = [];
-    const rows = text.split(/\n+/).map((row) => row.trim()).filter(Boolean);
-    const unitRegex = /\b(m3|m³|cbm|cubic\s*meter|kg|kgs|ton|tons|tonne|tonnes|mt|pcs|pieces|nos|no|sqm|m2|m²)\b/i;
-    const timberRegex = /(timber|wood|plywood|board|door|flush|laminated|veneer|meranti|teak|pine|rubberwood)/i;
+    const lineItems = [
+        ...parseMarkdownTableLineItems(text),
+        ...parseFlattenedTableLineItems(text),
+    ];
 
-    for (const row of rows) {
-        if (!unitRegex.test(row) || !timberRegex.test(row)) continue;
-
-        const qtyMatch = row.match(/(\d+(?:\.\d+)?)\s*(m3|m³|cbm|cubic\s*meter|kg|kgs|ton|tons|tonne|tonnes|mt|pcs|pieces|nos|no|sqm|m2|m²)\b/i);
-        if (!qtyMatch) continue;
-
-        const quantity = toNumber(qtyMatch[1]);
-        const unit = qtyMatch[2];
-
-        if (quantity <= 0) continue;
-
-        const amountMatches = [...row.matchAll(/(?:rm|myr|inr|₹|\$)?\s*(\d{2,}(?:\.\d{1,2})?)\b/gi)]
-            .map((m) => toNumber(m[1]))
-            .filter((n) => n > 0);
-
-        line_items.push({
-            item_name: row.slice(0, 120),
-            description: row,
-            quantity,
-            unit,
-            amount: amountMatches.length ? amountMatches[amountMatches.length - 1] : null,
-            currency: lower.includes("rm") ? "MYR" : lower.includes("inr") || lower.includes("₹") ? "INR" : null,
-        });
+    if (!lineItems.length) {
+        lineItems.push(...parseSimpleMaterialLineItem(text));
     }
 
-    if (line_items.length > 0) {
+    if (lineItems.length > 0) {
         return {
             document_type: "PURCHASED_GOODS",
-            country: lower.includes("malaysia") || lower.includes("rm") ? "MY" : lower.includes("india") || lower.includes("inr") || lower.includes("₹") ? "IN" : "UNKNOWN",
-            vendor: null,
-            currency: lower.includes("rm") ? "MYR" : lower.includes("inr") || lower.includes("₹") ? "INR" : null,
-            line_items,
-            confidence: 0.7,
-            warnings: ["Line items were parsed from Mistral OCR text using conservative timber/material rules."],
+            country,
+            vendor: lower.includes("lucky ply") ? "LUCKY PLY & LAMINATES" : null,
+            currency,
+            line_items: lineItems,
+            confidence: 0.82,
+            warnings: [`Mistral OCR parsed ${lineItems.length} material line item(s).`],
         };
     }
 
     return {
         document_type: "GENERIC_INVOICE",
-        country: lower.includes("malaysia") || lower.includes("rm") ? "MY" : lower.includes("india") || lower.includes("inr") || lower.includes("₹") ? "IN" : "UNKNOWN",
+        country,
         vendor: null,
-        currency: lower.includes("rm") ? "MYR" : lower.includes("inr") || lower.includes("₹") ? "INR" : null,
+        currency,
         line_items: [],
         confidence: 0.55,
         warnings: ["Mistral OCR extracted text, but no structured line items were confidently detected."],
@@ -201,8 +376,8 @@ async function mistralOcrRequest(input: {
     });
 
     const bodyText = await response.text();
-    let data: any = null;
 
+    let data: any = null;
     try {
         data = JSON.parse(bodyText);
     } catch {
