@@ -609,6 +609,41 @@ export async function extractInvoiceData(input: {
             warnings.push(...mistralResult.warnings);
             extractionSteps.push(`mistral_text_length_${mistralText.length}`);
             extractionSteps.push(`mistral_line_items_${mistralLineItems.length}`);
+
+            // ── Immediate return if Mistral rule-parser found items ───────────────
+            const mistralParsedItems =
+                (mistralResult as any)?.line_items ||
+                (mistralResult as any)?.lineItems ||
+                (mistralResult as any)?.items ||
+                [];
+
+            if (Array.isArray(mistralParsedItems) && mistralParsedItems.length > 0) {
+                warnings.push(
+                    `Mistral OCR parsed ${mistralParsedItems.length} material line item(s).`
+                );
+                extractionSteps.push(`mistral_early_items_${mistralParsedItems.length}`);
+
+                const earlyRawText = cleanText([pdfText, ocrText, mistralText].filter(Boolean).join("\n"));
+
+                return {
+                    success: true,
+                    method: "mistral_ocr",
+                    rawText: mistralResult.text || earlyRawText,
+                    textLength: (mistralResult.text || earlyRawText).length,
+                    line_items: mistralParsedItems,
+                    warnings,
+                    needs_review: false,
+                    confidence: mistralResult.confidence || 0.82,
+                    audit: {
+                        fileName: input.fileName,
+                        filePath: input.filePath,
+                        mimetype: input.mimetype,
+                        pdfTextLength: pdfText.length,
+                        ocrTextLength: ocrText.length,
+                        extraction_steps: [...extractionSteps],
+                    },
+                };
+            }
         } catch (error: any) {
             warnings.push(`Mistral OCR extraction failed: ${error?.message || String(error)}`);
             extractionSteps.push("mistral_ocr_extraction_failed");
@@ -741,9 +776,10 @@ export async function extractInvoiceData(input: {
     }
 
     // ── Gemini LLM Structured Extraction Fallback ───────────────────────────
-    // Runs ONLY when all manual parsers and vision have returned 0 line items.
     // Disabled if DISABLE_LLM_EXTRACTION=true.
-    if (!lineItems.length && rawText.length >= 100 && process.env.DISABLE_LLM_EXTRACTION !== "true") {
+    if (process.env.DISABLE_LLM_EXTRACTION === "true") {
+        extractionSteps.push("llm_structured_extraction_disabled");
+    } else if (!lineItems.length && rawText.length >= 100) {
         try {
             extractionSteps.push("llm_structured_extraction_started");
             const llmResult = await extractStructuredInvoiceWithLLM(rawText, {
