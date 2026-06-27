@@ -11,8 +11,7 @@ export async function findBestMapping(
     `
     SELECT *
     FROM public.emission_factor_mappings
-    WHERE active = true
-      AND country = $1
+    WHERE country = $1
       AND $2 ~* pattern
       AND (
         $3::text IS NULL

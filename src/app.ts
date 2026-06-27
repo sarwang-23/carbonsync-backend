@@ -68,7 +68,33 @@ app.get("/api/health", (_req: Request, res: Response) => {
     time: new Date().toISOString(),
   });
 });
+  
+app.get("/api/db-debug", async (_req: Request, res: Response) => {
+  try {
+    const dbInfo = await db.query(`
+      SELECT current_database(), current_schema();
+    `);
 
+    const columns = await db.query(`
+      SELECT column_name, data_type
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+      AND table_name = 'emission_factor_mappings'
+      ORDER BY ordinal_position;
+    `);
+
+    res.json({
+      success: true,
+      db: dbInfo.rows,
+      columns: columns.rows,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
 
 function assertManualFallbackAllowed(fallbackName: string): void {
   if (CLIMATIQ_ONLY_MODE) {
