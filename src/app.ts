@@ -4292,7 +4292,19 @@ function buildUnknownScannedInvoiceFallbackItems({
 }
 
 // Async upload route: returns immediately, no 502.
-app.post("/api/erp/upload-async", upload.single("invoice"), async (req, res) => {
+app.post("/api/erp/upload-async", (req, res, next) => {
+    upload.single("invoice")(req, res, (err) => {
+        if (err) {
+            console.error("MULTER_UPLOAD_ASYNC_ERROR", err);
+            return res.status(500).json({
+                success: false,
+                error_type: "MULTER_ERROR",
+                message: err.message || "File upload failed.",
+            });
+        }
+        next();
+    });
+}, async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({
@@ -6138,6 +6150,19 @@ app.get("/api/test-climatiq", async (_req: Request, res: Response) => {
 });
 
 app.use("/api", limiter, router);
+
+// Global Error Handler to catch all unhandled errors (like Multer) and return JSON
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  console.error("EXPRESS_GLOBAL_ERROR", err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(err.status || 500).json({
+    success: false,
+    error_type: err.name || "INTERNAL_SERVER_ERROR",
+    message: err.message || "An unexpected error occurred.",
+  });
+});
 
 app.listen(port, () => {
   console.log(`SERVER AT ${port}`);
