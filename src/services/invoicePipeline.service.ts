@@ -1,6 +1,7 @@
 import { extractInvoiceData } from "./extraction.service.js";
 import { normalizeLineItems } from "./lineItemNormalizer.service.js";
 import { calculateDynamicCountryEmission } from "./dynamicEmissionFactor.service.js";
+import { resolveLineItemQuantities } from "./quantityResolver.service.js";
 
 export interface UploadedInvoicePipelineInput {
     filePath: string;
@@ -136,7 +137,14 @@ export async function processUploadedInvoicePipeline(input: UploadedInvoicePipel
     const extractionItems = extraction.line_items || [];
     const existingItems = input.existingItems || [];
 
-    const rawItems = extractionItems.length > 0 ? extractionItems : existingItems;
+    const extractedRawItems = extractionItems.length > 0 ? extractionItems : existingItems;
+
+    const rawItems = resolveLineItemQuantities({
+        items: extractedRawItems,
+        rawText: extraction.rawText || "",
+        fileName: input.fileName,
+    });
+
     const normalizedItems = normalizeLineItems(rawItems);
 
     if (!rawItems.length) {
