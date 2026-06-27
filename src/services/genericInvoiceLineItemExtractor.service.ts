@@ -1,15 +1,11 @@
 /**
- * Generic Invoice Line Item Extractor v3
+ * Generic Invoice Line Item Extractor v4
  *
- * Broader fallback for OCR/Markdown tables.
- * Handles non-timber invoices too:
- * - Safety Net / Construction material
- * - Timber / Door / Plywood
- * - Steel / Aluminium / Cement / Textile / Plastic etc.
- *
- * Important:
- * This extractor does NOT require item names to match a hardcoded material list.
- * If a row has description + quantity + rate + amount, it can extract it.
+ * Broad fallback for OCR/Markdown invoices.
+ * Fixes TIMBER_4 / Safety Net style where header is:
+ * Sl No | Description of Goods | | Quantity | Rate | per Amount
+ * and row is:
+ * 1 | Safety Net ... | | 2,000.00 Sq.Mtr. | 140.00 | Sq.Mtr. 2,80,000.00
  */
 
 export type GenericExtractedLineItem = {
@@ -45,7 +41,7 @@ function toNumber(value: any): number {
 
 function detectCurrency(text: string) {
     if (/\brm\b|myr|malaysia|tnb|tenaga nasional/i.test(text)) return "MYR";
-    if (/₹|rs\.?|inr|gstin|vat tin|pan no|india|mumbai|thane|maharashtra/i.test(text)) return "INR";
+    if (/₹|rs\.?|inr|gstin|vat tin|pan no|india|mumbai|thane|maharashtra|thane jurisdiction/i.test(text)) return "INR";
     if (/\$|usd/i.test(text)) return "USD";
     return null;
 }
@@ -72,25 +68,7 @@ function normalizeUnit(unit: string, itemName = "") {
 }
 
 function isNonBillableRow(rowText: string) {
-    return /subtotal|sub\s*total|total\b|grand\s*total|vat|gst|cgst|sgst|igst|rounded|round\s*off|tax\b|amount\s+chargeable|amount\s+in\s+words|rupees\s*:/i.test(rowText);
-}
-
-function isHeaderText(text: string) {
-    return /description\s+of\s+goods|kind\s+of\s+product|particulars|quantity|amount|rate|size|sl\s*no|pcts|kgs/i.test(text);
-}
-
-function isLikelyItemName(value: string) {
-    const text = cleanText(value);
-    if (!text) return false;
-    if (/^-+$/.test(text)) return false;
-    if (isNonBillableRow(text)) return false;
-    if (isHeaderText(text)) return false;
-    if (!/[a-zA-Z]/.test(text)) return false;
-
-    // Avoid addresses / metadata as item rows
-    if (/invoice|dated|delivery|buyer|consignee|supplier|reference|despatch|destination|terms|email|phone|pan|tin|office|subject to/i.test(text)) return false;
-
-    return true;
+    return /subtotal|sub\s*total|grand\s*total|sale\s*vat|vat|gst|cgst|sgst|igst|rounded|round\s*off|tax\b|amount\s+chargeable|amount\s+in\s+words|rupees\s*:/i.test(rowText);
 }
 
 function inferCategory(itemName: string) {
@@ -106,7 +84,7 @@ function inferMaterial(itemName: string) {
     if (/aluminium|aluminum/i.test(itemName)) return "aluminium_product";
     if (/cement|concrete/i.test(itemName)) return "cement_or_concrete_product";
     if (/textile|fabric|cloth/i.test(itemName)) return "textile_product";
-    if (/net|safety\s*net|shade\s*net|fish\s*net/i.test(itemName)) return "safety_or_plastic_net_product";
+    if (/net|safety\s*net|shade\s*net|fish\s*net|garware/i.test(itemName)) return "safety_or_plastic_net_product";
     return "purchased_goods";
 }
 
@@ -120,7 +98,7 @@ function makeItem(input: {
     source: string;
     confidence: number;
     parameters?: Record<string, any>;
-}) {
+}): GenericExtractedLineItem {
     const itemName = cleanText(input.itemName);
 
     return {
@@ -142,237 +120,190 @@ function makeItem(input: {
     };
 }
 
-function dedupe(items: GenericExtractedLineItem[]) {
-    // Keep repeated invoice rows. Repeated rows may be valid billable rows.
-    return items;
+function isBadItemName(name: string) {
+    const n = cleanText(name);
+    if (!n || n.length < 3) return true;
+    if (!/[a-zA-Z]/.test(n)) return true;
+    if (/invoice|dated|delivery|buyer|consignee|supplier|reference|despatch|destination|terms|email|phone|pan|tin|office|subject to|description of goods|quantity|rate|amount/i.test(n)) return true;
+    if (isNonBillableRow(n)) return true;
+    return false;
 }
 
 /**
- * Header-aware table extraction.
- * Finds rows based on headers and does not require product keyword matching.
+ * Key fix for TIMBER_4:
+ * Extract rows like:
+ * | 1 | Safety Net ... | | 2,000.00 Sq.Mtr. | 140.00 | Sq.Mtr. 2,80,000.00 |
  */
-function extractHeaderAwarePipeTables(rawText: string): GenericExtractedLineItem[] {
-    const currency = detectCurrency(rawText);
-    const country = detectCountry(rawText);
+function extractNumberedPipeRows(rawText: string): GenericExtractedLineItem[] {
+    const text = String(rawText || "");
+    const currency = detectCurrency(text);
+    const country = detectCountry(text);
     const items: GenericExtractedLineItem[] = [];
 
-    const cells = String(rawText || "")
-        .split("|")
-        .map(cleanText)
-        .filter(Boolean)
-        .filter((cell) => !/^[-\s]+$/.test(cell));
+    const rowRegex =
+        /\|\s*(\d{1,4})\s*\|\s*([^|]{8,}?)\s*\|\s*(?:[^|]*\|\s*)?([\d,]+(?:\.\d+)?)\s*([A-Za-z.²0-9 ]{0,18})\s*\|\s*([\d,]+(?:\.\d+)?)\s*\|\s*([A-Za-z.²0-9 ]{0,18})\s*([\d,]+(?:\.\d+)?)\s*\|/gi;
 
-    for (let h = 0; h < cells.length; h++) {
-        const headerSlice = cells.slice(h, h + 12);
-        const headerText = headerSlice.join(" | ").toLowerCase();
+    let match: RegExpExecArray | null;
+    while ((match = rowRegex.exec(text)) !== null) {
+        const slNo = toNumber(match[1]);
+        const itemName = cleanText(match[2]);
+        const quantity = toNumber(match[3]);
+        const qtyUnit = cleanText(match[4]);
+        const rate = toNumber(match[5]);
+        const amountUnit = cleanText(match[6]);
+        const amount = toNumber(match[7]);
 
-        const hasDesc = /description\s+of\s+goods|kind\s+of\s+product|particulars|description/.test(headerText);
-        const hasQty = /\bquantity\b|pcs|pcts|kgs/.test(headerText);
-        const hasAmount = /\bamount\b/.test(headerText);
-        const hasRate = /\brate\b/.test(headerText);
+        if (!slNo || isBadItemName(itemName)) continue;
+        if (!quantity || !amount) continue;
+        if (amount < 10) continue;
 
-        if (!hasDesc || !hasQty || !hasAmount || !hasRate) continue;
-
-        const amountRel = headerSlice.findIndex((c) => /\bamount\b/i.test(c));
-        if (amountRel < 0) continue;
-
-        const header = headerSlice.slice(0, amountRel + 1);
-        const width = header.length;
-
-        const descIdx = header.findIndex((c) => /description|kind\s+of\s+product|particulars/i.test(c));
-        const sizeIdx = header.findIndex((c) => /\bsize\b/i.test(c));
-        const pcsIdx = header.findIndex((c) => /pcs|pcts|kgs/i.test(c));
-        const qtyIdx = header.findIndex((c) => /quantity/i.test(c));
-        const rateIdx = header.findIndex((c) => /\brate\b/i.test(c));
-        const perIdx = header.findIndex((c) => /\bper\b|unit/i.test(c));
-        const amountIdx = header.findIndex((c) => /\bamount\b/i.test(c));
-
-        if (descIdx < 0 || amountIdx < 0) continue;
-
-        let cursor = h + width;
-
-        while (cursor + width <= cells.length) {
-            let row = cells.slice(cursor, cursor + width);
-            let rowText = row.join(" ");
-
-            if (isNonBillableRow(rowText)) {
-                cursor += width;
-                continue;
-            }
-
-            let itemName = cleanText(row[descIdx]);
-
-            // If a row is shifted left due missing empty cells, try shifting.
-            if (!isLikelyItemName(itemName) && isLikelyItemName(row[0])) {
-                const shifted = ["", ...row].slice(0, width);
-                row = shifted;
-                rowText = row.join(" ");
-                itemName = cleanText(row[descIdx]);
-            }
-
-            if (!isLikelyItemName(itemName)) {
-                cursor += width;
-                continue;
-            }
-
-            const amount = toNumber(row[amountIdx]);
-            const pcs = pcsIdx >= 0 ? toNumber(row[pcsIdx]) : 0;
-            const qty = qtyIdx >= 0 ? toNumber(row[qtyIdx]) : 0;
-            const rate = rateIdx >= 0 ? toNumber(row[rateIdx]) : 0;
-            const unitRaw = perIdx >= 0 ? row[perIdx] : "";
-            const normalizedUnit = normalizeUnit(unitRaw, itemName);
-
-            if (!amount || amount <= 0) {
-                cursor += width;
-                continue;
-            }
-
-            const quantity =
-                qty > 0
-                    ? qty
-                    : pcs > 0
-                      ? pcs
-                      : rate > 0 && amount > 0
-                        ? amount / rate
-                        : 0;
-
-            if (!quantity || quantity <= 0) {
-                cursor += width;
-                continue;
-            }
-
-            const size = sizeIdx >= 0 ? row[sizeIdx] : null;
-
-            const fullName = size && /\d/.test(size)
-                ? `${itemName} (${size})`
-                : itemName;
-
-            items.push(
-                makeItem({
-                    itemName: fullName,
-                    quantity,
-                    unit: normalizedUnit,
-                    amount,
-                    currency,
-                    country,
-                    source: "generic_header_aware_table_fallback",
-                    confidence: 0.82,
-                    parameters: {
-                        product: itemName,
-                        size: size || null,
-                        pcs: pcs || null,
-                        table_quantity: qty || null,
-                        rate: rate || null,
-                        per: unitRaw || null,
-                        extraction_method: "header_aware_pipe_table",
-                        row_index: cursor,
-                    },
-                })
-            );
-
-            cursor += width;
-        }
-    }
-
-    return dedupe(items);
-}
-
-/**
- * Flexible single-row scanner:
- * Sl No | Description | Quantity | Rate | per Amount
- * or
- * Description | | 2,000.00 Sq.Mtr. | 140.00 | Sq.Mtr. 2,80,000.00
- */
-function extractFlexibleRows(rawText: string): GenericExtractedLineItem[] {
-    const currency = detectCurrency(rawText);
-    const country = detectCountry(rawText);
-    const items: GenericExtractedLineItem[] = [];
-
-    const rows = String(rawText || "")
-        .split(/\n|(?=\|\s*\d+\s*\|)/g)
-        .map(cleanText)
-        .filter((row) => row.includes("|"));
-
-    for (const row of rows) {
-        if (isNonBillableRow(row)) continue;
-
-        const cells = row
-            .split("|")
-            .map(cleanText)
-            .filter(Boolean)
-            .filter((cell) => !/^[-\s]+$/.test(cell));
-
-        if (cells.length < 5) continue;
-
-        // Find the most likely description cell.
-        const descIndex = cells.findIndex((cell) => isLikelyItemName(cell) && /[a-zA-Z]{3,}/.test(cell));
-        if (descIndex < 0) continue;
-
-        const desc = cells[descIndex];
-
-        // Find amount: usually last large money value.
-        const numericCells = cells.map((cell, idx) => ({ cell, idx, num: toNumber(cell) }));
-        const amountCandidate = [...numericCells]
-            .reverse()
-            .find((x) => x.num > 0 && x.idx > descIndex && /[\d,]+\.\d{2}/.test(x.cell));
-
-        if (!amountCandidate) continue;
-
-        // Find quantity+unit after description.
-        let quantity = 0;
-        let unit = "unknown";
-        let rate = 0;
-
-        for (let i = descIndex + 1; i < amountCandidate.idx; i++) {
-            const cell = cells[i];
-            const num = toNumber(cell);
-
-            if (!quantity && num > 0) {
-                quantity = num;
-                unit = normalizeUnit(cell, desc);
-            }
-
-            // rate is usually next numeric before amount
-            if (num > 0 && i !== amountCandidate.idx) {
-                rate = num;
-            }
-
-            const unitMatch = cell.match(/(Sq\.?\s*Mtr\.?|Sq\.?\s*Mr\.?|Sq\.?\s*Mt\.?|PCS|Nos|Kg|Kgs|MT|m2|kWh)/i);
-            if (unitMatch && unit === "unknown") {
-                unit = normalizeUnit(unitMatch[1], desc);
-            }
-        }
-
-        // Sometimes quantity and unit are in same cell: "2,000.00 Sq.Mtr."
-        const qtyUnitCell = cells.slice(descIndex + 1, amountCandidate.idx).find((cell) => /\d/.test(cell) && /(Sq|PCS|Nos|Kg|MT|m2|kWh)/i.test(cell));
-        if (qtyUnitCell) {
-            quantity = toNumber(qtyUnitCell);
-            const unitMatch = qtyUnitCell.match(/(Sq\.?\s*Mtr\.?|Sq\.?\s*Mr\.?|Sq\.?\s*Mt\.?|PCS|Nos|Kg|Kgs|MT|m2|kWh)/i);
-            if (unitMatch) unit = normalizeUnit(unitMatch[1], desc);
-        }
-
-        if (!quantity || quantity <= 0) continue;
+        const unit = normalizeUnit(qtyUnit || amountUnit, itemName);
 
         items.push(
             makeItem({
-                itemName: desc,
+                itemName,
                 quantity,
                 unit,
-                amount: amountCandidate.num,
+                amount,
                 currency,
                 country,
-                source: "generic_flexible_row_fallback",
-                confidence: 0.76,
+                source: "generic_numbered_pipe_row_fallback",
+                confidence: 0.84,
                 parameters: {
-                    product: desc,
-                    rate: rate || null,
-                    extraction_method: "flexible_pipe_row_scan",
+                    row_no: slNo,
+                    rate,
+                    per: amountUnit || qtyUnit || null,
+                    extraction_method: "numbered_pipe_row_regex",
                 },
             })
         );
     }
 
-    return dedupe(items);
+    return items;
+}
+
+/**
+ * Handles TIMBER_1:
+ * | 1 | BWP Deco... | 2.13 X 0.78 | 67 | 111.31 | 2,139.83 | Sq.Mr. | 2,38,185.00 |
+ */
+function extractStandardEightCellRows(rawText: string): GenericExtractedLineItem[] {
+    const text = String(rawText || "");
+    const currency = detectCurrency(text);
+    const country = detectCountry(text);
+    const items: GenericExtractedLineItem[] = [];
+
+    const rowRegex =
+        /\|\s*(\d{1,4})\s*\|\s*([^|]{8,}?)\s*\|\s*([0-9.]+\s*[xX]\s*[0-9.]+)\s*\|\s*([\d,]+(?:\.\d+)?)\s*\|\s*([\d,]+(?:\.\d+)?)\s*\|\s*([\d,]+(?:\.\d+)?)\s*\|\s*([^|]{1,20})\s*\|\s*([\d,]+(?:\.\d+)?)\s*\|/gi;
+
+    let match: RegExpExecArray | null;
+    while ((match = rowRegex.exec(text)) !== null) {
+        const slNo = toNumber(match[1]);
+        const itemName = cleanText(match[2]);
+        const size = cleanText(match[3]);
+        const pcs = toNumber(match[4]);
+        const tableQty = toNumber(match[5]);
+        const rate = toNumber(match[6]);
+        const per = cleanText(match[7]);
+        const amount = toNumber(match[8]);
+
+        if (!slNo || isBadItemName(itemName)) continue;
+        if (!amount) continue;
+
+        const unit = normalizeUnit(per, itemName);
+        const quantity = unit === "m2" && tableQty > 0 ? tableQty : pcs || tableQty;
+
+        if (!quantity) continue;
+
+        items.push(
+            makeItem({
+                itemName: `${itemName} (${size})`,
+                quantity,
+                unit,
+                amount,
+                currency,
+                country,
+                source: "generic_standard_8_cell_row_fallback",
+                confidence: 0.86,
+                parameters: {
+                    row_no: slNo,
+                    size,
+                    pcs,
+                    table_quantity: tableQty,
+                    rate,
+                    per,
+                    extraction_method: "standard_8_cell_row_regex",
+                },
+            })
+        );
+    }
+
+    return items;
+}
+
+/**
+ * Last fallback for rows flattened by OCR:
+ * Safety Net ... 2,000.00 Sq.Mtr. 140.00 Sq.Mtr. 2,80,000.00
+ */
+function extractFlatQuantityRateAmountRows(rawText: string): GenericExtractedLineItem[] {
+    const text = String(rawText || "").replace(/\s+/g, " ");
+    const currency = detectCurrency(text);
+    const country = detectCountry(text);
+    const items: GenericExtractedLineItem[] = [];
+
+    const patterns = [
+        /(?:\|\s*\d+\s*\|\s*)?([^|]{8,120}?(?:Net|Door|Shutter|Plywood|Steel|Aluminium|Cement|Textile|Fabric)[^|]{0,160}?)\s*\|\s*(?:\|\s*)?([\d,]+(?:\.\d+)?)\s*(Sq\.?\s*Mtr\.?|Sq\.?\s*Mr\.?|Sq\.?\s*Mt\.?|PCS|Nos|Kg|Kgs|MT|m2|kWh)\s*\|\s*([\d,]+(?:\.\d+)?)\s*\|\s*(?:Sq\.?\s*Mtr\.?|Sq\.?\s*Mr\.?|Sq\.?\s*Mt\.?|PCS|Nos|Kg|Kgs|MT|m2|kWh)?\s*([\d,]+(?:\.\d+)?)/i,
+    ];
+
+    for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (!match) continue;
+
+        const itemName = cleanText(match[1]).replace(/^\d+\s*\|\s*/, "");
+        const quantity = toNumber(match[2]);
+        const unit = normalizeUnit(match[3], itemName);
+        const rate = toNumber(match[4]);
+        const amount = toNumber(match[5]);
+
+        if (isBadItemName(itemName)) continue;
+        if (!quantity || !amount) continue;
+
+        items.push(
+            makeItem({
+                itemName,
+                quantity,
+                unit,
+                amount,
+                currency,
+                country,
+                source: "generic_flat_quantity_rate_amount_fallback",
+                confidence: 0.76,
+                parameters: {
+                    rate,
+                    extraction_method: "flat_quantity_rate_amount_regex",
+                },
+            })
+        );
+    }
+
+    return items;
+}
+
+function dedupe(items: GenericExtractedLineItem[]) {
+    const seen = new Set<string>();
+    return items.filter((item, idx) => {
+        const key = [
+            cleanText(item.item_name).toLowerCase(),
+            Number(item.quantity || 0).toFixed(4),
+            cleanText(item.unit).toLowerCase(),
+            Number(item.amount || 0).toFixed(2),
+            item.source,
+            idx,
+        ].join("|");
+
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
 }
 
 export function extractGenericInvoiceLineItems(rawText: string): GenericExtractedLineItem[] {
@@ -380,8 +311,9 @@ export function extractGenericInvoiceLineItems(rawText: string): GenericExtracte
     if (!text.trim()) return [];
 
     const items = dedupe([
-        ...extractHeaderAwarePipeTables(text),
-        ...extractFlexibleRows(text),
+        ...extractStandardEightCellRows(text),
+        ...extractNumberedPipeRows(text),
+        ...extractFlatQuantityRateAmountRows(text),
     ]);
 
     return items.filter((item) => {
