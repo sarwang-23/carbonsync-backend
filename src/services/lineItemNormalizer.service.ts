@@ -230,6 +230,36 @@ export function normalizeCurrency(value: any): string | null {
 export function normalizeLineItem(item: any): NormalizedLineItem {
     const itemName = String(item?.item_name || item?.name || item?.description || "Unknown item");
     const description = String(item?.description || item?.item_description || "");
+    const unitLower = String(item?.unit || item?.uom || "").toLowerCase().trim();
+
+    if (["m2", "sqm", "sq.mtr", "sq.mr", "sq.mt"].includes(unitLower)) {
+        return {
+            ...item,
+            item_name: itemName,
+            description,
+            original_quantity: item.quantity,
+            original_unit: item.unit,
+            quantity: Number(item.quantity || 0),
+            unit: "m2",
+            parameters: {
+                ...(item.parameters || {}),
+                normalized_quantity: Number(item.quantity || 0),
+                normalized_unit: "m2",
+                calculation_basis: "area_or_spend_based",
+            },
+            warnings: [
+                ...(item.warnings || []),
+                "Area unit m2 preserved. Do not convert m2 to kg without material density.",
+            ],
+            audit: {
+                normalization_method: "area_unit_preserved",
+                original_unit: item.unit,
+                normalized_unit: "m2",
+                original_quantity: item.quantity,
+                normalized_quantity: item.quantity,
+            },
+        };
+    }
 
     const originalQuantity =
         item?.quantity ??

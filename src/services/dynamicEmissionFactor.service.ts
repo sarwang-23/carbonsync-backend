@@ -1046,6 +1046,74 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
     });
 
     if (!best.selected) {
+        const isPurchasedGoods =
+            classification?.category === "purchased_goods" ||
+            normalizedItemData?.parameters?.category === "purchased_goods" ||
+            category === "purchased_goods";
+
+        const amount = Number(normalizedItemData?.amount || item?.amount || 0);
+        const currency = String(normalizedItemData?.currency || item?.currency || "").toUpperCase();
+
+        if (isPurchasedGoods && amount > 0 && currency) {
+            const exchangeRates: Record<string, number> = {
+                INR: Number(process.env.INR_TO_USD_RATE || 0.012),
+                MYR: Number(process.env.MYR_TO_USD_RATE || 0.21),
+                USD: 1,
+            };
+
+            const usdAmount = amount * (exchangeRates[currency] || 0);
+
+            if (usdAmount > 0) {
+                const spendSearch = await searchClimatiqEmissionFactors({
+                    query: "purchased goods spend",
+                    region: "IN",
+                } as any);
+
+                const spendFactor = spendSearch?.results?.[0] || {
+                    activity_id: "purchased_goods-default",
+                    region: "IN",
+                    year: 2024,
+                };
+
+                if (spendFactor?.activity_id) {
+                    const estimateInput = {
+                        selectedEF: {
+                            activity_id: spendFactor.activity_id,
+                            region: spendFactor.region || "IN",
+                            year: spendFactor.year || 2024,
+                        },
+                        parameters: {
+                            money: usdAmount,
+                            money_unit: "usd",
+                        },
+                    };
+
+                    const estimate = await estimateWithClimatiq(estimateInput);
+
+                    return {
+                        success: true,
+                        item_name: normalizedItemData.item_name,
+                        country: "IN",
+                        category: "purchased_goods",
+                        mapping_type: "spend_based_fallback",
+                        calculation_basis: "spend_based",
+                        converted: {
+                            value: usdAmount,
+                            unit: "USD",
+                            original_amount: amount,
+                            original_currency: currency,
+                        },
+                        climatiqBody: estimateInput,
+                        selected_emission_factor: spendFactor,
+                        result: estimate,
+                        warnings: [
+                            "No physical factor found for this item. Used spend-based purchased goods fallback.",
+                        ],
+                    } as any;
+                }
+            }
+        }
+
         return {
             success: false,
             needs_review: true,
