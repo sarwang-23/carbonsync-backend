@@ -15,7 +15,6 @@ export type EmissionFactorMapping = {
   fallback_factor_kgco2e_per_unit: string | number | null;
   fallback_unit: string | null;
   priority: number | null;
-  active: boolean;
   notes: string | null;
 };
 
@@ -30,8 +29,7 @@ export async function findBestMapping(
     `
     SELECT *
     FROM public.emission_factor_mappings
-    WHERE active = true
-      AND country = $1
+    WHERE country = $1
       AND $2 ~* pattern
       AND (
         $3::text IS NULL
@@ -46,7 +44,7 @@ export async function findBestMapping(
         WHEN region IS NULL THEN 3
         ELSE 4
       END,
-      priority DESC
+      priority DESC NULLS LAST
     LIMIT 1;
     `,
     [country, cleanItemName, region || null]
