@@ -312,6 +312,24 @@ function parseSimpleMaterialLineItem(text: string) {
     ];
 }
 
+
+function dedupeLineItems(items: any[]) {
+    const seen = new Set<string>();
+
+    return (items || []).filter((item) => {
+        const key = [
+            String(item?.item_name || item?.description || "").toLowerCase().replace(/\s+/g, " ").trim(),
+            Number(item?.quantity || 0).toFixed(4),
+            String(item?.unit || "").toLowerCase().trim(),
+            Number(item?.amount || 0).toFixed(2),
+        ].join("|");
+
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
 function parseStructuredFromMistralText(text: string) {
     const lower = safeLower(text);
     const { country, currency } = detectCountryAndCurrency(text);
@@ -353,10 +371,10 @@ function parseStructuredFromMistralText(text: string) {
         };
     }
 
-    const lineItems = [
+    const lineItems = dedupeLineItems([
         ...parseMarkdownTableLineItems(text),
         ...parseFlattenedTableLineItems(text),
-    ];
+    ]);
 
     if (!lineItems.length) {
         lineItems.push(...parseSimpleMaterialLineItem(text));

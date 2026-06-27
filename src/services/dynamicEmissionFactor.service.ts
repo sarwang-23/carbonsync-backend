@@ -551,8 +551,8 @@ export function buildClimatiqSearchQuery(category: DetectedCategory, itemName: s
         if (desc.includes("steel")) return "steel production";
         if (desc.includes("aluminium") || desc.includes("aluminum")) return "aluminium production";
         if (desc.includes("cement")) return "cement production";
-        if (desc.includes("flush door") || desc.includes("pinewood") || desc.includes("door")) return "wood product production";
-        if (desc.includes("timber") || desc.includes("wood") || desc.includes("plywood") || desc.includes("veneer") || desc.includes("laminate")) return "wood timber plywood production";
+        if (desc.includes("flush door") || desc.includes("pinewood") || desc.includes("door")) return "wood product production plywood timber";
+        if (desc.includes("timber") || desc.includes("wood") || desc.includes("plywood") || desc.includes("veneer") || desc.includes("laminate")) return "wood product production plywood timber";
         if (desc.includes("textile") || desc.includes("fabric")) return "textile production";
         if (desc.includes("plastic")) return "plastic production";
         if (desc.includes("paper")) return "paper production";
@@ -579,6 +579,29 @@ function scoreEmissionFactor(result: any, input: { region: SupportedCountry; cat
     const sourceLca = safeLower(result.source_lca_activity || "");
     const item = safeLower(input.itemName);
     const inputUnit = safeLower(input.unit);
+    const isWoodProductItem =
+        item.includes("wood") ||
+        item.includes("pinewood") ||
+        item.includes("plywood") ||
+        item.includes("timber") ||
+        item.includes("flush door") ||
+        item.includes("door") ||
+        item.includes("veneer") ||
+        item.includes("laminate");
+
+    const looksLikeMetalFactor =
+        activity.includes("steel") ||
+        activity.includes("metal") ||
+        activity.includes("screw") ||
+        activity.includes("fastener") ||
+        activity.includes("aluminium") ||
+        activity.includes("aluminum") ||
+        activity.includes("iron");
+
+    if (input.category === "purchased_goods" && isWoodProductItem && looksLikeMetalFactor) {
+        // Hard reject wrong matches like "Stainless steel - wood screws" for wood/flush door invoices.
+        return -9999;
+    }
 
     if (result.region === input.region) score += 45;
     if (result.region === "GLOBAL") score += 10;
@@ -617,9 +640,17 @@ function scoreEmissionFactor(result: any, input: { region: SupportedCountry; cat
     if (input.category === "purchased_goods") {
         if (activity.includes("production")) score += 30;
         if (activity.includes("market for")) score += 15;
-        for (const k of ["steel", "aluminium", "aluminum", "cement", "timber", "wood", "pinewood", "plywood", "veneer", "laminate", "flush door", "door", "textile", "fabric", "plastic", "paper"]) {
-            if (item.includes(k) && activity.includes(k)) score += 35;
+
+        if (isWoodProductItem) {
+            if (activity.includes("wood") || activity.includes("timber") || activity.includes("plywood") || activity.includes("forestry")) score += 80;
+            if (activity.includes("door") || activity.includes("wood product")) score += 40;
+            if (activity.includes("screw") || activity.includes("fastener") || activity.includes("steel") || activity.includes("metal")) score -= 200;
+        } else {
+            for (const k of ["steel", "aluminium", "aluminum", "cement", "textile", "fabric", "plastic", "paper"]) {
+                if (item.includes(k) && activity.includes(k)) score += 35;
+            }
         }
+
         if (activity.includes("transport")) score -= 30;
         if (activity.includes("waste")) score -= 30;
     }
@@ -649,7 +680,14 @@ function scoreEmissionFactor(result: any, input: { region: SupportedCountry; cat
 export function selectBestEmissionFactor(results: any[], input: { region: SupportedCountry; category: DetectedCategory; unit: string; itemName: string }) {
     const scored = (results || [])
         .filter((r) => r.region === input.region || r.region === "GLOBAL")
-        .map((r) => ({ ...r, mapping_score: Math.max(Number(r.mapping_score || 0), scoreEmissionFactor(r, input)) }))
+        .map((r) => {
+            const calculatedScore = scoreEmissionFactor(r, input);
+            return {
+                ...r,
+                mapping_score: calculatedScore < 0 ? calculatedScore : Math.max(Number(r.mapping_score || 0), calculatedScore),
+            };
+        })
+        .filter((r) => Number(r.mapping_score || 0) > 0)
         .sort((a, b) => b.mapping_score - a.mapping_score);
 
     // For non-India electricity bills, prefer latest Ember production mix when available.
