@@ -4,6 +4,7 @@ export type NormalizedUnit =
     | "t"
     | "l"
     | "m3"
+    | "m2"
     | "km"
     | "passenger-km"
     | "number"
@@ -54,7 +55,13 @@ function roundNumber(value: number, decimals = 6): number {
 }
 
 export function normalizeUnit(unit: any, itemName = "", description = ""): NormalizedUnit {
+    const unitText = safeLower(unit)
+        .replace(/\./g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
     const text = safeLower(`${unit || ""} ${itemName || ""} ${description || ""}`)
+        .replace(/\./g, "")
         .replace(/\s+/g, " ")
         .trim();
 
@@ -70,7 +77,8 @@ export function normalizeUnit(unit: any, itemName = "", description = ""): Norma
     }
 
     if (
-        text === "kg" ||
+        unitText === "kg" ||
+        unitText === "kgs" ||
         text.includes(" kg") ||
         text.includes("kgs") ||
         text.includes("kilogram") ||
@@ -80,8 +88,8 @@ export function normalizeUnit(unit: any, itemName = "", description = ""): Norma
     }
 
     if (
-        text === "t" ||
-        text === "mt" ||
+        unitText === "t" ||
+        unitText === "mt" ||
         text.includes(" mt") ||
         text.includes("tonne") ||
         text.includes("tonnes") ||
@@ -92,7 +100,8 @@ export function normalizeUnit(unit: any, itemName = "", description = ""): Norma
     }
 
     if (
-        text === "l" ||
+        unitText === "l" ||
+        unitText === "ltr" ||
         text.includes(" ltr") ||
         text.includes(" litre") ||
         text.includes(" liter") ||
@@ -105,14 +114,46 @@ export function normalizeUnit(unit: any, itemName = "", description = ""): Norma
     if (
         text.includes("m3") ||
         text.includes("m³") ||
+        text.includes("cbm") ||
         text.includes("cubic meter") ||
         text.includes("cubic metre")
     ) {
         return "m3";
     }
 
+    // Square meter / area units used in timber, plywood, laminate, flush-door invoices.
+    // Examples from OCR/Mistral: m2, m², Sq.Mr., Sq.Mtr., Sq.M, sqm.
     if (
-        text === "km" ||
+        unitText === "m2" ||
+        unitText === "m²" ||
+        unitText === "sqm" ||
+        unitText === "sq m" ||
+        unitText === "sqmr" ||
+        unitText === "sq mr" ||
+        unitText === "sqmtr" ||
+        unitText === "sq mtr" ||
+        unitText === "sqmeter" ||
+        unitText === "sq meter" ||
+        unitText === "sqmetre" ||
+        unitText === "sq metre" ||
+        text.includes(" m2") ||
+        text.includes("m²") ||
+        text.includes("sqm") ||
+        text.includes("sq m") ||
+        text.includes("sqmr") ||
+        text.includes("sq mr") ||
+        text.includes("sqmtr") ||
+        text.includes("sq mtr") ||
+        text.includes("square meter") ||
+        text.includes("square metre") ||
+        text.includes("square meters") ||
+        text.includes("square metres")
+    ) {
+        return "m2";
+    }
+
+    if (
+        unitText === "km" ||
         text.includes(" km") ||
         text.includes("kilometer") ||
         text.includes("kilometre")
@@ -136,6 +177,8 @@ export function normalizeUnit(unit: any, itemName = "", description = ""): Norma
         text.includes("number") ||
         text.includes("pcs") ||
         text.includes("piece") ||
+        text.includes("pieces") ||
+        text.includes("nos") ||
         text.includes("unit")
     ) {
         return "number";
@@ -195,6 +238,8 @@ export function normalizeLineItem(item: any): NormalizedLineItem {
         item?.parameters?.energy_kwh ??
         item?.parameters?.weight ??
         item?.parameters?.volume ??
+        item?.parameters?.area ??
+        item?.parameters?.area_m2 ??
         0;
 
     const originalUnit =
@@ -203,6 +248,7 @@ export function normalizeLineItem(item: any): NormalizedLineItem {
         item?.parameters?.energy_unit ??
         item?.parameters?.weight_unit ??
         item?.parameters?.volume_unit ??
+        item?.parameters?.area_unit ??
         "";
 
     const normalizedUnit = normalizeUnit(originalUnit, itemName, description);
@@ -249,3 +295,4 @@ export function normalizeLineItems(items: any[]): NormalizedLineItem[] {
 export function hasValidNormalizedQuantity(item: NormalizedLineItem) {
     return Boolean(item.quantity && item.quantity > 0 && item.unit !== "unknown");
 }
+
