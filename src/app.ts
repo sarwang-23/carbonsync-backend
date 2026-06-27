@@ -31,6 +31,7 @@ import {
     listInvoiceJobs,
     startInvoiceJob,
 } from "./services/invoiceJob.service.js";
+import { buildStructuredInvoiceResponse } from "./services/responseFormatter.service.js";
 dotenv.config();
 const require = createRequire(import.meta.url);
 const pdfParseModule = require("pdf-parse");
@@ -4365,7 +4366,7 @@ app.get("/api/erp/jobs/:jobId", async (req, res) => {
         });
     }
 
-    return res.json({
+    const mappedJob = {
         success: true,
         job_id: job.id,
         status: job.status,
@@ -4380,7 +4381,13 @@ app.get("/api/erp/jobs/:jobId", async (req, res) => {
         error_message: job.error_message,
         warnings: job.warnings,
         result: job.status === "completed" || job.status === "failed" ? job.result : undefined,
-    });
+    };
+
+    if (req.query.debug === "true") {
+        return res.json(mappedJob);
+    }
+
+    return res.json(buildStructuredInvoiceResponse(mappedJob));
 });
 
 // Optional: list recent jobs for debugging.
