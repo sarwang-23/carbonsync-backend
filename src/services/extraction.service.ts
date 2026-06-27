@@ -23,6 +23,8 @@ export type ExtractionMethod =
     | "combined_pdf_ocr"
     | "llm_structured_extraction"
     | "generic_ocr_table_fallback"
+    | "electricity_bill_fallback"
+    | "final_line_item_resolver"
     | "failed"
     | "scanned_pdf_blocked_free_mode";
 
@@ -808,143 +810,194 @@ export async function extractInvoiceData(input: {
         }
     }
 
-    let method: ExtractionMethod = "failed";
-    if (pdfText.length >= 300 && ocrText.length > 0) method = "combined_pdf_ocr";
-    else if (pdfText.length >= 300) method = "pdf_text";
-    else if (ocrText.length >= 300) method = "ocr_text";
-    else if (mistralText.length >= 300) method = "mistral_ocr";
-    else if (visionText.length >= 300) method = "vision_placeholder";
-    else if (lineItems.some((i: any) => i.source === "llm_structured_extraction")) method = "llm_structured_extraction";
+    // ── Permanent Final Extraction Resolver ─────────────────────────────
+    // From here onwards, every document must pass through one final resolver.
+    // This prevents: OCR text found, but final line_items = [].
 
-    const success = rawText.length > 0 || lineItems.length > 0;
+    const finalRawText = cleanText(
+        [pdfText, ocrText, mistralText, visionText].filter(Boolean).join("\n")
+    );
 
-    // ── Electricity Bill Fallback ──────────────────────────────────────
-    // Runs before generic fallback. Handles TNB Malaysia bills with Peak/Off-Peak kWh.
-    if (!lineItems.length) {
-        const fallbackText =
-            mistralText ||
-            ocrText ||
-            pdfText ||
-            rawText ||
-            "";
+    const auditBase = {
+        fileName: input.fileName,
+        filePath: input.filePath,
+        mimetype: input.mimetype,
+        pdfTextLength: pdfText.length,
+        ocrTextLength: ocrText.length,
+        extraction_steps: extractionSteps,
+    };
 
-        const electricityFallbackItems = extractElectricityBillLineItems(fallbackText);
+    // 1. Rule-based text extraction
+    const finalLineItems: ExtractedLineItem[] = [];
 
-        if (electricityFallbackItems.length > 0) {
-            warnings.push(
-                `Electricity fallback extracted ${electricityFallbackItems.length} line item(s) from OCR text.`
-            );
-
-            return {
-                success: true,
-                method: "electricity_bill_fallback" as any,
-                rawText: fallbackText,
-                textLength: fallbackText.length,
-                line_items: electricityFallbackItems,
-                warnings,
-                needs_review: false,
-                confidence: 0.86,
-                audit: {
-                    fileName: input.fileName,
-                    filePath: input.filePath,
-                    mimetype: input.mimetype,
-                    pdfTextLength: pdfText.length,
-                    ocrTextLength: ocrText.length,
-                    extraction_steps: [
-                        ...extractionSteps,
-                        "electricity_bill_fallback_started",
-                        `electricity_fallback_line_items_${electricityFallbackItems.length}`,
-                    ],
-                },
-            };
-        }
+    const ruleItems = extractStructuredLineItemsFromText(finalRawText);
+    if (ruleItems.length > 0) {
+        finalLineItems.push(...ruleItems);
+        extractionSteps.push(`rule_based_items_${ruleItems.length}`);
     }
 
-    // ── Generic OCR Table Fallback ─────────────────────────────────────
-    // Last resort before needs_review. Scans raw text for pipe-table rows.
-    if (!lineItems.length) {
-        const fallbackText = mistralText || ocrText || pdfText || rawText || "";
-        const genericFallbackItems = extractGenericInvoiceLineItems(fallbackText);
-
-        if (genericFallbackItems.length > 0) {
-            warnings.push(
-                `Generic fallback extracted ${genericFallbackItems.length} line item(s) from OCR text.`
-            );
-            extractionSteps.push("generic_ocr_table_fallback_started");
-            extractionSteps.push(`generic_fallback_line_items_${genericFallbackItems.length}`);
-
-            return {
-                success: true,
-                method: "generic_ocr_table_fallback",
-                rawText: fallbackText,
-                textLength: fallbackText.length,
-                line_items: genericFallbackItems,
-                warnings,
-                needs_review: false,
-                confidence: 0.78,
-                audit: {
-                    fileName: input.fileName,
-                    filePath: input.filePath,
-                    mimetype: input.mimetype,
-                    pdfTextLength: pdfText.length,
-                    ocrTextLength: ocrText.length,
-                    extraction_steps: [...extractionSteps],
-                },
-            };
-        }
+    // 2. Existing Mistral parsed items
+    if (!finalLineItems.length && mistralLineItems.length > 0) {
+        finalLineItems.push(...mistralLineItems);
+        extractionSteps.push(`mistral_items_accepted_${mistralLineItems.length}`);
     }
 
-    if (!lineItems.length) {
-        warnings.push("No structured line items extracted from text. Calculation may need manual review or Vision extraction.");
+    // 3. Vision items
+    if (!finalLineItems.length && visionLineItems.length > 0) {
+        finalLineItems.push(...visionLineItems);
+        extractionSteps.push(`vision_items_accepted_${visionLineItems.length}`);
     }
 
-    // ── Final Line Item Resolver ───────────────────────────────────────────
-    // Last safety net before returning needs_review. Checks all parser outputs
-    // and re-runs electricity + generic fallbacks on available text.
-    if (!lineItems.length) {
-        const audit = {
-            fileName: input.fileName,
-            filePath: input.filePath,
-            mimetype: input.mimetype,
-            pdfTextLength: pdfText.length,
-            ocrTextLength: ocrText.length,
-            extraction_steps: extractionSteps,
-        };
+    // 4. LLM items
+    if (!finalLineItems.length && llmResult?.line_items?.length > 0) {
+        finalLineItems.push(...llmResult.line_items);
+        extractionSteps.push(`llm_items_accepted_${llmResult.line_items.length}`);
+    }
 
-        const finalResolved = resolveFinalInvoiceLineItems({
-            rawText: "",
-            pdfText: typeof pdfText !== "undefined" ? pdfText : "",
-            ocrText: typeof ocrText !== "undefined" ? ocrText : "",
-            mistralText: typeof mistralText !== "undefined" ? mistralText : "",
-            mistralResult: typeof mistralResult !== "undefined" ? mistralResult : null,
-            ocrResult: null,
-            visionResult: null,
-            llmResult: null,
+    if (finalLineItems.length > 0) {
+        return {
+            success: true,
+            method: finalLineItems.some((i: any) => i.source === "llm_structured_extraction")
+                ? "llm_structured_extraction"
+                : mistralText
+                  ? "mistral_ocr"
+                  : ocrText
+                    ? "ocr_text"
+                    : "pdf_text",
+            rawText: finalRawText,
+            textLength: finalRawText.length,
+            line_items: finalLineItems,
             warnings,
-            audit,
-        });
-
-        if (finalResolved.line_items.length > 0) {
-            return finalResolved as any;
-        }
+            needs_review: false,
+            confidence: Math.max(
+                ...finalLineItems.map((i) => Number(i.confidence || 0.6)),
+                mistralConfidence || 0,
+                visionConfidence || 0
+            ),
+            audit: {
+                ...auditBase,
+                extraction_steps: [...extractionSteps],
+            },
+        };
     }
+
+    // 5. Mandatory final resolver
+    extractionSteps.push("final_line_item_resolver_started");
+    warnings.push("Final line item resolver started.");
+
+    const finalResolved = resolveFinalInvoiceLineItems({
+        rawText: finalRawText,
+        pdfText: pdfText || "",
+        ocrText: ocrText || "",
+        mistralText: mistralText || "",
+        mistralResult: mistralResult || null,
+        ocrResult: ocrResult || null,
+        visionResult: {
+            rawText: visionText,
+            line_items: visionLineItems,
+        },
+        llmResult: llmResult || null,
+        warnings,
+        audit: {
+            ...auditBase,
+            extraction_steps: [...extractionSteps],
+        },
+    });
+
+    extractionSteps.push(`final_resolver_items_${finalResolved.line_items.length}`);
+
+    if (finalResolved.line_items.length > 0) {
+        return {
+            ...finalResolved,
+            success: true,
+            needs_review: false,
+            audit: {
+                ...finalResolved.audit,
+                extraction_steps: [
+                    ...extractionSteps,
+                    ...(finalResolved.audit?.extraction_steps || []).filter(
+                        (step: string) => !extractionSteps.includes(step)
+                    ),
+                ],
+            },
+        } as any;
+    }
+
+    // 6. Direct electricity fallback, in case resolver service was not updated
+    extractionSteps.push("electricity_bill_fallback_started");
+
+    const electricityFallbackItems = extractElectricityBillLineItems(finalRawText);
+
+    extractionSteps.push(`electricity_fallback_line_items_${electricityFallbackItems.length}`);
+
+    if (electricityFallbackItems.length > 0) {
+        warnings.push(
+            `Electricity fallback extracted ${electricityFallbackItems.length} line item(s) from OCR text.`
+        );
+
+        return {
+            success: true,
+            method: "electricity_bill_fallback",
+            rawText: finalRawText,
+            textLength: finalRawText.length,
+            line_items: electricityFallbackItems,
+            warnings,
+            needs_review: false,
+            confidence: 0.86,
+            audit: {
+                ...auditBase,
+                extraction_steps: [...extractionSteps],
+            },
+        };
+    }
+
+    // 7. Direct generic table fallback, in case resolver service was not updated
+    extractionSteps.push("generic_ocr_table_fallback_started");
+
+    const genericFallbackItems = extractGenericInvoiceLineItems(finalRawText);
+
+    extractionSteps.push(`generic_fallback_line_items_${genericFallbackItems.length}`);
+
+    if (genericFallbackItems.length > 0) {
+        warnings.push(
+            `Generic fallback extracted ${genericFallbackItems.length} line item(s) from OCR text.`
+        );
+
+        return {
+            success: true,
+            method: "generic_ocr_table_fallback",
+            rawText: finalRawText,
+            textLength: finalRawText.length,
+            line_items: genericFallbackItems,
+            warnings,
+            needs_review: false,
+            confidence: 0.78,
+            audit: {
+                ...auditBase,
+                extraction_steps: [...extractionSteps],
+            },
+        };
+    }
+
+    // 8. Final failure only after all fallback layers have actually run
+    warnings.push(
+        "No structured line items extracted after PDF text, OCR, Mistral, Vision, LLM, electricity fallback, generic fallback, and final resolver."
+    );
 
     return {
-        success,
-        method,
-        rawText,
-        textLength: rawText.length,
-        line_items: lineItems,
+        success: false,
+        method: "final_line_item_resolver",
+        rawText: finalRawText,
+        textLength: finalRawText.length,
+        line_items: [],
         warnings,
-        needs_review: !lineItems.length,
-        confidence: lineItems.length ? Math.max(...lineItems.map((i) => Number(i.confidence || 0.6)), mistralConfidence || 0, visionConfidence || 0) : 0.35,
+        needs_review: true,
+        confidence: 0.35,
+        error_type: "NO_INVOICE_ITEMS_EXTRACTED",
+        message: "No invoice items extracted after all extraction and fallback layers.",
         audit: {
-            fileName: input.fileName,
-            filePath: input.filePath,
-            mimetype: input.mimetype,
-            pdfTextLength: pdfText.length,
-            ocrTextLength: ocrText.length,
-            extraction_steps: extractionSteps,
+            ...auditBase,
+            extraction_steps: [...extractionSteps],
         },
     };
 }
