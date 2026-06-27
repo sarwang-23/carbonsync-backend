@@ -71,7 +71,12 @@ function detectCountryAndCurrency(text: string) {
             lower.includes("lucknow") ||
             lower.includes("indian rupees")
             ? "INR"
-            : lower.includes("rm") || lower.includes("myr") || lower.includes("malaysia")
+            : lower.includes("rm") ||
+                lower.includes("myr") ||
+                lower.includes("malaysia") ||
+                lower.includes("bil elektrik") ||
+                lower.includes("tenaga nasional") ||
+                lower.includes("tnb")
                 ? "MYR"
                 : null;
 
@@ -82,20 +87,47 @@ function detectCountryAndCurrency(text: string) {
 }
 
 function extractTnbKwhFromText(rawText: string): number {
-    const clean = String(rawText || "").replace(/,/g, "").replace(/\s+/g, " ");
+    const original = String(rawText || "");
+    const clean = original.replace(/,/g, "").replace(/\s+/g, " ");
 
-    const patterns = [
-        /(?:kegunaan|penggunaan|jumlah\s+penggunaan|usage|consumption)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:kwh)?/i,
+    const candidates: number[] = [];
+
+    function addCandidate(value: any) {
+        const num = toNumber(value);
+        if (num > 0 && num < 100000) candidates.push(num);
+    }
+
+    // Direct common patterns.
+    const directPatterns = [
+        /(?:jumlah\s+penggunaan|jumlah\s+kegunaan|total\s+usage|total\s+consumption)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:kwh)?/i,
+        /(?:kegunaan|penggunaan|usage|consumption)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:kwh)?/i,
         /(\d+(?:\.\d+)?)\s*kwh/i,
     ];
 
-    for (const pattern of patterns) {
+    for (const pattern of directPatterns) {
         const match = clean.match(pattern);
-        if (match?.[1]) {
-            const value = toNumber(match[1]);
-            if (value > 0 && value < 100000) return value;
-        }
+        if (match?.[1]) addCandidate(match[1]);
     }
+
+    // Mistral table pattern from TNB bills:
+    // | Jumlah | 474 | | 166.78 |
+    // | Kegunaan kWh | kWh | 300 | 174 | 474 |
+    const tablePatterns = [
+        /\|\s*\*\*Jumlah\*\*\s*\|\s*\*\*(\d+(?:\.\d+)?)\*\*/i,
+        /\|\s*Jumlah\s*\|\s*(\d+(?:\.\d+)?)\s*\|/i,
+        /Kegunaan\s*kWh\s*\|\s*kWh\s*\|\s*\d+(?:\.\d+)?\s*\|\s*\d+(?:\.\d+)?\s*\|\s*(\d+(?:\.\d+)?)/i,
+        /Kegunaan\s*\|\s*Unit\s*[\s\S]{0,250}?\|\s*\d+\s*\|\s*\d+(?:\.\d+)?\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*kWh/i,
+    ];
+
+    for (const pattern of tablePatterns) {
+        const match = original.match(pattern) || clean.match(pattern);
+        if (match?.[1]) addCandidate(match[1]);
+    }
+
+    // Meter reading fallback:
+    // | 3152072314 | 2192 | 2666 | 474 | kWh |
+    const meterRow = clean.match(/\|\s*\d{6,}\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*kWh/i);
+    if (meterRow?.[3]) addCandidate(meterRow[3]);
 
     const previousPattern = /(?:dahulu|previous|previous_reading|previous reading)\s*[:\-]?\s*(\d+(?:\.\d+)?)/i;
     const currentPattern = /(?:semasa|current|current_reading|current reading)\s*[:\-]?\s*(\d+(?:\.\d+)?)/i;
@@ -103,7 +135,13 @@ function extractTnbKwhFromText(rawText: string): number {
     const previous = toNumber(clean.match(previousPattern)?.[1]);
     const current = toNumber(clean.match(currentPattern)?.[1]);
 
-    if (previous > 0 && current > previous) return current - previous;
+    if (previous > 0 && current > previous) addCandidate(current - previous);
+
+    // Prefer a plausible TNB usage value. In tariff rows, lower values like 200/300 can appear,
+    // so choose the highest candidate when multiple table values are detected.
+    if (candidates.length > 0) {
+        return Math.max(...candidates);
+    }
 
     return 0;
 }
@@ -274,24 +312,6 @@ function parseSimpleMaterialLineItem(text: string) {
     ];
 }
 
-
-function dedupeLineItems(items: any[]) {
-    const seen = new Set<string>();
-
-    return items.filter((item) => {
-        const key = [
-            String(item.item_name || "").toLowerCase().trim(),
-            Number(item.quantity || 0),
-            String(item.unit || "").toLowerCase().trim(),
-            Number(item.amount || 0),
-        ].join("|");
-
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
-}
-
 function parseStructuredFromMistralText(text: string) {
     const lower = safeLower(text);
     const { country, currency } = detectCountryAndCurrency(text);
@@ -333,10 +353,10 @@ function parseStructuredFromMistralText(text: string) {
         };
     }
 
-    const lineItems = dedupeLineItems([
+    const lineItems = [
         ...parseMarkdownTableLineItems(text),
         ...parseFlattenedTableLineItems(text),
-    ]);
+    ];
 
     if (!lineItems.length) {
         lineItems.push(...parseSimpleMaterialLineItem(text));
