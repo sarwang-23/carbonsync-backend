@@ -3,11 +3,10 @@ import db from "../db.js";
 export type EmissionFactorMapping = {
   id: string;
 
-  // Actual DB columns used by the current query
+  // Current DB columns used safely by the query
   pattern: string;
   category: string | null;
   material: string | null;
-  country: string | null;
   region: string | null;
   unit_type: string | null;
   calculation_basis: string | null;
@@ -16,7 +15,8 @@ export type EmissionFactorMapping = {
   priority: number | null;
   notes: string | null;
 
-  // Optional DB columns: these may or may not exist in your Supabase table
+  // These columns may not exist in your current Supabase table, so we do not query them directly
+  country?: string | null;
   climatiq_activity_id?: string | null;
   climatiq_region?: string | null;
   climatiq_year?: number | null;
@@ -48,10 +48,6 @@ function mapUnitTypeToParameterName(unitType?: string | null): string | null {
   }
 
   return value || null;
-}
-
-function normalizeCountry(country?: string | null): string {
-  return String(country || "Malaysia").trim() || "Malaysia";
 }
 
 function buildManualActivityId(row: any): string | null {
@@ -87,7 +83,6 @@ export async function findBestMapping(
   region?: string
 ): Promise<EmissionFactorMapping | null> {
   const cleanItemName = String(itemName || "").trim();
-  const cleanCountry = normalizeCountry(country);
   const cleanRegion = region ? String(region).trim() : null;
 
   if (!cleanItemName) {
@@ -96,28 +91,30 @@ export async function findBestMapping(
 
   /*
     IMPORTANT:
-    Do not reference ef.climatiq_activity_id, ef.climatiq_region, ef.climatiq_year,
-    or ef.active directly here because your current Supabase table may not have
-    those columns. SELECT ef.* is safe, but selecting a missing column by name
-    causes 500 errors like:
-    column ef.climatiq_activity_id does not exist
+    Your current Supabase table is missing these columns:
+    - country
+    - active
+    - climatiq_activity_id
+
+    So this query does NOT reference them directly.
+    It only uses columns that are currently safe:
+    pattern, region, priority, and ef.*
   */
   const result = await db.query(
     `
     SELECT
       ef.*
     FROM public.emission_factor_mappings ef
-    WHERE ef.country = $1
-      AND $2 ~* ef.pattern
+    WHERE $1 ~* ef.pattern
       AND (
-        $3::text IS NULL
-        OR ef.region = $3
+        $2::text IS NULL
+        OR ef.region = $2
         OR ef.region = 'Malaysia'
         OR ef.region IS NULL
       )
     ORDER BY
       CASE
-        WHEN ef.region = $3 THEN 1
+        WHEN ef.region = $2 THEN 1
         WHEN ef.region = 'Malaysia' THEN 2
         WHEN ef.region IS NULL THEN 3
         ELSE 4
@@ -125,7 +122,7 @@ export async function findBestMapping(
       ef.priority DESC NULLS LAST
     LIMIT 1;
     `,
-    [cleanCountry, cleanItemName, cleanRegion]
+    [cleanItemName, cleanRegion]
   );
 
   const row = result.rows[0];
@@ -138,17 +135,16 @@ export async function findBestMapping(
     row.climatiq_region ||
     row.region ||
     cleanRegion ||
-    (cleanCountry.toLowerCase() === "malaysia" ? "MY" : cleanCountry);
+    (String(country || "").toLowerCase() === "malaysia" ? "MY" : country);
 
   return {
     ...row,
 
-    // These fields are required by src/app.ts, so we create them safely here.
+    // compatibility for src/app.ts
+    country: row.country || country || "Malaysia",
     activity_id: row.climatiq_activity_id || buildManualActivityId(row),
     requested_region: requestedRegion,
     parameter_name: mapUnitTypeToParameterName(row.unit_type),
-
-    // Required by old Climatiq body logic.
     data_version: row.data_version || "^6",
   };
 }
@@ -174,3 +170,4 @@ export function calculateEmission(
     source: mapping.notes,
   };
 }
+
