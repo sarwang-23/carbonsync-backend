@@ -16,6 +16,7 @@ import {
     estimateWithClimatiq,
     selectLatestEmberElectricityFactor,
     buildActivityParameters,
+    isLikelyCompatibleFactor,
 } from "./climatiq.service.js";
 import {
     normalizeLineItem,
@@ -119,6 +120,209 @@ function safeLower(value: any) {
 function roundNumber(value: number, decimals = 6) {
     return Number(Number(value || 0).toFixed(decimals));
 }
+
+
+function includesAny(text: string, keywords: string[]) {
+    const lower = safeLower(text);
+    return keywords.some((keyword) => lower.includes(keyword));
+}
+
+function getMaterialProfile(itemName: string, description = "") {
+    const text = safeLower(`${itemName} ${description}`);
+
+    if (includesAny(text, ["flush door", "pinewood", "plywood", "veneer", "laminate", "laminates", "wood", "timber", "door"])) {
+        const thicknessMatch = text.match(/(\d+(?:\.\d+)?)\s*mm/);
+        const thicknessMm = thicknessMatch?.[1] ? Number(thicknessMatch[1]) : 32;
+
+        let densityKgM3 = 550;
+        let material = "wood product";
+
+        if (text.includes("pinewood")) {
+            densityKgM3 = 500;
+            material = "pine wood product";
+        } else if (text.includes("plywood")) {
+            densityKgM3 = 600;
+            material = "plywood product";
+        } else if (text.includes("flush door") || text.includes("door")) {
+            densityKgM3 = 550;
+            material = "wooden flush door";
+        } else if (text.includes("timber") || text.includes("wood")) {
+            densityKgM3 = 500;
+            material = "timber wood product";
+        }
+
+        return {
+            material,
+            thickness_mm: thicknessMm,
+            thickness_m: thicknessMm / 1000,
+            density_kg_m3: densityKgM3,
+        };
+    }
+
+    return null;
+}
+
+function convertAreaMaterialToWeightKg(item: any, normalizedItemData: any) {
+    const itemName = String(normalizedItemData?.item_name || item?.item_name || "");
+    const description = String(normalizedItemData?.description || item?.description || "");
+    const unit = safeLower(normalizedItemData?.unit || item?.unit);
+    const quantity = Number(normalizedItemData?.quantity || item?.quantity || 0);
+
+    if (unit !== "m2" || !quantity || quantity <= 0) return null;
+
+    const profile = getMaterialProfile(itemName, description);
+    if (!profile) return null;
+
+    const weightKg = quantity * profile.thickness_m * profile.density_kg_m3;
+
+    return {
+        value: roundNumber(weightKg),
+        unit: "kg",
+        weight: roundNumber(weightKg),
+        weight_unit: "kg",
+        conversion_method: "area_to_weight_using_thickness_and_density",
+        original_area_m2: quantity,
+        ...profile,
+    };
+}
+
+function getSpendParameters(item: any) {
+    const amount = Number(item?.amount || 0);
+    const currency = String(item?.currency || item?.parameters?.currency || "").toUpperCase();
+
+    if (amount > 0 && currency) {
+        return {
+            money: amount,
+            money_unit: currency,
+        };
+    }
+
+    return null;
+}
+
+function buildClimatiqParameterCandidates(category: DetectedCategory, normalizedItemData: any, converted: any, item: any) {
+    const candidates: Array<{ parameters: Record<string, any>; converted: any; method: string }> = [];
+
+    const directParameters = buildActivityParameters(category, normalizedItemData, converted);
+    candidates.push({
+        parameters: directParameters,
+        converted,
+        method: "direct_normalized_parameters",
+    });
+
+    if (category === "purchased_goods") {
+        const areaToWeight = convertAreaMaterialToWeightKg(item, normalizedItemData);
+        if (areaToWeight) {
+            candidates.unshift({
+                parameters: {
+                    weight: areaToWeight.weight,
+                    weight_unit: "kg",
+                },
+                converted: areaToWeight,
+                method: "area_to_weight_material_conversion",
+            });
+        }
+
+        const spend = getSpendParameters(normalizedItemData);
+        if (spend) {
+            candidates.push({
+                parameters: spend,
+                converted: {
+                    value: spend.money,
+                    unit: spend.money_unit,
+                    conversion_method: "spend_based_parameters",
+                },
+                method: "spend_based_parameters",
+            });
+        }
+    }
+
+    return candidates;
+}
+
+function getClimatiqErrorDetails(error: any) {
+    return {
+        status: error?.response?.status,
+        data: error?.response?.data,
+        message: error?.message || String(error),
+    };
+}
+
+async function estimateWithCompatibleCandidates(input: {
+    candidates: any[];
+    best: any;
+    category: DetectedCategory;
+    normalizedItemData: any;
+    normalizedInputItem: any;
+    item: any;
+}) {
+    const orderedFactors = [
+        input.best.selected,
+        ...(input.best.alternatives || []),
+    ].filter(Boolean);
+
+    const parameterCandidates = buildClimatiqParameterCandidates(
+        input.category,
+        input.normalizedItemData,
+        input.category === "electricity_bill"
+            ? { value: Number(input.normalizedItemData.quantity || 1), unit: "kWh" }
+            : convertQuantity(Number(input.normalizedItemData.quantity || 1), input.normalizedItemData.unit || "kg"),
+        input.item
+    );
+
+    const attempts: any[] = [];
+
+    for (const factor of orderedFactors) {
+        for (const parameterCandidate of parameterCandidates) {
+            if (!isLikelyCompatibleFactor(factor, parameterCandidate.parameters)) {
+                attempts.push({
+                    activity_id: factor.activity_id,
+                    unit: factor.unit,
+                    method: parameterCandidate.method,
+                    skipped: true,
+                    reason: "Factor metadata not likely compatible with parameter type.",
+                    parameters: parameterCandidate.parameters,
+                });
+                continue;
+            }
+
+            try {
+                const estimateResponse = await estimateWithClimatiq({
+                    selectedEF: factor,
+                    parameters: parameterCandidate.parameters,
+                });
+
+                return {
+                    estimateResponse,
+                    selectedFactor: factor,
+                    converted: parameterCandidate.converted,
+                    parameters: parameterCandidate.parameters,
+                    parameter_method: parameterCandidate.method,
+                    attempts,
+                };
+            } catch (error: any) {
+                attempts.push({
+                    activity_id: factor.activity_id,
+                    name: factor.name,
+                    unit: factor.unit,
+                    method: parameterCandidate.method,
+                    parameters: parameterCandidate.parameters,
+                    error: getClimatiqErrorDetails(error),
+                });
+            }
+        }
+    }
+
+    return {
+        estimateResponse: null,
+        selectedFactor: null,
+        converted: null,
+        parameters: null,
+        parameter_method: null,
+        attempts,
+    };
+}
+
 
 function estimateGasBreakdown(co2e: number, category: string) {
     const name = safeLower(category);
@@ -347,7 +551,8 @@ export function buildClimatiqSearchQuery(category: DetectedCategory, itemName: s
         if (desc.includes("steel")) return "steel production";
         if (desc.includes("aluminium") || desc.includes("aluminum")) return "aluminium production";
         if (desc.includes("cement")) return "cement production";
-        if (desc.includes("timber") || desc.includes("wood") || desc.includes("plywood")) return "wood timber production";
+        if (desc.includes("flush door") || desc.includes("pinewood") || desc.includes("door")) return "wood product production";
+        if (desc.includes("timber") || desc.includes("wood") || desc.includes("plywood") || desc.includes("veneer") || desc.includes("laminate")) return "wood timber plywood production";
         if (desc.includes("textile") || desc.includes("fabric")) return "textile production";
         if (desc.includes("plastic")) return "plastic production";
         if (desc.includes("paper")) return "paper production";
@@ -412,7 +617,7 @@ function scoreEmissionFactor(result: any, input: { region: SupportedCountry; cat
     if (input.category === "purchased_goods") {
         if (activity.includes("production")) score += 30;
         if (activity.includes("market for")) score += 15;
-        for (const k of ["steel", "aluminium", "aluminum", "cement", "timber", "wood", "plywood", "textile", "fabric", "plastic", "paper"]) {
+        for (const k of ["steel", "aluminium", "aluminum", "cement", "timber", "wood", "pinewood", "plywood", "veneer", "laminate", "flush door", "door", "textile", "fabric", "plastic", "paper"]) {
             if (item.includes(k) && activity.includes(k)) score += 35;
         }
         if (activity.includes("transport")) score -= 30;
@@ -733,23 +938,51 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
         };
     }
 
-    const converted =
-        category === "electricity_bill"
-            ? { value: Number(normalizedItemData.quantity || 1), unit: "kWh" }
-            : convertQuantity(Number(normalizedItemData.quantity || 1), normalizedItemData.unit || "kg");
-
-    const parameters = buildActivityParameters(category, normalizedItemData, converted);
-
-    const estimateResponse = await estimateWithClimatiq({
-        selectedEF: best.selected,
-        parameters,
+    const estimateAttempt = await estimateWithCompatibleCandidates({
+        candidates,
+        best,
+        category,
+        normalizedItemData,
+        normalizedInputItem,
+        item,
     });
+
+    if (!estimateAttempt.estimateResponse || !estimateAttempt.selectedFactor) {
+        return {
+            success: false,
+            needs_review: true,
+            error_type: "CLIMATIQ_ESTIMATE_FAILED",
+            message: "Climatiq Estimate API failed for all compatible factor/parameter combinations.",
+            item_name: itemName,
+            region,
+            country: region,
+            category,
+            search_query: query,
+            selected_emission_factor: buildSelectedEmissionFactorSummary(best.selected),
+            alternatives: best.alternatives?.map((a: any) => ({
+                id: a.id,
+                activity_id: a.activity_id,
+                name: a.name,
+                source: a.source,
+                year: a.year,
+                region: a.region,
+                unit: a.unit,
+                mapping_score: a.mapping_score,
+            })),
+            estimate_attempts: estimateAttempt.attempts,
+            normalized_item: normalizedItemData,
+        };
+    }
+
+    const estimateResponse = estimateAttempt.estimateResponse;
+    const converted = estimateAttempt.converted;
+    const parameters = estimateAttempt.parameters;
     const climatiqBody = estimateResponse.climatiqBody;
     const data: any = estimateResponse.data || {};
     const gases = data.constituent_gases || {};
     const co2e = Number(data.co2e || gases.co2e_total || 0);
     const gasBreakdown = estimateGasBreakdown(co2e, category);
-    const factor = data.emission_factor || best.selected;
+    const factor = data.emission_factor || estimateAttempt.selectedFactor;
 
     // Build a structured mapping object from the best selector result
     const mapping = {
@@ -763,7 +996,7 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
     };
 
     // Step 2: Build result warnings
-    const selectedEF = best.selected;
+    const selectedEF = estimateAttempt.selectedFactor || best.selected;
     const resultWarnings = buildResultWarnings({
         country: region,
         category,
@@ -815,6 +1048,8 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
         search_query: query,
         converted,
         climatiqBody,
+        climatiq_parameter_method: estimateAttempt.parameter_method,
+        estimate_attempts: estimateAttempt.attempts,
         selected_emission_factor: buildSelectedEmissionFactorSummary(selectedEF),
         alternatives: best.alternatives?.map((a: any) => ({
             id: a.id,

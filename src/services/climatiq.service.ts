@@ -123,25 +123,35 @@ export async function estimateWithClimatiq(input: ClimatiqEstimateInput) {
         parameters: payload.parameters,
     });
 
-    const response = await axios.post(ESTIMATE_URL, payload, {
-        headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-        },
-    });
+    try {
+        const response = await axios.post(ESTIMATE_URL, payload, {
+            headers: {
+                Authorization: `Bearer ${apiKey}`,
+                "Content-Type": "application/json",
+            },
+        });
 
-    console.log("CLIMATIQ_ESTIMATE_SUCCESS", {
-        co2e: response.data?.co2e,
-        co2e_unit: response.data?.co2e_unit,
-        source: response.data?.emission_factor?.source,
-        year: response.data?.emission_factor?.year,
-        region: response.data?.emission_factor?.region,
-    });
+        console.log("CLIMATIQ_ESTIMATE_SUCCESS", {
+            co2e: response.data?.co2e,
+            co2e_unit: response.data?.co2e_unit,
+            source: response.data?.emission_factor?.source,
+            year: response.data?.emission_factor?.year,
+            region: response.data?.emission_factor?.region,
+        });
 
-    return {
-        climatiqBody: payload,
-        data: response.data,
-    };
+        return {
+            climatiqBody: payload,
+            data: response.data,
+        };
+    } catch (error: any) {
+        console.warn("CLIMATIQ_ESTIMATE_FAILED", {
+            status: error?.response?.status,
+            response: error?.response?.data,
+            activity_id: payload.emission_factor.activity_id,
+            parameters: payload.parameters,
+        });
+        throw error;
+    }
 }
 
 /**
@@ -165,10 +175,48 @@ export function selectLatestEmberElectricityFactor(results: any[], region: strin
 }
 
 /**
+ * Checks if Climatiq factor metadata looks compatible with a parameter style.
+ * This is a best-effort guard before hitting Estimate API.
+ */
+export function isLikelyCompatibleFactor(selectedEF: any, parameters: Record<string, any>) {
+    const unit = safeLower(selectedEF?.unit);
+    const activity = safeLower(`${selectedEF?.activity_id || ""} ${selectedEF?.name || ""} ${selectedEF?.description || ""}`);
+
+    if (parameters.energy !== undefined) {
+        return unit.includes("kwh") || activity.includes("electricity");
+    }
+
+    if (parameters.weight !== undefined) {
+        return (
+            unit.includes("kg") ||
+            unit.includes("tonne") ||
+            unit.includes("t") ||
+            activity.includes("production") ||
+            activity.includes("material")
+        );
+    }
+
+    if (parameters.volume !== undefined) {
+        return unit.includes("l") || unit.includes("m3") || activity.includes("water") || activity.includes("fuel");
+    }
+
+    if (parameters.money !== undefined) {
+        return unit.includes("usd") || unit.includes("eur") || unit.includes("gbp") || unit.includes("money");
+    }
+
+    if (parameters.number !== undefined) {
+        return unit.includes("number") || unit.includes("unit") || activity.includes("hotel");
+    }
+
+    return true;
+}
+
+/**
  * Converts normalized item/category into Climatiq parameters.
+ * Do not send unsupported internal units such as m2 directly to Climatiq for purchased goods.
  */
 export function buildActivityParameters(category: string, item: any, converted?: any) {
-    const unit = safeLower(item?.unit);
+    const unit = safeLower(item?.unit || converted?.unit);
 
     if (category === "electricity_bill") {
         return {
@@ -179,21 +227,57 @@ export function buildActivityParameters(category: string, item: any, converted?:
 
     if (category === "fuel") {
         return {
-            volume: Number(item?.quantity || converted?.value || 0),
+            volume: Number(converted?.value || item?.quantity || 0),
             volume_unit: unit.includes("lit") || unit === "l" || unit === "ltr" ? "l" : item?.unit || "l",
         };
     }
 
     if (category === "transport_logistics") {
         return {
-            weight: Number(item?.weight || item?.parameters?.weight || item?.quantity || 1),
-            weight_unit: item?.weight_unit || item?.parameters?.weight_unit || "t",
+            weight: Number(item?.weight || item?.parameters?.weight || converted?.weight || item?.quantity || 1),
+            weight_unit: item?.weight_unit || item?.parameters?.weight_unit || converted?.weight_unit || "t",
             distance: Number(item?.distance || item?.parameters?.distance || 1),
             distance_unit: item?.distance_unit || item?.parameters?.distance_unit || "km",
         };
     }
 
     if (category === "purchased_goods" || category === "waste") {
+        if (converted?.unit === "kg" || converted?.weight_unit === "kg") {
+            return {
+                weight: Number(converted?.value || converted?.weight || item?.quantity || 0),
+                weight_unit: "kg",
+            };
+        }
+
+        if (converted?.unit === "t" || converted?.unit === "tonne" || converted?.weight_unit === "t") {
+            return {
+                weight: Number(converted?.value || converted?.weight || item?.quantity || 0),
+                weight_unit: "t",
+            };
+        }
+
+        if (unit === "kg") {
+            return {
+                weight: Number(item?.quantity || 0),
+                weight_unit: "kg",
+            };
+        }
+
+        if (unit === "t" || unit === "tonne" || unit === "mt") {
+            return {
+                weight: Number(item?.quantity || 0),
+                weight_unit: "t",
+            };
+        }
+
+        // If only spend is available, let Climatiq spend-based factor work when compatible.
+        if (item?.amount && item?.currency) {
+            return {
+                money: Number(item.amount),
+                money_unit: item.currency,
+            };
+        }
+
         return {
             weight: Number(converted?.value || item?.quantity || 0),
             weight_unit: converted?.unit || "kg",
@@ -202,7 +286,7 @@ export function buildActivityParameters(category: string, item: any, converted?:
 
     if (category === "water") {
         return {
-            volume: Number(item?.quantity || converted?.value || 0),
+            volume: Number(converted?.value || item?.quantity || 0),
             volume_unit: unit === "m3" ? "m3" : item?.unit || "m3",
         };
     }
@@ -215,4 +299,3 @@ export function buildActivityParameters(category: string, item: any, converted?:
 
     throw new Error(`Unsupported Climatiq activity parameter category: ${category}`);
 }
-
