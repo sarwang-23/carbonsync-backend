@@ -8,6 +8,7 @@ import {
     shouldBlockScannedPdfInFreeMode,
     buildScannedPdfFreeModeExtractionResult,
 } from "./scannedPdfGuard.service.js";
+import { extractStructuredInvoiceWithLLM } from "./llmStructuredExtraction.service.js";
 
 export type ExtractionMethod =
     | "pdf_text"
@@ -15,6 +16,7 @@ export type ExtractionMethod =
     | "vision_placeholder"
     | "mistral_ocr"
     | "combined_pdf_ocr"
+    | "llm_structured_extraction"
     | "failed"
     | "scanned_pdf_blocked_free_mode";
 
@@ -660,12 +662,36 @@ export async function extractInvoiceData(input: {
         lineItems.push(...visionLineItems);
     }
 
+    // ── LLM Structured Extraction Fallback ──────────────────────────────────
+    // Runs ONLY when all manual parsers and vision have returned 0 line items.
+    // Sends raw text to Gemini and asks for structured JSON.
+    if (!lineItems.length && rawText.length >= 100) {
+        try {
+            extractionSteps.push("llm_structured_extraction_started");
+            const llmResult = await extractStructuredInvoiceWithLLM(rawText, {
+                fileName: input.fileName,
+                mimetype: input.mimetype,
+            });
+            warnings.push(...llmResult.warnings);
+            if (llmResult.success && llmResult.line_items.length) {
+                lineItems.push(...llmResult.line_items);
+                extractionSteps.push(`llm_structured_items_${llmResult.line_items.length}`);
+            } else {
+                extractionSteps.push("llm_structured_extraction_no_items");
+            }
+        } catch (error: any) {
+            warnings.push(`LLM structured extraction failed: ${error?.message || String(error)}`);
+            extractionSteps.push("llm_structured_extraction_failed");
+        }
+    }
+
     let method: ExtractionMethod = "failed";
     if (pdfText.length >= 300 && ocrText.length > 0) method = "combined_pdf_ocr";
     else if (pdfText.length >= 300) method = "pdf_text";
     else if (ocrText.length >= 300) method = "ocr_text";
     else if (mistralText.length >= 300) method = "mistral_ocr";
     else if (visionText.length >= 300) method = "vision_placeholder";
+    else if (lineItems.some((i: any) => i.source === "llm_structured_extraction")) method = "llm_structured_extraction";
 
     const success = rawText.length > 0 || lineItems.length > 0;
 
