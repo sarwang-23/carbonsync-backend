@@ -10,6 +10,7 @@ import {
 } from "./scannedPdfGuard.service.js";
 import { extractStructuredInvoiceWithLLM } from "./llmStructuredExtraction.service.js";
 import { extractStructuredInvoiceWithMistral } from "./mistralStructuredExtraction.service.js";
+import { extractGenericInvoiceLineItems } from "./genericInvoiceLineItemExtractor.service.js";
 
 export type ExtractionMethod =
     | "pdf_text"
@@ -19,6 +20,7 @@ export type ExtractionMethod =
     | "mistral_ocr_llm"
     | "combined_pdf_ocr"
     | "llm_structured_extraction"
+    | "generic_ocr_table_fallback"
     | "failed"
     | "scanned_pdf_blocked_free_mode";
 
@@ -808,6 +810,40 @@ export async function extractInvoiceData(input: {
     else if (lineItems.some((i: any) => i.source === "llm_structured_extraction")) method = "llm_structured_extraction";
 
     const success = rawText.length > 0 || lineItems.length > 0;
+
+    // ── Generic OCR Table Fallback ─────────────────────────────────────
+    // Last resort before needs_review. Scans raw text for pipe-table rows.
+    if (!lineItems.length) {
+        const fallbackText = mistralText || ocrText || pdfText || rawText || "";
+        const genericFallbackItems = extractGenericInvoiceLineItems(fallbackText);
+
+        if (genericFallbackItems.length > 0) {
+            warnings.push(
+                `Generic fallback extracted ${genericFallbackItems.length} line item(s) from OCR text.`
+            );
+            extractionSteps.push("generic_ocr_table_fallback_started");
+            extractionSteps.push(`generic_fallback_line_items_${genericFallbackItems.length}`);
+
+            return {
+                success: true,
+                method: "generic_ocr_table_fallback",
+                rawText: fallbackText,
+                textLength: fallbackText.length,
+                line_items: genericFallbackItems,
+                warnings,
+                needs_review: false,
+                confidence: 0.78,
+                audit: {
+                    fileName: input.fileName,
+                    filePath: input.filePath,
+                    mimetype: input.mimetype,
+                    pdfTextLength: pdfText.length,
+                    ocrTextLength: ocrText.length,
+                    extraction_steps: [...extractionSteps],
+                },
+            };
+        }
+    }
 
     if (!lineItems.length) {
         warnings.push("No structured line items extracted from text. Calculation may need manual review or Vision extraction.");
