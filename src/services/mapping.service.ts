@@ -1,25 +1,11 @@
 import db from "../db.js";
 
 export type EmissionFactorMapping = {
-  id: string;
+  id?: string;
 
-  // Current DB columns used safely by the query
-  pattern: string;
-  category: string | null;
-  material: string | null;
-  region: string | null;
-  unit_type: string | null;
-  calculation_basis: string | null;
-  fallback_factor_kgco2e_per_unit: string | number | null;
-  fallback_unit: string | null;
-  priority: number | null;
-  notes: string | null;
-
-  // These columns may not exist in your current Supabase table, so we do not query them directly
-  country?: string | null;
-  climatiq_activity_id?: string | null;
-  climatiq_region?: string | null;
-  climatiq_year?: number | null;
+  // Dynamic DB fields. Your Supabase table may have different columns,
+  // so keep this type flexible.
+  [key: string]: any;
 
   // Compatibility fields used by src/app.ts
   activity_id: string | null;
@@ -28,53 +14,179 @@ export type EmissionFactorMapping = {
   data_version: string;
 };
 
-function mapUnitTypeToParameterName(unitType?: string | null): string | null {
-  const value = String(unitType || "").toLowerCase().trim();
+const TABLE_SCHEMA = "public";
+const TABLE_NAME = "emission_factor_mappings";
 
-  if (["energy", "electricity", "kwh", "kw h"].includes(value)) {
-    return "energy";
-  }
+let cachedColumns: Set<string> | null = null;
 
-  if (["mass", "weight", "kg", "kgs", "tonne", "tonnes", "ton", "mt"].includes(value)) {
-    return "weight";
-  }
+async function getMappingColumns(): Promise<Set<string>> {
+  if (cachedColumns) return cachedColumns;
 
-  if (["volume", "litre", "liter", "litres", "liters", "l", "m3", "cubic_meter", "cubic metre"].includes(value)) {
-    return "volume";
-  }
+  const result = await db.query(
+    `
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = $1
+      AND table_name = $2
+    `,
+    [TABLE_SCHEMA, TABLE_NAME]
+  );
 
-  if (["distance", "km", "kilometre", "kilometer"].includes(value)) {
-    return "distance";
-  }
+  cachedColumns = new Set(result.rows.map((row: any) => String(row.column_name)));
+  return cachedColumns;
+}
 
-  return value || null;
+function hasColumn(columns: Set<string>, columnName: string): boolean {
+  return columns.has(columnName);
+}
+
+function quoteIdent(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
+function mapUnitTypeToParameterName(value?: string | null): string | null {
+  const unit = String(value || "").toLowerCase().trim();
+
+  if (["energy", "electricity", "kwh", "kw h"].includes(unit)) return "energy";
+  if (["mass", "weight", "kg", "kgs", "tonne", "tonnes", "ton", "mt"].includes(unit)) return "weight";
+  if (["volume", "litre", "liter", "litres", "liters", "l", "m3", "cubic_meter", "cubic metre"].includes(unit)) return "volume";
+  if (["distance", "km", "kilometre", "kilometer"].includes(unit)) return "distance";
+
+  return unit || null;
 }
 
 function buildManualActivityId(row: any): string | null {
-  const material = String(row?.material || "").toLowerCase().trim();
-  const category = String(row?.category || "").toLowerCase().trim();
+  const text = [
+    row?.pattern,
+    row?.item_keywords,
+    row?.keyword,
+    row?.keywords,
+    row?.category,
+    row?.material,
+    row?.calculation_basis,
+    row?.notes,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 
-  if (material.includes("electricity") || category.includes("electricity")) {
+  if (text.includes("electricity") || text.includes("kwh") || text.includes("tnb")) {
     return "manual-malaysia-electricity";
   }
 
-  if (material.includes("diesel")) {
-    return "manual-malaysia-diesel";
-  }
-
-  if (material.includes("petrol") || material.includes("gasoline")) {
-    return "manual-malaysia-petrol";
-  }
-
-  if (material.includes("natural")) {
-    return "manual-malaysia-natural-gas";
-  }
-
-  if (material.includes("lpg")) {
-    return "manual-malaysia-lpg";
-  }
+  if (text.includes("diesel")) return "manual-malaysia-diesel";
+  if (text.includes("petrol") || text.includes("gasoline")) return "manual-malaysia-petrol";
+  if (text.includes("natural gas")) return "manual-malaysia-natural-gas";
+  if (text.includes("lpg")) return "manual-malaysia-lpg";
 
   return null;
+}
+
+function getFactor(row: any): number {
+  const value =
+    row?.fallback_factor_kgco2e_per_unit ??
+    row?.emission_factor ??
+    row?.factor ??
+    row?.factor_value ??
+    row?.co2e_factor ??
+    0;
+
+  return Number(value || 0);
+}
+
+function getFallbackUnit(row: any): string | null {
+  return (
+    row?.fallback_unit ||
+    row?.ef_unit ||
+    row?.factor_unit ||
+    row?.unit ||
+    null
+  );
+}
+
+function getRegion(row: any, defaultRegion?: string | null): string | null {
+  return (
+    row?.climatiq_region ||
+    row?.requested_region ||
+    row?.region ||
+    defaultRegion ||
+    null
+  );
+}
+
+function getUnitType(row: any): string | null {
+  return (
+    row?.unit_type ||
+    row?.parameter_name ||
+    row?.input_unit ||
+    row?.unit ||
+    null
+  );
+}
+
+function rowText(row: any): string {
+  return [
+    row?.pattern,
+    row?.item_keywords,
+    row?.keyword,
+    row?.keywords,
+    row?.category,
+    row?.material,
+    row?.calculation_basis,
+    row?.notes,
+    row?.activity,
+    row?.sector,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function keywordMatchScore(itemName: string, row: any): number {
+  const item = String(itemName || "").toLowerCase();
+  const text = rowText(row);
+
+  if (!text) return 0;
+
+  let score = 0;
+
+  const strongSignals = [
+    "electricity",
+    "kwh",
+    "tnb",
+    "tenaga",
+    "diesel",
+    "petrol",
+    "gasoline",
+    "natural gas",
+    "lpg",
+    "campus",
+    "university",
+    "bank",
+    "warehouse",
+    "export",
+    "freight",
+  ];
+
+  for (const signal of strongSignals) {
+    if (item.includes(signal) && text.includes(signal)) {
+      score += 20;
+    }
+  }
+
+  const tokens = item
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(" ")
+    .filter((token) => token.length >= 3 && !["the", "and", "for", "with"].includes(token));
+
+  for (const token of tokens) {
+    if (text.includes(token)) score += 3;
+  }
+
+  const priority = Number(row?.priority || 0);
+  score += Math.min(priority, 100) / 100;
+
+  return score;
 }
 
 export async function findBestMapping(
@@ -83,69 +195,105 @@ export async function findBestMapping(
   region?: string
 ): Promise<EmissionFactorMapping | null> {
   const cleanItemName = String(itemName || "").trim();
+  const cleanCountry = String(country || "Malaysia").trim();
   const cleanRegion = region ? String(region).trim() : null;
 
-  if (!cleanItemName) {
-    return null;
+  if (!cleanItemName) return null;
+
+  const columns = await getMappingColumns();
+
+  const whereParts: string[] = [];
+  const params: any[] = [];
+  let paramIndex = 1;
+
+  // Add country filter only when the connected DB actually has country column.
+  if (hasColumn(columns, "country")) {
+    whereParts.push(`country = $${paramIndex}`);
+    params.push(cleanCountry);
+    paramIndex += 1;
   }
 
-  /*
-    IMPORTANT:
-    Your current Supabase table is missing these columns:
-    - country
-    - active
-    - climatiq_activity_id
+  // Add active filter only when the connected DB actually has active column.
+  if (hasColumn(columns, "active")) {
+    whereParts.push(`active = true`);
+  }
 
-    So this query does NOT reference them directly.
-    It only uses columns that are currently safe:
-    pattern, region, priority, and ef.*
-  */
+  // Add region filter only when region column exists.
+  if (hasColumn(columns, "region") && cleanRegion) {
+    whereParts.push(`(region = $${paramIndex} OR region = 'Malaysia' OR region IS NULL)`);
+    params.push(cleanRegion);
+    paramIndex += 1;
+  }
+
+  const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
+
+  const orderBy = hasColumn(columns, "priority")
+    ? `ORDER BY priority DESC NULLS LAST`
+    : "";
+
   const result = await db.query(
     `
-    SELECT
-      ef.*
-    FROM public.emission_factor_mappings ef
-    WHERE $1 ~* ef.pattern
-      AND (
-        $2::text IS NULL
-        OR ef.region = $2
-        OR ef.region = 'Malaysia'
-        OR ef.region IS NULL
-      )
-    ORDER BY
-      CASE
-        WHEN ef.region = $2 THEN 1
-        WHEN ef.region = 'Malaysia' THEN 2
-        WHEN ef.region IS NULL THEN 3
-        ELSE 4
-      END,
-      ef.priority DESC NULLS LAST
-    LIMIT 1;
+    SELECT *
+    FROM ${quoteIdent(TABLE_SCHEMA)}.${quoteIdent(TABLE_NAME)}
+    ${whereClause}
+    ${orderBy}
+    LIMIT 500
     `,
-    [cleanItemName, cleanRegion]
+    params
   );
 
-  const row = result.rows[0];
+  const rows = result.rows || [];
 
-  if (!row) {
+  if (rows.length === 0) return null;
+
+  let bestRow: any = null;
+  let bestScore = -1;
+
+  for (const row of rows) {
+    let score = keywordMatchScore(cleanItemName, row);
+
+    // If table has pattern column, use regex safely in JS, not SQL.
+    // This prevents SQL errors when pattern column is missing.
+    if (row?.pattern) {
+      try {
+        const regex = new RegExp(String(row.pattern), "i");
+        if (regex.test(cleanItemName)) score += 1000;
+      } catch {
+        // Ignore invalid DB regex pattern and continue with keyword score.
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestRow = row;
+    }
+  }
+
+  if (!bestRow || bestScore <= 0) {
     return null;
   }
 
-  const requestedRegion =
-    row.climatiq_region ||
-    row.region ||
-    cleanRegion ||
-    (String(country || "").toLowerCase() === "malaysia" ? "MY" : country);
+  const requestedRegion = getRegion(bestRow, cleanRegion || (cleanCountry.toLowerCase() === "malaysia" ? "MY" : cleanCountry));
+  const unitType = getUnitType(bestRow);
 
   return {
-    ...row,
+    ...bestRow,
 
-    // compatibility for src/app.ts
-    country: row.country || country || "Malaysia",
-    activity_id: row.climatiq_activity_id || buildManualActivityId(row),
+    // Normalize/fill old app.ts compatibility fields
+    country: bestRow.country || cleanCountry,
+    region: bestRow.region || requestedRegion,
+
+    fallback_factor_kgco2e_per_unit: getFactor(bestRow),
+    fallback_unit: getFallbackUnit(bestRow),
+
+    activity_id:
+      bestRow.activity_id ||
+      bestRow.climatiq_activity_id ||
+      buildManualActivityId(bestRow),
+
     requested_region: requestedRegion,
-    parameter_name: mapUnitTypeToParameterName(row.unit_type),
-    data_version: row.data_version || "^6",
+    parameter_name: mapUnitTypeToParameterName(unitType),
+    data_version: bestRow.data_version || "^6",
   };
 }
 
@@ -153,7 +301,7 @@ export function calculateEmission(
   quantity: number,
   mapping: EmissionFactorMapping
 ) {
-  const factor = Number(mapping.fallback_factor_kgco2e_per_unit || 0);
+  const factor = getFactor(mapping);
   const safeQuantity = Number(quantity || 0);
 
   const totalKgCO2e = safeQuantity * factor;
@@ -161,13 +309,12 @@ export function calculateEmission(
 
   return {
     emission_factor: factor,
-    factor_unit: mapping.fallback_unit,
+    factor_unit: getFallbackUnit(mapping),
     total_kgco2e: Number(totalKgCO2e.toFixed(6)),
     total_tco2e: Number(totalTCO2e.toFixed(6)),
-    material: mapping.material,
-    category: mapping.category,
-    region: mapping.region,
-    source: mapping.notes,
+    material: mapping.material || null,
+    category: mapping.category || null,
+    region: mapping.region || mapping.requested_region || null,
+    source: mapping.notes || null,
   };
 }
-
