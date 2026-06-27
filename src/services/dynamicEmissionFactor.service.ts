@@ -586,6 +586,40 @@ export function extractElectricityKwh(text: string): number | null {
     return null;
 }
 
+/**
+ * Priority: structured parameters (energy_kwh / energy / normalized_quantity) first,
+ * then item quantity when unit is kWh, then raw text parser as last resort.
+ */
+function getElectricityKwh(item: any, combinedText = ""): number {
+    // 1. Structured parameters — most reliable, comes from fallback extractor
+    const fromParams =
+        Number(item?.parameters?.energy_kwh) ||
+        Number(item?.parameters?.energy) ||
+        Number(item?.parameters?.normalized_quantity);
+
+    if (Number.isFinite(fromParams) && fromParams > 0) {
+        return fromParams;
+    }
+
+    // 2. Item quantity when unit is explicitly kWh
+    const fromItem = Number(item?.quantity || item?.original_quantity);
+    if (
+        Number.isFinite(fromItem) &&
+        fromItem > 0 &&
+        String(item?.unit || item?.original_unit || "").toLowerCase().includes("kwh")
+    ) {
+        return fromItem;
+    }
+
+    // 3. Raw text parser — fallback for unstructured OCR
+    if (combinedText) {
+        const fromText = extractElectricityKwh(combinedText);
+        if (fromText && fromText > 0) return fromText;
+    }
+
+    return 0;
+}
+
 export function buildClimatiqSearchQuery(category: DetectedCategory, itemName: string) {
     const desc = safeLower(itemName);
 
@@ -814,7 +848,7 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
 
     // India region fixed EF rules. These three document types must not go to Climatiq.
     if (region === "IN" && category === "electricity_bill") {
-        const quantity = extractElectricityKwh(combinedText) || Number(item?.parameters?.energy_kwh || item?.parameters?.energy || item?.quantity || 0);
+        const quantity = getElectricityKwh(item, combinedText);
         
         const validation = validateElectricityBill({
             extractedKwh: Number(quantity || 0),
@@ -938,8 +972,8 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
     // Scanned Malaysia TNB bills often contain usage like "Jumlah Penggunaan Anda (2,169kWh)".
     // If extraction produced amount/charges instead of consumption, force the correct kWh quantity here.
     if (category === "electricity_bill") {
-        const kwh = extractElectricityKwh(combinedText);
-        if (kwh) {
+        const kwh = getElectricityKwh(item, combinedText);
+        if (kwh > 0) {
             normalizedItemData.quantity = kwh;
             normalizedItemData.unit = "kWh";
             normalizedItemData.item_name = "Electricity consumption";
