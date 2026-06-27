@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
-import { extractTextWithOcr } from "./ocr.service.js";
+import { extractInvoiceWithMistralOcr as extractInvoiceWithOcr } from "./ocr.service.js";
 import { extractInvoiceWithGeminiVision, convertVisionStructuredToLineItems } from "./vision.service.js";
 import { extractInvoiceWithMistralOcr } from "./mistralOcr.service.js";
 import {
@@ -9,12 +9,14 @@ import {
     buildScannedPdfFreeModeExtractionResult,
 } from "./scannedPdfGuard.service.js";
 import { extractStructuredInvoiceWithLLM } from "./llmStructuredExtraction.service.js";
+import { extractStructuredInvoiceWithMistral } from "./mistralStructuredExtraction.service.js";
 
 export type ExtractionMethod =
     | "pdf_text"
     | "ocr_text"
     | "vision_placeholder"
     | "mistral_ocr"
+    | "mistral_ocr_llm"
     | "combined_pdf_ocr"
     | "llm_structured_extraction"
     | "failed"
@@ -100,9 +102,19 @@ export async function extractPdfText(filePath: string): Promise<string> {
  * You can connect existing Tesseract/Gemini OCR code here from app.ts.
  */
 export async function extractOcrDetailed(filePath: string, mimetype = "") {
-    // Do not hardcode maxPages/scale here.
-    // ocr.service.ts will read OCR_MAX_PAGES, OCR_SCALE, OCR_PAGE_TIMEOUT_MS from Render env.
-    const result = await extractTextWithOcr(filePath, mimetype);
+    // ocr.service.ts now uses Mistral OCR; Tesseract has been removed.
+    // This stub preserves the expected shape { success, text, method, confidence, pages_processed, warnings }.
+    const mistralResult = await extractInvoiceWithOcr({ filePath, fileName: "", mimetype });
+    const text = mistralResult.rawText || "";
+
+    const result = {
+        success: mistralResult.success,
+        text,
+        confidence: mistralResult.confidence,
+        pages_processed: text.length > 0 ? 1 : 0,
+        method: (mistralResult.success ? "pdf_page_ocr" : "failed") as "pdf_page_ocr" | "image_ocr" | "failed",
+        warnings: mistralResult.warnings,
+    };
 
     console.log("OCR_EXTRACTION_RESULT", {
         success: result.success,
@@ -603,6 +615,43 @@ export async function extractInvoiceData(input: {
         }
     }
 
+    // ── Mistral LLM Structured Extraction ───────────────────────────────────
+    // Fires after Mistral OCR when manual rules still found 0 line items.
+    if (
+        mistralText &&
+        (!mistralLineItems || mistralLineItems.length === 0) &&
+        process.env.ENABLE_MISTRAL_LLM_EXTRACTION === "true"
+    ) {
+        try {
+            extractionSteps.push("mistral_llm_structured_extraction_started");
+            const mistralStructured = await extractStructuredInvoiceWithMistral(
+                mistralText,
+                input.fileName
+            );
+
+            if (mistralStructured.line_items?.length > 0) {
+                warnings.push(
+                    `Mistral LLM extracted ${mistralStructured.line_items.length} structured line item(s).`
+                );
+                extractionSteps.push(`mistral_llm_line_items_${mistralStructured.line_items.length}`);
+                mistralLineItems = mistralStructured.line_items;
+                mistralConfidence = mistralStructured.confidence || 0.78;
+            } else {
+                extractionSteps.push("mistral_llm_structured_extraction_no_items");
+            }
+        } catch (error: any) {
+            warnings.push(
+                `Mistral LLM structured extraction failed: ${
+                    (error as any)?.response?.data?.message ||
+                    (error as any)?.response?.data?.error?.message ||
+                    error?.message ||
+                    String(error)
+                }`
+            );
+            extractionSteps.push("mistral_llm_structured_extraction_failed");
+        }
+    }
+
     if (
         (pdfText + " " + ocrText + " " + mistralText).trim().length < 300 &&
         shouldBlockScannedPdfInFreeMode({
@@ -662,10 +711,10 @@ export async function extractInvoiceData(input: {
         lineItems.push(...visionLineItems);
     }
 
-    // ── LLM Structured Extraction Fallback ──────────────────────────────────
+    // ── Gemini LLM Structured Extraction Fallback ───────────────────────────
     // Runs ONLY when all manual parsers and vision have returned 0 line items.
-    // Sends raw text to Gemini and asks for structured JSON.
-    if (!lineItems.length && rawText.length >= 100) {
+    // Disabled if DISABLE_LLM_EXTRACTION=true.
+    if (!lineItems.length && rawText.length >= 100 && process.env.DISABLE_LLM_EXTRACTION !== "true") {
         try {
             extractionSteps.push("llm_structured_extraction_started");
             const llmResult = await extractStructuredInvoiceWithLLM(rawText, {

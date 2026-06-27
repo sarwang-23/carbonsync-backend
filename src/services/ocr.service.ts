@@ -1,28 +1,12 @@
 import fs from "fs";
-import path from "path";
-import os from "os";
-import { pathToFileURL } from "url";
-import { createCanvas } from "canvas";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
-import { createWorker } from "tesseract.js";
 
-export interface OcrResult {
+export interface MistralOcrExtractionResult {
     success: boolean;
-    text: string;
+    provider: "mistral_ocr" | "disabled" | "failed";
+    rawText: string;
+    structured: any | null;
     confidence: number;
-    pages_processed: number;
-    method: "pdf_page_ocr" | "image_ocr" | "failed";
     warnings: string[];
-}
-
-const OCR_SERVICE_VERSION = "OCR_CHROME_DATA_PDF_EMBED_V6_20260627";
-
-function cleanText(text: string) {
-    return String(text || "")
-        .replace(/\u0000/g, " ")
-        .replace(/[^\S\r\n]+/g, " ")
-        .replace(/\n{3,}/g, "\n\n")
-        .trim();
 }
 
 function getEnvNumber(name: string, defaultValue: number) {
@@ -30,11 +14,7 @@ function getEnvNumber(name: string, defaultValue: number) {
     return Number.isFinite(value) && value > 0 ? value : defaultValue;
 }
 
-async function withTimeout<T>(
-    promise: Promise<T>,
-    timeoutMs: number,
-    timeoutMessage: string
-): Promise<T> {
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
     let timer: NodeJS.Timeout | null = null;
 
     try {
@@ -49,549 +29,597 @@ async function withTimeout<T>(
     }
 }
 
-class NodeCanvasFactory {
-    create(width: number, height: number) {
-        if (width <= 0 || height <= 0) throw new Error("Invalid canvas size");
-
-        const canvas = createCanvas(width, height);
-        const context = canvas.getContext("2d");
-
-        return { canvas, context };
-    }
-
-    reset(canvasAndContext: any, width: number, height: number) {
-        if (!canvasAndContext?.canvas) throw new Error("Canvas is not specified");
-        if (width <= 0 || height <= 0) throw new Error("Invalid canvas size");
-
-        canvasAndContext.canvas.width = width;
-        canvasAndContext.canvas.height = height;
-    }
-
-    destroy(canvasAndContext: any) {
-        if (!canvasAndContext?.canvas) return;
-        canvasAndContext.canvas.width = 0;
-        canvasAndContext.canvas.height = 0;
-        canvasAndContext.canvas = null;
-        canvasAndContext.context = null;
-    }
+function cleanTextPreserveLines(text: string) {
+    return String(text || "")
+        .replace(/\u0000/g, " ")
+        .replace(/\r/g, "\n")
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n[ \t]+/g, "\n")
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
 }
 
-async function createTesseractWorker() {
-    const worker: any = await createWorker("eng");
-
-    if (typeof worker.loadLanguage === "function") await worker.loadLanguage("eng");
-    if (typeof worker.initialize === "function") await worker.initialize("eng");
-
-    if (typeof worker.setParameters === "function") {
-        await worker.setParameters({
-            tessedit_pageseg_mode: "6",
-            preserve_interword_spaces: "1",
-            user_defined_dpi: "220",
-        });
-    }
-
-    return worker;
+function toNumber(value: any): number {
+    const num = Number(String(value ?? "").replace(/,/g, "").replace(/[^\d.-]/g, "").trim());
+    return Number.isFinite(num) ? num : 0;
 }
 
-async function terminateWorker(worker: any) {
-    try {
-        if (worker && typeof worker.terminate === "function") await worker.terminate();
-    } catch {
-        // ignore terminate errors
-    }
+function safeLower(value: any): string {
+    return String(value || "").toLowerCase().trim();
 }
 
-function preprocessCanvasForOcr(canvas: any) {
-    const context = canvas.getContext("2d");
-    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
+function normalizeMistralPages(data: any) {
+    const pages = Array.isArray(data?.pages) ? data.pages : [];
 
-    for (let i = 0; i < data.length; i += 4) {
-        const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-
-        let enhanced = (gray - 128) * 1.35 + 128;
-        enhanced = enhanced > 185 ? 255 : enhanced < 95 ? 0 : enhanced;
-
-        data[i] = enhanced;
-        data[i + 1] = enhanced;
-        data[i + 2] = enhanced;
-    }
-
-    context.putImageData(imageData, 0, 0);
-    return canvas;
-}
-
-function writeTempPng(buffer: Buffer) {
-    const filePath = path.join(
-        os.tmpdir(),
-        `carbonsync-ocr-${Date.now()}-${Math.random().toString(16).slice(2)}.png`
+    return cleanTextPreserveLines(
+        pages
+            .map((page: any) => page?.markdown || page?.text || page?.content || "")
+            .filter(Boolean)
+            .join("\n\n")
     );
-
-    fs.writeFileSync(filePath, buffer);
-    return filePath;
 }
 
-async function recognizeImagePath(worker: any, imagePath: string, timeoutMs: number) {
-    const result: any = await withTimeout(
-        worker.recognize(imagePath),
-        timeoutMs,
-        `Tesseract OCR timed out after ${timeoutMs}ms`
-    );
+function detectCountryAndCurrency(text: string) {
+    const lower = safeLower(text);
 
-    return {
-        text: cleanText(result?.data?.text || ""),
-        confidence: Number(result?.data?.confidence || 0),
-    };
+    const currency =
+        lower.includes("inr") ||
+            text.includes("₹") ||
+            lower.includes("maharashtra") ||
+            lower.includes("mumbai") ||
+            lower.includes("lucknow") ||
+            lower.includes("indian rupees")
+            ? "INR"
+            : lower.includes("rm") ||
+                lower.includes("myr") ||
+                lower.includes("malaysia") ||
+                lower.includes("bil elektrik") ||
+                lower.includes("tenaga nasional") ||
+                lower.includes("tnb")
+                ? "MYR"
+                : null;
+
+    const country =
+        currency === "INR" ? "IN" : currency === "MYR" ? "MY" : "UNKNOWN";
+
+    return { country, currency };
 }
 
-async function recognizePngBuffer(worker: any, pngBuffer: Buffer, timeoutMs: number) {
-    const tempPath = writeTempPng(pngBuffer);
+function extractTnbKwhFromText(rawText: string): number {
+    const original = String(rawText || "");
+    const clean = original.replace(/,/g, "").replace(/\s+/g, " ");
 
-    try {
-        return await recognizeImagePath(worker, tempPath, timeoutMs);
-    } finally {
-        try {
-            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-        } catch {
-            // ignore temp cleanup errors
-        }
-    }
-}
+    const candidates: number[] = [];
 
-async function renderPdfPagesWithPdfJs(
-    filePath: string,
-    maxPages: number,
-    scale: number,
-    warnings: string[]
-): Promise<Buffer[]> {
-    const buffers: Buffer[] = [];
-    warnings.push("OCR pdfjs load started");
-
-    const data = new Uint8Array(fs.readFileSync(filePath));
-    const pdf = await withTimeout(
-        pdfjsLib.getDocument({
-            data,
-            disableWorker: true,
-            verbosity: 0,
-            useSystemFonts: true,
-            disableFontFace: true,
-        } as any).promise,
-        getEnvNumber("OCR_PDF_LOAD_TIMEOUT_MS", 10000),
-        "PDF load timed out"
-    );
-
-    warnings.push(`OCR pdfjs loaded pages: ${pdf.numPages}`);
-
-    const totalPages = Math.min(pdf.numPages, maxPages);
-    const canvasFactory = new NodeCanvasFactory();
-
-    for (let pageNo = 1; pageNo <= totalPages; pageNo++) {
-        warnings.push(`OCR pdfjs page ${pageNo} get started`);
-
-        const page = await pdf.getPage(pageNo);
-        const viewport = page.getViewport({ scale });
-
-        const width = Math.ceil(viewport.width);
-        const height = Math.ceil(viewport.height);
-
-        warnings.push(`OCR pdfjs page ${pageNo} viewport ${width}x${height}`);
-
-        const canvasAndContext = canvasFactory.create(width, height);
-        const canvas: any = canvasAndContext.canvas;
-        const context: any = canvasAndContext.context;
-
-        context.save();
-        context.fillStyle = "white";
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        context.restore();
-
-        try {
-            warnings.push(`OCR pdfjs page ${pageNo} render started`);
-
-            await withTimeout(
-                page.render({
-                    canvasContext: context,
-                    viewport,
-                    canvasFactory,
-                    background: "white",
-                } as any).promise,
-                getEnvNumber("OCR_RENDER_TIMEOUT_MS", 15000),
-                `PDF page ${pageNo} render timed out`
-            );
-
-            warnings.push(`OCR pdfjs page ${pageNo} render finished`);
-
-            const processedCanvas = preprocessCanvasForOcr(canvas);
-            const imageBuffer = processedCanvas.toBuffer("image/png");
-
-            warnings.push(`OCR pdfjs page ${pageNo} rendered png bytes: ${imageBuffer.length}`);
-            buffers.push(imageBuffer);
-        } finally {
-            canvasFactory.destroy(canvasAndContext);
-        }
+    function addCandidate(value: any) {
+        const num = toNumber(value);
+        if (num > 0 && num < 100000) candidates.push(num);
     }
 
-    return buffers;
-}
-
-async function loadPuppeteer(warnings: string[]) {
-    try {
-        return await import("puppeteer");
-    } catch (error1: any) {
-        warnings.push(`puppeteer import failed: ${error1?.message || String(error1)}`);
-        try {
-            return await import("puppeteer-core");
-        } catch (error2: any) {
-            warnings.push(`puppeteer-core import failed: ${error2?.message || String(error2)}`);
-            return null;
-        }
-    }
-}
-
-function findChromeExecutable(puppeteerModule: any) {
-    const envPath =
-        process.env.PUPPETEER_EXECUTABLE_PATH ||
-        process.env.CHROME_EXECUTABLE_PATH ||
-        process.env.GOOGLE_CHROME_BIN;
-
-    if (envPath && fs.existsSync(envPath)) return envPath;
-
-    try {
-        const p = puppeteerModule?.executablePath?.();
-        if (p && fs.existsSync(p)) return p;
-    } catch {
-        // ignore
-    }
-
-    const candidates = [
-        "/usr/bin/google-chrome-stable",
-        "/usr/bin/google-chrome",
-        "/usr/bin/chromium-browser",
-        "/usr/bin/chromium",
+    // Direct common patterns.
+    const directPatterns = [
+        /(?:jumlah\s+penggunaan|jumlah\s+kegunaan|total\s+usage|total\s+consumption)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:kwh)?/i,
+        /(?:kegunaan|penggunaan|usage|consumption)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:kwh)?/i,
+        /(\d+(?:\.\d+)?)\s*kwh/i,
     ];
 
-    return candidates.find((candidate) => fs.existsSync(candidate));
+    for (const pattern of directPatterns) {
+        const match = clean.match(pattern);
+        if (match?.[1]) addCandidate(match[1]);
+    }
+
+    // Mistral table pattern from TNB bills:
+    // | Jumlah | 474 | | 166.78 |
+    // | Kegunaan kWh | kWh | 300 | 174 | 474 |
+    const tablePatterns = [
+        /\|\s*\*\*Jumlah\*\*\s*\|\s*\*\*(\d+(?:\.\d+)?)\*\*/i,
+        /\|\s*Jumlah\s*\|\s*(\d+(?:\.\d+)?)\s*\|/i,
+        /Kegunaan\s*kWh\s*\|\s*kWh\s*\|\s*\d+(?:\.\d+)?\s*\|\s*\d+(?:\.\d+)?\s*\|\s*(\d+(?:\.\d+)?)/i,
+        /Kegunaan\s*\|\s*Unit\s*[\s\S]{0,250}?\|\s*\d+\s*\|\s*\d+(?:\.\d+)?\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*kWh/i,
+    ];
+
+    for (const pattern of tablePatterns) {
+        const match = original.match(pattern) || clean.match(pattern);
+        if (match?.[1]) addCandidate(match[1]);
+    }
+
+    // Meter reading fallback:
+    // | 3152072314 | 2192 | 2666 | 474 | kWh |
+    const meterRow = clean.match(/\|\s*\d{6,}\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*kWh/i);
+    if (meterRow?.[3]) addCandidate(meterRow[3]);
+
+    const previousPattern = /(?:dahulu|previous|previous_reading|previous reading)\s*[:\-]?\s*(\d+(?:\.\d+)?)/i;
+    const currentPattern = /(?:semasa|current|current_reading|current reading)\s*[:\-]?\s*(\d+(?:\.\d+)?)/i;
+
+    const previous = toNumber(clean.match(previousPattern)?.[1]);
+    const current = toNumber(clean.match(currentPattern)?.[1]);
+
+    if (previous > 0 && current > previous) addCandidate(current - previous);
+
+    // Prefer a plausible TNB usage value. In tariff rows, lower values like 200/300 can appear,
+    // so choose the highest candidate when multiple table values are detected.
+    if (candidates.length > 0) {
+        return Math.max(...candidates);
+    }
+
+    return 0;
 }
 
-async function screenshotPageToPng(page: any, pngPath: string, warnings: string[]) {
-    await page.screenshot({
-        path: pngPath,
-        fullPage: false,
-        type: "png",
-    });
+function normalizeUnit(unit: string) {
+    const lower = safeLower(unit).replace(/\./g, "");
 
-    const size = fs.existsSync(pngPath) ? fs.statSync(pngPath).size : 0;
-    warnings.push(`OCR chrome screenshot bytes: ${size}`);
+    if (lower.includes("sq") || lower.includes("m²") || lower.includes("m2")) return "m2";
+    if (lower.includes("mt")) return "tonne";
+    if (lower.includes("ton")) return "tonne";
+    if (lower.includes("kg")) return "kg";
+    if (lower.includes("m3") || lower.includes("m³") || lower.includes("cbm")) return "m3";
+    if (lower.includes("pcs") || lower.includes("piece") || lower === "no" || lower === "nos") return "pcs";
 
-    return size > 0 ? pngPath : null;
+    return unit || null;
 }
 
-async function renderPdfFirstPageWithChrome(filePath: string, warnings: string[]): Promise<string | null> {
-    const puppeteerModule: any = await loadPuppeteer(warnings);
-    if (!puppeteerModule) return null;
-
-    const executablePath = findChromeExecutable(puppeteerModule);
-    warnings.push(`OCR chrome executable: ${executablePath || "puppeteer_default"}`);
-
-    let browser: any = null;
-    const pngPath = path.join(
-        os.tmpdir(),
-        `carbonsync-chrome-pdf-${Date.now()}-${Math.random().toString(16).slice(2)}.png`
+function isMaterialDescription(description: string) {
+    return /(timber|wood|pinewood|plywood|veneer|laminate|laminates|flush\s*door|door|board|mosaic|steel|aluminium|aluminum|cement|textile|fabric|iron|copper|plastic)/i.test(
+        description || ""
     );
+}
 
-    try {
-        browser = await puppeteerModule.default.launch({
-            executablePath: executablePath || undefined,
-            headless: "new",
-            args: [
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--no-zygote",
-                "--disable-extensions",
-                "--disable-background-networking",
-                "--allow-file-access-from-files",
-            ],
+function parseMarkdownTableLineItems(text: string) {
+    const { country, currency } = detectCountryAndCurrency(text);
+    const lineItems: any[] = [];
+
+    const rows = String(text || "")
+        .split(/\n+/)
+        .map((row) => row.trim())
+        .filter((row) => row.includes("|"));
+
+    for (const row of rows) {
+        if (/^\|\s*-+/.test(row)) continue;
+
+        const cells = row
+            .split("|")
+            .map((cell) => cell.trim())
+            .filter((cell) => cell.length > 0);
+
+        // Expected Mistral table:
+        // Sl No | Description | Size | Pcs | Quantity | Rate | per | Amount
+        if (cells.length < 7) continue;
+
+        const slNo = toNumber(cells[0]);
+        const description = cells[1] || "";
+
+        if (!slNo || !isMaterialDescription(description)) continue;
+
+        const size = cells[2] || null;
+        const pcs = toNumber(cells[3]);
+        const quantity = toNumber(cells[4]);
+        const rate = toNumber(cells[5]);
+        const unit = normalizeUnit(cells[6] || "");
+        const amount = toNumber(cells[7]);
+
+        if (quantity <= 0) continue;
+
+        lineItems.push({
+            item_name: description.slice(0, 120),
+            description,
+            quantity,
+            unit,
+            amount: amount || null,
+            currency,
+            confidence: 0.84,
+            source: "mistral_markdown_table_rules",
+            parameters: {
+                material: safeLower(description),
+                size,
+                pcs: pcs || null,
+                rate: rate || null,
+                country,
+                region: country,
+                category: "purchased_goods",
+                extraction_method: "mistral_markdown_table_rules",
+            },
         });
+    }
 
-        const page = await browser.newPage();
+    return lineItems;
+}
 
-        const width = getEnvNumber("OCR_CHROME_WIDTH", 1200);
-        const height = getEnvNumber("OCR_CHROME_HEIGHT", 1600);
-        const deviceScaleFactor = getEnvNumber("OCR_CHROME_DEVICE_SCALE", 2);
+function parseFlattenedTableLineItems(text: string) {
+    const { country, currency } = detectCountryAndCurrency(text);
+    const lineItems: any[] = [];
+    const flat = String(text || "").replace(/\n/g, " ");
 
-        await page.setViewport({
-            width,
-            height,
-            deviceScaleFactor,
+    const rowRegex =
+        /\|\s*(\d+)\s*\|\s*([^|]+?(?:timber|wood|pinewood|plywood|veneer|laminate|laminates|flush\s*door|door|board|mosaic|steel|aluminium|aluminum|cement|textile|fabric|iron|copper|plastic)[^|]*?)\s*\|\s*([^|]*?)\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*([\d,.]+)\s*\|\s*([\d,.]+)\s*\|\s*([^|]+?)\s*\|\s*([\d,.]+)\s*\|/gi;
+
+    let match: RegExpExecArray | null;
+
+    while ((match = rowRegex.exec(flat)) !== null) {
+        const description = cleanTextPreserveLines(match[2]);
+        const size = cleanTextPreserveLines(match[3]);
+        const pcs = toNumber(match[4]);
+        const quantity = toNumber(match[5]);
+        const rate = toNumber(match[6]);
+        const unit = normalizeUnit(match[7]);
+        const amount = toNumber(match[8]);
+
+        if (quantity <= 0) continue;
+
+        lineItems.push({
+            item_name: description.slice(0, 120),
+            description,
+            quantity,
+            unit,
+            amount: amount || null,
+            currency,
+            confidence: 0.82,
+            source: "mistral_flattened_table_rules",
+            parameters: {
+                material: safeLower(description),
+                size: size || null,
+                pcs: pcs || null,
+                rate: rate || null,
+                country,
+                region: country,
+                category: "purchased_goods",
+                extraction_method: "mistral_flattened_table_rules",
+            },
         });
-
-        const pdfUrl = pathToFileURL(path.resolve(filePath)).href;
-        const pdfBase64 = fs.readFileSync(filePath).toString("base64");
-        const pdfDataUrl = `data:application/pdf;base64,${pdfBase64}`;
-
-        function buildHtml(src: string, tag: "iframe" | "embed") {
-            const element =
-                tag === "iframe"
-                    ? `<iframe src="${src}#page=1&zoom=180&toolbar=0&navpanes=0&scrollbar=0"></iframe>`
-                    : `<embed src="${src}#page=1&zoom=180&toolbar=0&navpanes=0&scrollbar=0" type="application/pdf" />`;
-
-            return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    background: white;
-    width: ${width}px;
-    height: ${height}px;
-    overflow: hidden;
-  }
-  #wrap {
-    width: ${width}px;
-    height: ${height}px;
-    background: white;
-    overflow: hidden;
-  }
-  iframe, embed, object {
-    width: ${width}px;
-    height: ${height}px;
-    border: 0;
-    background: white;
-  }
-</style>
-</head>
-<body>
-  <div id="wrap">${element}</div>
-</body>
-</html>`;
-        }
-
-        async function tryHtmlScreenshot(label: string, html: string) {
-            warnings.push(`OCR chrome setContent ${label} started`);
-
-            await page.setContent(html, {
-                waitUntil: "domcontentloaded",
-                timeout: getEnvNumber("OCR_CHROME_TIMEOUT_MS", 30000),
-            });
-
-            await new Promise((resolve) => setTimeout(resolve, getEnvNumber("OCR_CHROME_WAIT_MS", 5000)));
-
-            const screenshotPath = await screenshotPageToPng(page, pngPath, warnings);
-            warnings.push(`OCR chrome ${label} screenshot path: ${screenshotPath || "none"}`);
-
-            return screenshotPath;
-        }
-
-        // Try data URL first. Headless Chrome often blocks/ detaches local PDF viewer frames.
-        let screenshotPath = await tryHtmlScreenshot("data-pdf iframe", buildHtml(pdfDataUrl, "iframe"));
-        if (screenshotPath) return screenshotPath;
-
-        warnings.push("OCR chrome data iframe screenshot empty, trying data embed");
-        screenshotPath = await tryHtmlScreenshot("data-pdf embed", buildHtml(pdfDataUrl, "embed"));
-        if (screenshotPath) return screenshotPath;
-
-        warnings.push("OCR chrome data embed screenshot empty, trying file iframe");
-        screenshotPath = await tryHtmlScreenshot("file-pdf iframe", buildHtml(pdfUrl, "iframe"));
-        if (screenshotPath) return screenshotPath;
-
-        warnings.push("OCR chrome file iframe screenshot empty, trying file embed");
-        screenshotPath = await tryHtmlScreenshot("file-pdf embed", buildHtml(pdfUrl, "embed"));
-        return screenshotPath;
-    } catch (error: any) {
-        warnings.push(`OCR chrome render failed: ${error?.message || String(error)}`);
-
-        try {
-            if (fs.existsSync(pngPath)) fs.unlinkSync(pngPath);
-        } catch {
-            // ignore
-        }
-
-        return null;
-    } finally {
-        try {
-            if (browser) await browser.close();
-        } catch {
-            // ignore
-        }
     }
+
+    return lineItems;
 }
 
-export async function extractTextFromPdfWithOcr(
-    filePath: string,
-    options: {
-        maxPages?: number;
-        scale?: number;
-    } = {}
-): Promise<OcrResult> {
-    const warnings: string[] = [`${OCR_SERVICE_VERSION}`];
-    let worker: any = null;
+function parseSimpleMaterialLineItem(text: string) {
+    const { country, currency } = detectCountryAndCurrency(text);
+    const clean = String(text || "").replace(/,/g, "").replace(/\s+/g, " ").trim();
 
-    try {
-        const maxPages = options.maxPages || getEnvNumber("OCR_MAX_PAGES", 1);
-        const scale = options.scale || getEnvNumber("OCR_SCALE", 2);
-        const pageTimeoutMs = getEnvNumber("OCR_PAGE_TIMEOUT_MS", 25000);
+    const materialPattern =
+        /(steel|timber|wood|plywood|aluminium|aluminum|cement|textile|fabric|iron|copper|plastic)\s+(\d+(?:\.\d+)?)\s*(mt|tonnes?|tons?|kg|kgs|m3|m³|cbm|pcs|pieces|nos?|sqm|sq\.?\s*mr\.?|m2|m²)\b.{0,100}?(\d{2,}(?:\.\d{1,2})?)?/i;
 
-        worker = await createTesseractWorker();
-        warnings.push("OCR tesseract worker created");
+    const match = clean.match(materialPattern);
+    if (!match) return [];
 
-        const pageTexts: string[] = [];
-        const confidences: number[] = [];
-        let pagesProcessed = 0;
+    const material = match[1];
+    const quantity = toNumber(match[2]);
+    const unit = normalizeUnit(match[3]);
 
-        try {
-            const imageBuffers = await renderPdfPagesWithPdfJs(filePath, maxPages, scale, warnings);
+    if (quantity <= 0) return [];
 
-            for (let i = 0; i < imageBuffers.length; i++) {
-                const pageNo = i + 1;
-                const result = await recognizePngBuffer(worker, imageBuffers[i], pageTimeoutMs);
-                pagesProcessed += 1;
+    const amountCandidates = [...clean.matchAll(/\b(\d{3,}(?:\.\d{1,2})?)\b/g)]
+        .map((m) => toNumber(m[1]))
+        .filter((n) => n > 0);
 
-                warnings.push(`OCR pdfjs page ${pageNo} text length: ${result.text.length}`);
-                warnings.push(`OCR pdfjs page ${pageNo} confidence: ${result.confidence}`);
-
-                if (result.text) pageTexts.push(result.text);
-                if (result.confidence) confidences.push(result.confidence);
-            }
-        } catch (pdfJsError: any) {
-            warnings.push(`OCR pdfjs fatal error: ${pdfJsError?.message || String(pdfJsError)}`);
-            warnings.push("OCR trying chrome HTML PDF render fallback");
-
-            const chromePngPath = await renderPdfFirstPageWithChrome(filePath, warnings);
-
-            if (chromePngPath) {
-                try {
-                    const result = await recognizeImagePath(worker, chromePngPath, pageTimeoutMs);
-                    pagesProcessed = 1;
-
-                    warnings.push(`OCR chrome page 1 text length: ${result.text.length}`);
-                    warnings.push(`OCR chrome page 1 confidence: ${result.confidence}`);
-
-                    if (result.text) pageTexts.push(result.text);
-                    if (result.confidence) confidences.push(result.confidence);
-                } finally {
-                    try {
-                        if (fs.existsSync(chromePngPath)) fs.unlinkSync(chromePngPath);
-                    } catch {
-                        // ignore
-                    }
-                }
-            }
-        }
-
-        const text = cleanText(pageTexts.join("\n"));
-        const avgConfidence =
-            confidences.length > 0
-                ? confidences.reduce((sum, value) => sum + value, 0) / confidences.length
-                : 0;
-
-        return {
-            success: Boolean(text),
-            text,
-            confidence: Number(avgConfidence.toFixed(2)),
-            pages_processed: pagesProcessed,
-            method: text ? "pdf_page_ocr" : "failed",
-            warnings,
-        };
-    } catch (error: any) {
-        warnings.push(`OCR fatal error: ${error?.message || String(error)}`);
-
-        return {
-            success: false,
-            text: "",
-            confidence: 0,
-            pages_processed: 0,
-            method: "failed",
-            warnings,
-        };
-    } finally {
-        await terminateWorker(worker);
-    }
+    return [
+        {
+            item_name: `${material.toUpperCase()} material invoice`,
+            description: `${material.toUpperCase()} purchased goods extracted from OCR text`,
+            quantity,
+            unit,
+            amount: amountCandidates.length ? amountCandidates[amountCandidates.length - 1] : null,
+            currency,
+            confidence: 0.76,
+            source: "simple_material_text_rules",
+            parameters: {
+                material: material.toLowerCase(),
+                country,
+                region: country,
+                category: "purchased_goods",
+                extraction_method: "simple_material_text_rules",
+            },
+        },
+    ];
 }
 
-export async function extractTextFromImageWithOcr(filePath: string): Promise<OcrResult> {
-    const warnings: string[] = [`${OCR_SERVICE_VERSION}`];
-    let worker: any = null;
 
-    try {
-        worker = await createTesseractWorker();
-        warnings.push("OCR tesseract worker created");
+function dedupeLineItems(items: any[]) {
+    const seen = new Set<string>();
 
-        const result = await recognizeImagePath(
-            worker,
-            filePath,
-            getEnvNumber("OCR_PAGE_TIMEOUT_MS", 25000)
-        );
+    return (items || []).filter((item) => {
+        const key = [
+            String(item?.item_name || item?.description || "").toLowerCase().replace(/\s+/g, " ").trim(),
+            Number(item?.quantity || 0).toFixed(4),
+            String(item?.unit || "").toLowerCase().trim(),
+            Number(item?.amount || 0).toFixed(2),
+        ].join("|");
 
-        warnings.push(`OCR image text length: ${result.text.length}`);
-        warnings.push(`OCR image confidence: ${result.confidence}`);
-
-        return {
-            success: Boolean(result.text),
-            text: result.text,
-            confidence: Number(result.confidence.toFixed(2)),
-            pages_processed: 1,
-            method: "image_ocr",
-            warnings,
-        };
-    } catch (error: any) {
-        warnings.push(`OCR fatal error: ${error?.message || String(error)}`);
-
-        return {
-            success: false,
-            text: "",
-            confidence: 0,
-            pages_processed: 0,
-            method: "failed",
-            warnings,
-        };
-    } finally {
-        await terminateWorker(worker);
-    }
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
 }
 
-export async function extractTextWithOcr(
-    filePath: string,
-    mimetype = "",
-    options: {
-        maxPages?: number;
-        scale?: number;
-    } = {}
-): Promise<OcrResult> {
-    const ext = path.extname(filePath || "").toLowerCase();
-    const type = String(mimetype || "").toLowerCase();
 
-    if (process.env.DISABLE_OCR_EXTRACTION === "true") {
-        return {
-            success: false,
-            text: "",
-            confidence: 0,
-            pages_processed: 0,
-            method: "failed",
-            warnings: [`${OCR_SERVICE_VERSION}`, "DISABLE_OCR_EXTRACTION=true. OCR skipped."],
-        };
+function parseGenericDoorShutterRows(text: string) {
+    const { country, currency } = detectCountryAndCurrency(text);
+    const lineItems: any[] = [];
+
+    const normalized = String(text || "")
+        .replace(/\r/g, "\n")
+        .replace(/\s+/g, " ");
+
+    const rows = String(text || "")
+        .split(/\n+/)
+        .map((row) => row.trim())
+        .filter((row) => row.includes("|"));
+
+    for (const row of rows) {
+        if (/^\|\s*-+/.test(row)) continue;
+
+        const cells = row
+            .split("|")
+            .map((cell) => cell.trim())
+            .filter((cell) => cell.length > 0);
+
+        const productIndex = cells.findIndex((cell) => /door\s*shutter|flush\s*door|plywood|timber|wood/i.test(cell));
+        if (productIndex < 0) continue;
+
+        const product = cells[productIndex];
+        const pcs = toNumber(cells[productIndex + 1]);
+        const thickness = toNumber(cells[productIndex + 2]);
+        const size = cells[productIndex + 3] || null;
+        const areaOrCft = toNumber(cells[productIndex + 4]);
+        const rate = toNumber(cells[productIndex + 5]);
+        const per = String(cells[productIndex + 6] || "").trim();
+        const amount = toNumber(cells[productIndex + 7]);
+
+        if (!pcs || !amount) continue;
+
+        lineItems.push({
+            item_name: `${product}${thickness ? ` ${thickness}MM` : ""}${size ? ` (${size})` : ""}`,
+            description: `${product}${thickness ? ` ${thickness}MM` : ""}${size ? ` size ${size}` : ""}`,
+            quantity: pcs,
+            unit: per && /pcs|pc|nos|no/i.test(per) ? "pcs" : per || "pcs",
+            amount,
+            currency: currency || "INR",
+            confidence: 0.82,
+            source: "mistral_generic_table_rules",
+            parameters: {
+                country,
+                region: country,
+                vendor: /kaamdhenu/i.test(text) ? "Kaamdhenu Timber Productz" : null,
+                material: "timber_door_shutter",
+                product,
+                pcs,
+                thickness_mm: thickness || null,
+                size,
+                area_or_cft_per_piece: areaOrCft || null,
+                rate: rate || null,
+                per: per || null,
+                category: "purchased_goods",
+                extraction_method: "generic_door_shutter_markdown_table",
+            },
+        });
     }
 
-    if (type.includes("pdf") || ext === ".pdf") {
-        return extractTextFromPdfWithOcr(filePath, options);
+    if (lineItems.length > 0) return lineItems;
+
+    const rowRegex =
+        /Door\s+Shutter\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+([0-9.]+\s*[xX]\s*[0-9.]+)\s+(\d+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)\s+PCS\s+([\d,]+(?:\.\d+)?)/gi;
+
+    let match: RegExpExecArray | null;
+    while ((match = rowRegex.exec(normalized)) !== null) {
+        const pcs = toNumber(match[1]);
+        const thickness = toNumber(match[2]);
+        const size = String(match[3] || "").trim();
+        const areaOrCft = toNumber(match[4]);
+        const rate = toNumber(match[5]);
+        const amount = toNumber(match[6]);
+
+        if (!pcs || !amount) continue;
+
+        lineItems.push({
+            item_name: `Door Shutter ${thickness}MM (${size})`,
+            description: `Door Shutter ${thickness}MM size ${size}`,
+            quantity: pcs,
+            unit: "pcs",
+            amount,
+            currency: currency || "INR",
+            confidence: 0.78,
+            source: "mistral_generic_flattened_rules",
+            parameters: {
+                country,
+                region: country,
+                vendor: /kaamdhenu/i.test(text) ? "Kaamdhenu Timber Productz" : null,
+                material: "timber_door_shutter",
+                product: "Door Shutter",
+                pcs,
+                thickness_mm: thickness || null,
+                size,
+                area_or_cft_per_piece: areaOrCft || null,
+                rate: rate || null,
+                per: "PCS",
+                category: "purchased_goods",
+                extraction_method: "generic_door_shutter_flattened_text",
+            },
+        });
     }
+
+    return lineItems;
+}
+
+function parseStructuredFromMistralText(text: string) {
+    const lower = safeLower(text);
+    const { country, currency } = detectCountryAndCurrency(text);
+
+    const kwh = extractTnbKwhFromText(text);
 
     if (
-        type.includes("image") ||
-        [".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff"].includes(ext)
+        kwh > 0 &&
+        (
+            lower.includes("tenaga nasional") ||
+            lower.includes("tnb") ||
+            lower.includes("bil elektrik") ||
+            lower.includes("kwh")
+        )
     ) {
-        return extractTextFromImageWithOcr(filePath);
+        return {
+            document_type: "ELECTRICITY_BILL",
+            country: lower.includes("malaysia") || lower.includes("tnb") || lower.includes("tenaga nasional") ? "MY" : "UNKNOWN",
+            vendor: lower.includes("tenaga nasional") || lower.includes("tnb") ? "TENAGA NASIONAL" : null,
+            currency: lower.includes("rm") ? "MYR" : null,
+            line_items: [
+                {
+                    item_name: "TNB Malaysia Electricity Bill",
+                    description: "Grid electricity consumption extracted by Mistral OCR",
+                    quantity: kwh,
+                    unit: "kWh",
+                    amount: null,
+                    currency: lower.includes("rm") ? "MYR" : null,
+                },
+            ],
+            electricity: {
+                usage_kwh: kwh,
+                previous_reading: null,
+                current_reading: null,
+                meter_difference_kwh: kwh,
+            },
+            confidence: 0.82,
+            warnings: [],
+        };
+    }
+
+    const lineItems = dedupeLineItems([
+        ...parseMarkdownTableLineItems(text),
+        ...parseFlattenedTableLineItems(text),
+        ...parseGenericDoorShutterRows(text),
+    ]);
+
+    if (!lineItems.length) {
+        lineItems.push(...parseSimpleMaterialLineItem(text));
+    }
+
+    if (lineItems.length > 0) {
+        return {
+            document_type: "PURCHASED_GOODS",
+            country,
+            vendor: lower.includes("lucky ply") ? "LUCKY PLY & LAMINATES" : null,
+            currency,
+            line_items: lineItems,
+            confidence: 0.82,
+            warnings: [`Mistral OCR parsed ${lineItems.length} material line item(s).`],
+        };
     }
 
     return {
-        success: false,
-        text: "",
-        confidence: 0,
-        pages_processed: 0,
-        method: "failed",
-        warnings: [`${OCR_SERVICE_VERSION}`, `Unsupported OCR file type: ${mimetype || ext || "unknown"}`],
+        document_type: "GENERIC_INVOICE",
+        country,
+        vendor: null,
+        currency,
+        line_items: [],
+        confidence: 0.55,
+        warnings: ["Mistral OCR extracted text, but no structured line items were confidently detected."],
     };
+}
+
+async function mistralOcrRequest(input: {
+    fileBase64: string;
+    mimetype: string;
+    fileName: string;
+}) {
+    const apiKey = process.env.MISTRAL_API_KEY;
+    const model = process.env.MISTRAL_OCR_MODEL || "mistral-ocr-latest";
+    const endpoint = process.env.MISTRAL_OCR_ENDPOINT || "https://api.mistral.ai/v1/ocr";
+
+    const payload = {
+        model,
+        document: {
+            type: "document_url",
+            document_url: `data:${input.mimetype || "application/pdf"};base64,${input.fileBase64}`,
+            document_name: input.fileName || "invoice",
+        },
+        include_image_base64: false,
+    };
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+    });
+
+    const bodyText = await response.text();
+
+    let data: any = null;
+    try {
+        data = JSON.parse(bodyText);
+    } catch {
+        data = { raw: bodyText };
+    }
+
+    if (!response.ok) {
+        throw new Error(`Mistral OCR failed ${response.status}: ${bodyText.slice(0, 1000)}`);
+    }
+
+    return data;
+}
+
+export async function extractInvoiceWithMistralOcr(input: {
+    filePath: string;
+    fileName: string;
+    mimetype?: string;
+}): Promise<MistralOcrExtractionResult> {
+    if (process.env.ENABLE_MISTRAL_OCR !== "true") {
+        return {
+            success: false,
+            provider: "disabled",
+            rawText: "",
+            structured: null,
+            confidence: 0,
+            warnings: ["ENABLE_MISTRAL_OCR is not true. Mistral OCR fallback skipped."],
+        };
+    }
+
+    if (!process.env.MISTRAL_API_KEY) {
+        return {
+            success: false,
+            provider: "disabled",
+            rawText: "",
+            structured: null,
+            confidence: 0,
+            warnings: ["MISTRAL_API_KEY is not configured. Mistral OCR fallback skipped."],
+        };
+    }
+
+    try {
+        const fileBase64 = fs.readFileSync(input.filePath).toString("base64");
+        const timeoutMs = getEnvNumber("MISTRAL_OCR_TIMEOUT_MS", 30000);
+
+        const data = await withTimeout(
+            mistralOcrRequest({
+                fileBase64,
+                fileName: input.fileName,
+                mimetype: input.mimetype || "application/pdf",
+            }),
+            timeoutMs,
+            `Mistral OCR timed out after ${timeoutMs}ms`
+        );
+
+        const rawText = normalizeMistralPages(data);
+        const structured = parseStructuredFromMistralText(rawText);
+
+        return {
+            success: Boolean(rawText || structured?.line_items?.length),
+            provider: "mistral_ocr",
+            rawText,
+            structured,
+            confidence: Number(structured?.confidence || 0.7),
+            warnings: [
+                ...(structured?.warnings || []),
+                `Mistral OCR extracted text length: ${rawText.length}`,
+            ],
+        };
+    } catch (error: any) {
+        return {
+            success: false,
+            provider: "failed",
+            rawText: "",
+            structured: null,
+            confidence: 0,
+            warnings: [error?.message || String(error)],
+        };
+    }
 }
