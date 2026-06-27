@@ -11,6 +11,7 @@ import {
 import { extractStructuredInvoiceWithLLM } from "./llmStructuredExtraction.service.js";
 import { extractStructuredInvoiceWithMistral } from "./mistralStructuredExtraction.service.js";
 import { extractGenericInvoiceLineItems } from "./genericInvoiceLineItemExtractor.service.js";
+import { extractElectricityBillLineItems } from "./electricityBillFallbackExtractor.service.js";
 
 export type ExtractionMethod =
     | "pdf_text"
@@ -810,6 +811,48 @@ export async function extractInvoiceData(input: {
     else if (lineItems.some((i: any) => i.source === "llm_structured_extraction")) method = "llm_structured_extraction";
 
     const success = rawText.length > 0 || lineItems.length > 0;
+
+    // ── Electricity Bill Fallback ──────────────────────────────────────
+    // Runs before generic fallback. Handles TNB Malaysia bills with Peak/Off-Peak kWh.
+    if (!lineItems.length) {
+        const fallbackText =
+            mistralText ||
+            ocrText ||
+            pdfText ||
+            rawText ||
+            "";
+
+        const electricityFallbackItems = extractElectricityBillLineItems(fallbackText);
+
+        if (electricityFallbackItems.length > 0) {
+            warnings.push(
+                `Electricity fallback extracted ${electricityFallbackItems.length} line item(s) from OCR text.`
+            );
+
+            return {
+                success: true,
+                method: "electricity_bill_fallback" as any,
+                rawText: fallbackText,
+                textLength: fallbackText.length,
+                line_items: electricityFallbackItems,
+                warnings,
+                needs_review: false,
+                confidence: 0.86,
+                audit: {
+                    fileName: input.fileName,
+                    filePath: input.filePath,
+                    mimetype: input.mimetype,
+                    pdfTextLength: pdfText.length,
+                    ocrTextLength: ocrText.length,
+                    extraction_steps: [
+                        ...extractionSteps,
+                        "electricity_bill_fallback_started",
+                        `electricity_fallback_line_items_${electricityFallbackItems.length}`,
+                    ],
+                },
+            };
+        }
+    }
 
     // ── Generic OCR Table Fallback ─────────────────────────────────────
     // Last resort before needs_review. Scans raw text for pipe-table rows.
