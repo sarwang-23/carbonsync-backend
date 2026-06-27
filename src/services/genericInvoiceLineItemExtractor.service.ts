@@ -91,8 +91,12 @@ function isLikelyItemName(value: string) {
 
 function dedupe(items: GenericExtractedLineItem[]) {
     const seen = new Set<string>();
-    return items.filter((item) => {
+
+    return items.filter((item, index) => {
+        const rowId = item.parameters?.row_index ?? index;
+
         const key = [
+            rowId,
             cleanText(item.item_name).toLowerCase(),
             Number(item.quantity || 0).toFixed(4),
             cleanText(item.unit).toLowerCase(),
@@ -165,6 +169,7 @@ function extractFromPipeCells(rawText: string): GenericExtractedLineItem[] {
             confidence: 0.82,
             source: "generic_pipe_table_fallback",
             parameters: {
+                row_index: i,
                 country,
                 region: country,
                 material: /door|shutter|flush|plywood|timber|wood/i.test(product)
@@ -219,6 +224,7 @@ function extractFromFlatRows(rawText: string): GenericExtractedLineItem[] {
             confidence: 0.78,
             source: "generic_flat_row_fallback",
             parameters: {
+                row_index: items.length,
                 country,
                 region: country,
                 material: "timber_or_wood_product",
