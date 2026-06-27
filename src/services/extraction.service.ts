@@ -3,6 +3,7 @@ import path from "path";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { extractTextWithOcr } from "./ocr.service.js";
 import { extractInvoiceWithGeminiVision, convertVisionStructuredToLineItems } from "./vision.service.js";
+import { extractInvoiceWithMistralOcr } from "./mistralOcr.service.js";
 import {
     shouldBlockScannedPdfInFreeMode,
     buildScannedPdfFreeModeExtractionResult,
@@ -12,6 +13,7 @@ export type ExtractionMethod =
     | "pdf_text"
     | "ocr_text"
     | "vision_placeholder"
+    | "mistral_ocr"
     | "combined_pdf_ocr"
     | "failed"
     | "scanned_pdf_blocked_free_mode";
@@ -116,6 +118,34 @@ export async function extractOcrDetailed(filePath: string, mimetype = "") {
 export async function extractOcrText(filePath: string, mimetype = ""): Promise<string> {
     const result = await extractOcrDetailed(filePath, mimetype);
     return result.text || "";
+}
+
+
+export async function extractWithMistralOcrFallback(
+    filePath: string,
+    fileName = "",
+    mimetype = ""
+): Promise<{ text: string; lineItems: ExtractedLineItem[]; warnings: string[]; confidence: number }> {
+    const result = await extractInvoiceWithMistralOcr({
+        filePath,
+        fileName,
+        mimetype,
+    });
+
+    console.log("MISTRAL_OCR_EXTRACTION_RESULT", {
+        success: result.success,
+        provider: result.provider,
+        confidence: result.confidence,
+        warnings: result.warnings,
+        textLength: result.rawText?.length || 0,
+    });
+
+    return {
+        text: result.rawText || "",
+        lineItems: convertVisionStructuredToLineItems(result.structured, result.rawText || ""),
+        warnings: result.warnings || [],
+        confidence: result.confidence || 0,
+    };
 }
 
 /**
@@ -407,6 +437,9 @@ export async function extractInvoiceData(input: {
     let visionText = "";
     let visionLineItems: ExtractedLineItem[] = [];
     let visionConfidence = 0;
+    let mistralText = "";
+    let mistralLineItems: ExtractedLineItem[] = [];
+    let mistralConfidence = 0;
 
     if (!input.filePath || !fs.existsSync(input.filePath)) {
         return {
@@ -457,7 +490,32 @@ export async function extractInvoiceData(input: {
         }
     }
 
+
     if (
+        process.env.ENABLE_MISTRAL_OCR === "true" &&
+        (pdfText + " " + ocrText).trim().length < 300
+    ) {
+        try {
+            extractionSteps.push("mistral_ocr_extraction_started");
+            const mistralResult = await extractWithMistralOcrFallback(
+                input.filePath,
+                input.fileName,
+                input.mimetype || ""
+            );
+            mistralText = mistralResult.text;
+            mistralLineItems = mistralResult.lineItems;
+            mistralConfidence = mistralResult.confidence;
+            warnings.push(...mistralResult.warnings);
+            extractionSteps.push(`mistral_text_length_${mistralText.length}`);
+            extractionSteps.push(`mistral_line_items_${mistralLineItems.length}`);
+        } catch (error: any) {
+            warnings.push(`Mistral OCR extraction failed: ${error?.message || String(error)}`);
+            extractionSteps.push("mistral_ocr_extraction_failed");
+        }
+    }
+
+    if (
+        (pdfText + " " + ocrText + " " + mistralText).trim().length < 300 &&
         shouldBlockScannedPdfInFreeMode({
             mimetype: input.mimetype || "",
             fileName: input.fileName || "",
@@ -506,8 +564,11 @@ export async function extractInvoiceData(input: {
         warnings.push("Vision extraction disabled and OCR/PDF text is below 300 characters.");
     }
 
-    const rawText = cleanText([pdfText, ocrText, visionText].filter(Boolean).join("\n"));
+    const rawText = cleanText([pdfText, ocrText, mistralText, visionText].filter(Boolean).join("\n"));
     const lineItems = extractStructuredLineItemsFromText(rawText);
+    if (!lineItems.length && mistralLineItems.length) {
+        lineItems.push(...mistralLineItems);
+    }
     if (!lineItems.length && visionLineItems.length) {
         lineItems.push(...visionLineItems);
     }
@@ -516,6 +577,7 @@ export async function extractInvoiceData(input: {
     if (pdfText.length >= 300 && ocrText.length > 0) method = "combined_pdf_ocr";
     else if (pdfText.length >= 300) method = "pdf_text";
     else if (ocrText.length >= 300) method = "ocr_text";
+    else if (mistralText.length >= 300) method = "mistral_ocr";
     else if (visionText.length >= 300) method = "vision_placeholder";
 
     const success = rawText.length > 0 || lineItems.length > 0;
@@ -532,7 +594,7 @@ export async function extractInvoiceData(input: {
         line_items: lineItems,
         warnings,
         needs_review: !lineItems.length,
-        confidence: lineItems.length ? Math.max(...lineItems.map((i) => Number(i.confidence || 0.6)), visionConfidence || 0) : 0.35,
+        confidence: lineItems.length ? Math.max(...lineItems.map((i) => Number(i.confidence || 0.6)), mistralConfidence || 0, visionConfidence || 0) : 0.35,
         audit: {
             fileName: input.fileName,
             filePath: input.filePath,
