@@ -1,12 +1,15 @@
 /**
- * Generic Invoice Line Item Extractor v2
+ * Generic Invoice Line Item Extractor v3
  *
- * Permanent fallback for OCR text tables.
- * Handles:
- * - Header-aware tables: Description/Kind of Product + Size + Pcs + Quantity + Rate + Per + Amount
- * - TIMBER_1 style: Sl No | Description | Size | Pcs | Quantity | Rate | per | Amount
- * - TIMBER_3 style: Ch.No | Kind of Product | Pcts/Kgs | Length/Thickness | Size | Cubic Ft/Sq.Mtrs | Rate | Per | Amount
- * - Flattened Door Shutter rows
+ * Broader fallback for OCR/Markdown tables.
+ * Handles non-timber invoices too:
+ * - Safety Net / Construction material
+ * - Timber / Door / Plywood
+ * - Steel / Aluminium / Cement / Textile / Plastic etc.
+ *
+ * Important:
+ * This extractor does NOT require item names to match a hardcoded material list.
+ * If a row has description + quantity + rate + amount, it can extract it.
  */
 
 export type GenericExtractedLineItem = {
@@ -64,7 +67,7 @@ function normalizeUnit(unit: string, itemName = "") {
     if (/litre|liter|ltr|\bl\b/.test(u)) return "l";
     if (/m3|m³|cubic|cft|cu\.?\s*ft/.test(u)) return "m3";
 
-    if (/door|shutter|flush|plywood|timber|wood/i.test(itemName) && !u) return "pcs";
+    if (/door|shutter|flush|plywood|timber|wood|net|safety/i.test(itemName) && !u) return "pcs";
     return unit || "unknown";
 }
 
@@ -72,23 +75,39 @@ function isNonBillableRow(rowText: string) {
     return /subtotal|sub\s*total|total\b|grand\s*total|vat|gst|cgst|sgst|igst|rounded|round\s*off|tax\b|amount\s+chargeable|amount\s+in\s+words|rupees\s*:/i.test(rowText);
 }
 
+function isHeaderText(text: string) {
+    return /description\s+of\s+goods|kind\s+of\s+product|particulars|quantity|amount|rate|size|sl\s*no|pcts|kgs/i.test(text);
+}
+
 function isLikelyItemName(value: string) {
     const text = cleanText(value);
     if (!text) return false;
     if (/^-+$/.test(text)) return false;
     if (isNonBillableRow(text)) return false;
-    if (/description\s+of\s+goods|kind\s+of\s+product|particulars|quantity|amount|rate|size/i.test(text)) return false;
-    return /[a-zA-Z]/.test(text);
+    if (isHeaderText(text)) return false;
+    if (!/[a-zA-Z]/.test(text)) return false;
+
+    // Avoid addresses / metadata as item rows
+    if (/invoice|dated|delivery|buyer|consignee|supplier|reference|despatch|destination|terms|email|phone|pan|tin|office|subject to/i.test(text)) return false;
+
+    return true;
 }
 
-function isMaterialName(value: string) {
-    return /door|shutter|flush|plywood|timber|wood|veneer|laminate|steel|aluminium|aluminum|cement|textile|fabric|plastic|paper/i.test(value);
+function inferCategory(itemName: string) {
+    if (/electricity|kwh|tenaga|tnb/i.test(itemName)) return "electricity_bill";
+    if (/fuel|diesel|petrol|gasoline/i.test(itemName)) return "fuel";
+    if (/water|m3|sewerage/i.test(itemName)) return "water";
+    return "purchased_goods";
 }
 
-function dedupe(items: GenericExtractedLineItem[]) {
-    // Do not remove repeated invoice rows blindly.
-    // Some invoices legitimately repeat same item/quantity/amount as separate billable rows.
-    return items;
+function inferMaterial(itemName: string) {
+    if (/door|shutter|flush|plywood|timber|wood|veneer|laminate/i.test(itemName)) return "timber_or_wood_product";
+    if (/steel|iron|tmt|bar|rod/i.test(itemName)) return "steel_or_metal_product";
+    if (/aluminium|aluminum/i.test(itemName)) return "aluminium_product";
+    if (/cement|concrete/i.test(itemName)) return "cement_or_concrete_product";
+    if (/textile|fabric|cloth/i.test(itemName)) return "textile_product";
+    if (/net|safety\s*net|shade\s*net|fish\s*net/i.test(itemName)) return "safety_or_plastic_net_product";
+    return "purchased_goods";
 }
 
 function makeItem(input: {
@@ -102,11 +121,13 @@ function makeItem(input: {
     confidence: number;
     parameters?: Record<string, any>;
 }) {
+    const itemName = cleanText(input.itemName);
+
     return {
-        item_name: input.itemName,
-        description: input.itemName,
+        item_name: itemName,
+        description: itemName,
         quantity: input.quantity,
-        unit: normalizeUnit(input.unit, input.itemName),
+        unit: normalizeUnit(input.unit, itemName),
         amount: input.amount,
         currency: input.currency,
         confidence: input.confidence,
@@ -114,17 +135,21 @@ function makeItem(input: {
         parameters: {
             country: input.country,
             region: input.country,
-            category: "purchased_goods",
-            material: isMaterialName(input.itemName) ? "material_or_purchased_goods" : null,
+            category: inferCategory(itemName),
+            material: inferMaterial(itemName),
             ...(input.parameters || {}),
         },
     };
 }
 
+function dedupe(items: GenericExtractedLineItem[]) {
+    // Keep repeated invoice rows. Repeated rows may be valid billable rows.
+    return items;
+}
+
 /**
- * Header-aware pipe table extraction.
- *
- * Converts all pipe cells into rows using detected header width.
+ * Header-aware table extraction.
+ * Finds rows based on headers and does not require product keyword matching.
  */
 function extractHeaderAwarePipeTables(rawText: string): GenericExtractedLineItem[] {
     const currency = detectCurrency(rawText);
@@ -142,13 +167,12 @@ function extractHeaderAwarePipeTables(rawText: string): GenericExtractedLineItem
         const headerText = headerSlice.join(" | ").toLowerCase();
 
         const hasDesc = /description\s+of\s+goods|kind\s+of\s+product|particulars|description/.test(headerText);
+        const hasQty = /\bquantity\b|pcs|pcts|kgs/.test(headerText);
         const hasAmount = /\bamount\b/.test(headerText);
         const hasRate = /\brate\b/.test(headerText);
-        const hasUnit = /\bper\b|unit/.test(headerText);
 
-        if (!hasDesc || !hasAmount || !hasRate) continue;
+        if (!hasDesc || !hasQty || !hasAmount || !hasRate) continue;
 
-        // Determine the header end at Amount column.
         const amountRel = headerSlice.findIndex((c) => /\bamount\b/i.test(c));
         if (amountRel < 0) continue;
 
@@ -158,9 +182,7 @@ function extractHeaderAwarePipeTables(rawText: string): GenericExtractedLineItem
         const descIdx = header.findIndex((c) => /description|kind\s+of\s+product|particulars/i.test(c));
         const sizeIdx = header.findIndex((c) => /\bsize\b/i.test(c));
         const pcsIdx = header.findIndex((c) => /pcs|pcts|kgs/i.test(c));
-        const qtyIdx = header.findIndex((c) => /^quantity$/i.test(c));
-        const thicknessIdx = header.findIndex((c) => /length|thickness/i.test(c));
-        const measureIdx = header.findIndex((c) => /cubic|sq\.?\s*m|sq\.?\s*mtrs/i.test(c));
+        const qtyIdx = header.findIndex((c) => /quantity/i.test(c));
         const rateIdx = header.findIndex((c) => /\brate\b/i.test(c));
         const perIdx = header.findIndex((c) => /\bper\b|unit/i.test(c));
         const amountIdx = header.findIndex((c) => /\bamount\b/i.test(c));
@@ -173,7 +195,6 @@ function extractHeaderAwarePipeTables(rawText: string): GenericExtractedLineItem
             let row = cells.slice(cursor, cursor + width);
             let rowText = row.join(" ");
 
-            // Stop/skip on non item rows.
             if (isNonBillableRow(rowText)) {
                 cursor += width;
                 continue;
@@ -181,17 +202,15 @@ function extractHeaderAwarePipeTables(rawText: string): GenericExtractedLineItem
 
             let itemName = cleanText(row[descIdx]);
 
-            // Some TIMBER_3 subsequent rows have no first date cell and row shifts left:
-            // Door Shutter | 40 | 32.00 | size | measure | rate | PCS | amount
-            // In this case descIdx from header may be 1 but row[0] is actual item.
-            if (!isLikelyItemName(itemName) && isLikelyItemName(row[0]) && isMaterialName(row[0])) {
+            // If a row is shifted left due missing empty cells, try shifting.
+            if (!isLikelyItemName(itemName) && isLikelyItemName(row[0])) {
                 const shifted = ["", ...row].slice(0, width);
                 row = shifted;
                 rowText = row.join(" ");
                 itemName = cleanText(row[descIdx]);
             }
 
-            if (!isLikelyItemName(itemName) || !isMaterialName(itemName)) {
+            if (!isLikelyItemName(itemName)) {
                 cursor += width;
                 continue;
             }
@@ -201,23 +220,21 @@ function extractHeaderAwarePipeTables(rawText: string): GenericExtractedLineItem
             const qty = qtyIdx >= 0 ? toNumber(row[qtyIdx]) : 0;
             const rate = rateIdx >= 0 ? toNumber(row[rateIdx]) : 0;
             const unitRaw = perIdx >= 0 ? row[perIdx] : "";
+            const normalizedUnit = normalizeUnit(unitRaw, itemName);
 
             if (!amount || amount <= 0) {
                 cursor += width;
                 continue;
             }
 
-            // If "Quantity" column exists and "per" is Sq.Mtr/m2, use quantity.
-            // Otherwise use pcs/pcts/kgs.
-            const normalizedUnit = normalizeUnit(unitRaw, itemName);
             const quantity =
-                qty > 0 && normalizedUnit === "m2"
+                qty > 0
                     ? qty
-                    : qty > 0 && pcs <= 0
-                      ? qty
-                      : pcs > 0
-                        ? pcs
-                        : qty;
+                    : pcs > 0
+                      ? pcs
+                      : rate > 0 && amount > 0
+                        ? amount / rate
+                        : 0;
 
             if (!quantity || quantity <= 0) {
                 cursor += width;
@@ -225,16 +242,10 @@ function extractHeaderAwarePipeTables(rawText: string): GenericExtractedLineItem
             }
 
             const size = sizeIdx >= 0 ? row[sizeIdx] : null;
-            const thickness = thicknessIdx >= 0 ? toNumber(row[thicknessIdx]) : null;
-            const secondaryMeasure = measureIdx >= 0 ? toNumber(row[measureIdx]) : null;
 
-            const fullName = [
-                itemName,
-                thickness ? `${thickness}MM` : "",
-                size && /\d/.test(size) ? `(${size})` : "",
-            ]
-                .filter(Boolean)
-                .join(" ");
+            const fullName = size && /\d/.test(size)
+                ? `${itemName} (${size})`
+                : itemName;
 
             items.push(
                 makeItem({
@@ -245,14 +256,12 @@ function extractHeaderAwarePipeTables(rawText: string): GenericExtractedLineItem
                     currency,
                     country,
                     source: "generic_header_aware_table_fallback",
-                    confidence: 0.84,
+                    confidence: 0.82,
                     parameters: {
                         product: itemName,
                         size: size || null,
                         pcs: pcs || null,
                         table_quantity: qty || null,
-                        thickness_mm: thickness || null,
-                        secondary_measure: secondaryMeasure || null,
                         rate: rate || null,
                         per: unitRaw || null,
                         extraction_method: "header_aware_pipe_table",
@@ -269,141 +278,95 @@ function extractHeaderAwarePipeTables(rawText: string): GenericExtractedLineItem
 }
 
 /**
- * Pipe-cell fallback for rows without perfect header mapping.
+ * Flexible single-row scanner:
+ * Sl No | Description | Quantity | Rate | per Amount
+ * or
+ * Description | | 2,000.00 Sq.Mtr. | 140.00 | Sq.Mtr. 2,80,000.00
  */
-function extractMaterialPipeCellScan(rawText: string): GenericExtractedLineItem[] {
+function extractFlexibleRows(rawText: string): GenericExtractedLineItem[] {
     const currency = detectCurrency(rawText);
     const country = detectCountry(rawText);
     const items: GenericExtractedLineItem[] = [];
 
-    const cells = String(rawText || "")
-        .split("|")
+    const rows = String(rawText || "")
+        .split(/\n|(?=\|\s*\d+\s*\|)/g)
         .map(cleanText)
-        .filter(Boolean)
-        .filter((cell) => !/^[-\s]+$/.test(cell));
+        .filter((row) => row.includes("|"));
 
-    for (let i = 0; i < cells.length; i++) {
-        const product = cells[i];
+    for (const row of rows) {
+        if (isNonBillableRow(row)) continue;
 
-        if (!isLikelyItemName(product) || !isMaterialName(product)) continue;
+        const cells = row
+            .split("|")
+            .map(cleanText)
+            .filter(Boolean)
+            .filter((cell) => !/^[-\s]+$/.test(cell));
 
-        // TIMBER_3 shape:
-        // product | pcs | thickness | size | measure | rate | PCS | amount
-        const pcsA = toNumber(cells[i + 1]);
-        const thicknessA = toNumber(cells[i + 2]);
-        const sizeA = cells[i + 3];
-        const measureA = toNumber(cells[i + 4]);
-        const rateA = toNumber(cells[i + 5]);
-        const unitA = normalizeUnit(cells[i + 6], product);
-        const amountA = toNumber(cells[i + 7]);
+        if (cells.length < 5) continue;
 
-        if (pcsA > 0 && amountA > 0 && /\d+(?:\.\d+)?\s*[xX]\s*\d+(?:\.\d+)?/.test(sizeA || "")) {
-            items.push(
-                makeItem({
-                    itemName: `${product}${thicknessA ? ` ${thicknessA}MM` : ""} (${sizeA})`,
-                    quantity: pcsA,
-                    unit: unitA,
-                    amount: amountA,
-                    currency,
-                    country,
-                    source: "generic_pipe_cell_scan_fallback",
-                    confidence: 0.82,
-                    parameters: {
-                        product,
-                        thickness_mm: thicknessA || null,
-                        size: sizeA,
-                        secondary_measure: measureA || null,
-                        rate: rateA || null,
-                        per: cells[i + 6] || null,
-                        extraction_method: "pipe_cell_material_scan",
-                        row_index: i,
-                    },
-                })
-            );
-            i += 7;
-            continue;
+        // Find the most likely description cell.
+        const descIndex = cells.findIndex((cell) => isLikelyItemName(cell) && /[a-zA-Z]{3,}/.test(cell));
+        if (descIndex < 0) continue;
+
+        const desc = cells[descIndex];
+
+        // Find amount: usually last large money value.
+        const numericCells = cells.map((cell, idx) => ({ cell, idx, num: toNumber(cell) }));
+        const amountCandidate = [...numericCells]
+            .reverse()
+            .find((x) => x.num > 0 && x.idx > descIndex && /[\d,]+\.\d{2}/.test(x.cell));
+
+        if (!amountCandidate) continue;
+
+        // Find quantity+unit after description.
+        let quantity = 0;
+        let unit = "unknown";
+        let rate = 0;
+
+        for (let i = descIndex + 1; i < amountCandidate.idx; i++) {
+            const cell = cells[i];
+            const num = toNumber(cell);
+
+            if (!quantity && num > 0) {
+                quantity = num;
+                unit = normalizeUnit(cell, desc);
+            }
+
+            // rate is usually next numeric before amount
+            if (num > 0 && i !== amountCandidate.idx) {
+                rate = num;
+            }
+
+            const unitMatch = cell.match(/(Sq\.?\s*Mtr\.?|Sq\.?\s*Mr\.?|Sq\.?\s*Mt\.?|PCS|Nos|Kg|Kgs|MT|m2|kWh)/i);
+            if (unitMatch && unit === "unknown") {
+                unit = normalizeUnit(unitMatch[1], desc);
+            }
         }
 
-        // TIMBER_1 shape:
-        // slno | product | size | pcs | quantity | rate | per | amount
-        // If loop currently at product cell:
-        const sizeB = cells[i + 1];
-        const pcsB = toNumber(cells[i + 2]);
-        const qtyB = toNumber(cells[i + 3]);
-        const rateB = toNumber(cells[i + 4]);
-        const unitB = normalizeUnit(cells[i + 5], product);
-        const amountB = toNumber(cells[i + 6]);
-
-        if (qtyB > 0 && amountB > 0 && /\d+(?:\.\d+)?\s*[xX]\s*\d+(?:\.\d+)?/.test(sizeB || "")) {
-            const quantity = unitB === "m2" ? qtyB : pcsB || qtyB;
-
-            items.push(
-                makeItem({
-                    itemName: `${product} (${sizeB})`,
-                    quantity,
-                    unit: unitB,
-                    amount: amountB,
-                    currency,
-                    country,
-                    source: "generic_pipe_cell_scan_fallback",
-                    confidence: 0.82,
-                    parameters: {
-                        product,
-                        size: sizeB,
-                        pcs: pcsB || null,
-                        table_quantity: qtyB || null,
-                        rate: rateB || null,
-                        per: cells[i + 5] || null,
-                        extraction_method: "pipe_cell_material_scan_timber1",
-                        row_index: i,
-                    },
-                })
-            );
-            i += 6;
+        // Sometimes quantity and unit are in same cell: "2,000.00 Sq.Mtr."
+        const qtyUnitCell = cells.slice(descIndex + 1, amountCandidate.idx).find((cell) => /\d/.test(cell) && /(Sq|PCS|Nos|Kg|MT|m2|kWh)/i.test(cell));
+        if (qtyUnitCell) {
+            quantity = toNumber(qtyUnitCell);
+            const unitMatch = qtyUnitCell.match(/(Sq\.?\s*Mtr\.?|Sq\.?\s*Mr\.?|Sq\.?\s*Mt\.?|PCS|Nos|Kg|Kgs|MT|m2|kWh)/i);
+            if (unitMatch) unit = normalizeUnit(unitMatch[1], desc);
         }
-    }
 
-    return dedupe(items);
-}
-
-function extractFlatDoorRows(rawText: string): GenericExtractedLineItem[] {
-    const currency = detectCurrency(rawText);
-    const country = detectCountry(rawText);
-    const items: GenericExtractedLineItem[] = [];
-    const text = String(rawText || "").replace(/\s+/g, " ");
-
-    const doorRegex =
-        /Door\s+Shutter\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+([0-9.]+\s*[xX]\s*[0-9.]+)\s+(\d+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)\s+PCS\s+([\d,]+(?:\.\d+)?)/gi;
-
-    let match: RegExpExecArray | null;
-    while ((match = doorRegex.exec(text)) !== null) {
-        const quantity = toNumber(match[1]);
-        const thickness = toNumber(match[2]);
-        const size = cleanText(match[3]);
-        const secondaryMeasure = toNumber(match[4]);
-        const rate = toNumber(match[5]);
-        const amount = toNumber(match[6]);
-
-        if (!quantity || !amount) continue;
+        if (!quantity || quantity <= 0) continue;
 
         items.push(
             makeItem({
-                itemName: `Door Shutter ${thickness}MM (${size})`,
+                itemName: desc,
                 quantity,
-                unit: "pcs",
-                amount,
+                unit,
+                amount: amountCandidate.num,
                 currency,
                 country,
-                source: "generic_flat_row_fallback",
-                confidence: 0.78,
+                source: "generic_flexible_row_fallback",
+                confidence: 0.76,
                 parameters: {
-                    product: "Door Shutter",
-                    thickness_mm: thickness || null,
-                    size,
-                    secondary_measure: secondaryMeasure || null,
+                    product: desc,
                     rate: rate || null,
-                    per: "PCS",
-                    extraction_method: "flat_door_shutter_regex",
+                    extraction_method: "flexible_pipe_row_scan",
                 },
             })
         );
@@ -418,8 +381,7 @@ export function extractGenericInvoiceLineItems(rawText: string): GenericExtracte
 
     const items = dedupe([
         ...extractHeaderAwarePipeTables(text),
-        ...extractMaterialPipeCellScan(text),
-        ...extractFlatDoorRows(text),
+        ...extractFlexibleRows(text),
     ]);
 
     return items.filter((item) => {

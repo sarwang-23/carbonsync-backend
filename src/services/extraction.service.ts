@@ -912,13 +912,14 @@ export async function extractInvoiceData(input: {
         };
 
         const finalResolved = resolveFinalInvoiceLineItems({
-            rawText,
-            pdfText,
-            ocrText,
-            mistralText,
-            mistralResult,
-            ocrResult,
-            llmResult,
+            rawText: "",
+            pdfText: typeof pdfText !== "undefined" ? pdfText : "",
+            ocrText: typeof ocrText !== "undefined" ? ocrText : "",
+            mistralText: typeof mistralText !== "undefined" ? mistralText : "",
+            mistralResult: typeof mistralResult !== "undefined" ? mistralResult : null,
+            ocrResult: null,
+            visionResult: null,
+            llmResult: null,
             warnings,
             audit,
         });
