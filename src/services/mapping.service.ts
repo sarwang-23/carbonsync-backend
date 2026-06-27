@@ -3,15 +3,12 @@ import db from "../db.js";
 export type EmissionFactorMapping = {
   id: string;
 
-  // Actual DB columns in public.emission_factor_mappings
+  // Actual DB columns used by the current query
   pattern: string;
   category: string | null;
   material: string | null;
   country: string | null;
   region: string | null;
-  climatiq_activity_id: string | null;
-  climatiq_region: string | null;
-  climatiq_year: number | null;
   unit_type: string | null;
   calculation_basis: string | null;
   fallback_factor_kgco2e_per_unit: string | number | null;
@@ -19,7 +16,12 @@ export type EmissionFactorMapping = {
   priority: number | null;
   notes: string | null;
 
-  // Compatibility fields used in src/app.ts
+  // Optional DB columns: these may or may not exist in your Supabase table
+  climatiq_activity_id?: string | null;
+  climatiq_region?: string | null;
+  climatiq_year?: number | null;
+
+  // Compatibility fields used by src/app.ts
   activity_id: string | null;
   requested_region: string | null;
   parameter_name: string | null;
@@ -52,6 +54,33 @@ function normalizeCountry(country?: string | null): string {
   return String(country || "Malaysia").trim() || "Malaysia";
 }
 
+function buildManualActivityId(row: any): string | null {
+  const material = String(row?.material || "").toLowerCase().trim();
+  const category = String(row?.category || "").toLowerCase().trim();
+
+  if (material.includes("electricity") || category.includes("electricity")) {
+    return "manual-malaysia-electricity";
+  }
+
+  if (material.includes("diesel")) {
+    return "manual-malaysia-diesel";
+  }
+
+  if (material.includes("petrol") || material.includes("gasoline")) {
+    return "manual-malaysia-petrol";
+  }
+
+  if (material.includes("natural")) {
+    return "manual-malaysia-natural-gas";
+  }
+
+  if (material.includes("lpg")) {
+    return "manual-malaysia-lpg";
+  }
+
+  return null;
+}
+
 export async function findBestMapping(
   itemName: string,
   country: string = "Malaysia",
@@ -65,16 +94,18 @@ export async function findBestMapping(
     return null;
   }
 
+  /*
+    IMPORTANT:
+    Do not reference ef.climatiq_activity_id, ef.climatiq_region, ef.climatiq_year,
+    or ef.active directly here because your current Supabase table may not have
+    those columns. SELECT ef.* is safe, but selecting a missing column by name
+    causes 500 errors like:
+    column ef.climatiq_activity_id does not exist
+  */
   const result = await db.query(
     `
     SELECT
-      ef.*,
-
-      -- Old app.ts compatibility aliases
-      ef.climatiq_activity_id AS activity_id,
-      COALESCE(ef.climatiq_region, ef.region) AS requested_region,
-      '^6'::text AS data_version
-
+      ef.*
     FROM public.emission_factor_mappings ef
     WHERE ef.country = $1
       AND $2 ~* ef.pattern
@@ -103,12 +134,18 @@ export async function findBestMapping(
     return null;
   }
 
+  const requestedRegion =
+    row.climatiq_region ||
+    row.region ||
+    cleanRegion ||
+    (cleanCountry.toLowerCase() === "malaysia" ? "MY" : cleanCountry);
+
   return {
     ...row,
 
-    // These 3 fields are required by src/app.ts at multiple lines.
-    activity_id: row.activity_id || row.climatiq_activity_id || null,
-    requested_region: row.requested_region || row.climatiq_region || row.region || null,
+    // These fields are required by src/app.ts, so we create them safely here.
+    activity_id: row.climatiq_activity_id || buildManualActivityId(row),
+    requested_region: requestedRegion,
     parameter_name: mapUnitTypeToParameterName(row.unit_type),
 
     // Required by old Climatiq body logic.
