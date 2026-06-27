@@ -652,6 +652,35 @@ export async function extractInvoiceData(input: {
         }
     }
 
+    // ── Early return: Mistral (OCR rule-parser or LLM) already found items ───
+    // Skip Gemini Vision and Gemini LLM — they are not needed.
+    if (mistralLineItems.length > 0) {
+        const earlyRawText = cleanText([pdfText, ocrText, mistralText].filter(Boolean).join("\n"));
+
+        extractionSteps.push(`mistral_early_return_items_${mistralLineItems.length}`);
+
+        return {
+            success: true,
+            method: mistralLineItems.some((i: any) => i.source === "mistral_llm_structured_extraction")
+                ? "mistral_ocr_llm"
+                : "mistral_ocr",
+            rawText: earlyRawText,
+            textLength: earlyRawText.length,
+            line_items: mistralLineItems,
+            warnings,
+            needs_review: false,
+            confidence: mistralConfidence || 0.78,
+            audit: {
+                fileName: input.fileName,
+                filePath: input.filePath,
+                mimetype: input.mimetype,
+                pdfTextLength: pdfText.length,
+                ocrTextLength: ocrText.length,
+                extraction_steps: extractionSteps,
+            },
+        };
+    }
+
     if (
         (pdfText + " " + ocrText + " " + mistralText).trim().length < 300 &&
         shouldBlockScannedPdfInFreeMode({
