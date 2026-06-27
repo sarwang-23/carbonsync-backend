@@ -190,13 +190,48 @@ function getSpendParameters(item: any) {
     const amount = Number(item?.amount || 0);
     const currency = String(item?.currency || item?.parameters?.currency || "").toUpperCase();
 
-    if (amount > 0 && currency) {
+    if (!amount || amount <= 0 || !currency) return null;
+
+    // Climatiq CEDA spend-based factors commonly use kg/USD.
+    // Invoice amount can be INR/MYR, so convert money to USD before calling Estimate API.
+    // Set these env vars in production for your preferred accounting FX rate:
+    // INR_TO_USD_RATE=0.012
+    // MYR_TO_USD_RATE=0.21
+    if (currency === "USD") {
         return {
             money: amount,
-            money_unit: currency,
+            money_unit: "USD",
+            original_money: amount,
+            original_money_unit: "USD",
+            conversion_method: "spend_based_usd_original",
         };
     }
 
+    if (currency === "INR") {
+        const rate = Number(process.env.INR_TO_USD_RATE || process.env.USD_PER_INR || 0.012);
+        return {
+            money: Number((amount * rate).toFixed(6)),
+            money_unit: "USD",
+            original_money: amount,
+            original_money_unit: "INR",
+            fx_rate_to_usd: rate,
+            conversion_method: "spend_based_inr_to_usd",
+        };
+    }
+
+    if (currency === "MYR") {
+        const rate = Number(process.env.MYR_TO_USD_RATE || process.env.USD_PER_MYR || 0.21);
+        return {
+            money: Number((amount * rate).toFixed(6)),
+            money_unit: "USD",
+            original_money: amount,
+            original_money_unit: "MYR",
+            fx_rate_to_usd: rate,
+            conversion_method: "spend_based_myr_to_usd",
+        };
+    }
+
+    // Unknown currency: do not guess. Let calculation fail cleanly with needs_review.
     return null;
 }
 
@@ -226,13 +261,19 @@ function buildClimatiqParameterCandidates(category: DetectedCategory, normalized
         const spend = getSpendParameters(normalizedItemData);
         if (spend) {
             candidates.push({
-                parameters: spend,
+                parameters: {
+                    money: spend.money,
+                    money_unit: spend.money_unit,
+                },
                 converted: {
                     value: spend.money,
                     unit: spend.money_unit,
-                    conversion_method: "spend_based_parameters",
+                    original_money: spend.original_money,
+                    original_money_unit: spend.original_money_unit,
+                    fx_rate_to_usd: spend.fx_rate_to_usd,
+                    conversion_method: spend.conversion_method || "spend_based_parameters",
                 },
-                method: "spend_based_parameters",
+                method: spend.conversion_method || "spend_based_parameters",
             });
         }
     }
