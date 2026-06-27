@@ -12,6 +12,7 @@ import { extractStructuredInvoiceWithLLM } from "./llmStructuredExtraction.servi
 import { extractStructuredInvoiceWithMistral } from "./mistralStructuredExtraction.service.js";
 import { extractGenericInvoiceLineItems } from "./genericInvoiceLineItemExtractor.service.js";
 import { extractElectricityBillLineItems } from "./electricityBillFallbackExtractor.service.js";
+import { resolveFinalInvoiceLineItems } from "./finalInvoiceLineItemResolver.service.js";
 
 export type ExtractionMethod =
     | "pdf_text"
@@ -544,6 +545,10 @@ export async function extractInvoiceData(input: {
     let mistralText = "";
     let mistralLineItems: ExtractedLineItem[] = [];
     let mistralConfidence = 0;
+    // Hoisted so resolveFinalInvoiceLineItems can inspect all parser outputs
+    let ocrResult: any = null;
+    let mistralResult: any = null;
+    let llmResult: any = null;
 
     if (!input.filePath || !fs.existsSync(input.filePath)) {
         return {
@@ -580,7 +585,7 @@ export async function extractInvoiceData(input: {
     if (pdfText.length < 300) {
         try {
             extractionSteps.push("ocr_extraction_started");
-            const ocrResult = await extractOcrDetailed(input.filePath, input.mimetype || "");
+            ocrResult = await extractOcrDetailed(input.filePath, input.mimetype || "");
             ocrText = ocrResult.text || "";
             if (ocrResult.warnings?.length) {
                 warnings.push(...ocrResult.warnings.map((warning: any) => `OCR warning: ${warning}`));
@@ -601,7 +606,7 @@ export async function extractInvoiceData(input: {
     ) {
         try {
             extractionSteps.push("mistral_ocr_extraction_started");
-            const mistralResult = await extractWithMistralOcrFallback(
+            mistralResult = await extractWithMistralOcrFallback(
                 input.filePath,
                 input.fileName,
                 input.mimetype || ""
@@ -785,14 +790,15 @@ export async function extractInvoiceData(input: {
     } else if (!lineItems.length && rawText.length >= 100) {
         try {
             extractionSteps.push("llm_structured_extraction_started");
-            const llmResult = await extractStructuredInvoiceWithLLM(rawText, {
+            const llmResultLocal = await extractStructuredInvoiceWithLLM(rawText, {
                 fileName: input.fileName,
                 mimetype: input.mimetype,
             });
-            warnings.push(...llmResult.warnings);
-            if (llmResult.success && llmResult.line_items.length) {
-                lineItems.push(...llmResult.line_items);
-                extractionSteps.push(`llm_structured_items_${llmResult.line_items.length}`);
+            llmResult = llmResultLocal;
+            warnings.push(...llmResultLocal.warnings);
+            if (llmResultLocal.success && llmResultLocal.line_items.length) {
+                lineItems.push(...llmResultLocal.line_items);
+                extractionSteps.push(`llm_structured_items_${llmResultLocal.line_items.length}`);
             } else {
                 extractionSteps.push("llm_structured_extraction_no_items");
             }
@@ -890,6 +896,36 @@ export async function extractInvoiceData(input: {
 
     if (!lineItems.length) {
         warnings.push("No structured line items extracted from text. Calculation may need manual review or Vision extraction.");
+    }
+
+    // ── Final Line Item Resolver ───────────────────────────────────────────
+    // Last safety net before returning needs_review. Checks all parser outputs
+    // and re-runs electricity + generic fallbacks on available text.
+    if (!lineItems.length) {
+        const audit = {
+            fileName: input.fileName,
+            filePath: input.filePath,
+            mimetype: input.mimetype,
+            pdfTextLength: pdfText.length,
+            ocrTextLength: ocrText.length,
+            extraction_steps: extractionSteps,
+        };
+
+        const finalResolved = resolveFinalInvoiceLineItems({
+            rawText,
+            pdfText,
+            ocrText,
+            mistralText,
+            mistralResult,
+            ocrResult,
+            llmResult,
+            warnings,
+            audit,
+        });
+
+        if (finalResolved.line_items.length > 0) {
+            return finalResolved as any;
+        }
     }
 
     return {
