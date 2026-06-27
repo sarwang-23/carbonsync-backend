@@ -2,10 +2,12 @@ import db from "../db.js";
 
 export type EmissionFactorMapping = {
   id: string;
+
+  // Actual DB columns in public.emission_factor_mappings
   pattern: string;
-  category: string;
-  material: string;
-  country: string;
+  category: string | null;
+  material: string | null;
+  country: string | null;
   region: string | null;
   climatiq_activity_id: string | null;
   climatiq_region: string | null;
@@ -16,41 +18,102 @@ export type EmissionFactorMapping = {
   fallback_unit: string | null;
   priority: number | null;
   notes: string | null;
+
+  // Compatibility fields used in src/app.ts
+  activity_id: string | null;
+  requested_region: string | null;
+  parameter_name: string | null;
+  data_version: string;
 };
+
+function mapUnitTypeToParameterName(unitType?: string | null): string | null {
+  const value = String(unitType || "").toLowerCase().trim();
+
+  if (["energy", "electricity", "kwh", "kw h"].includes(value)) {
+    return "energy";
+  }
+
+  if (["mass", "weight", "kg", "kgs", "tonne", "tonnes", "ton", "mt"].includes(value)) {
+    return "weight";
+  }
+
+  if (["volume", "litre", "liter", "litres", "liters", "l", "m3", "cubic_meter", "cubic metre"].includes(value)) {
+    return "volume";
+  }
+
+  if (["distance", "km", "kilometre", "kilometer"].includes(value)) {
+    return "distance";
+  }
+
+  return value || null;
+}
+
+function normalizeCountry(country?: string | null): string {
+  return String(country || "Malaysia").trim() || "Malaysia";
+}
 
 export async function findBestMapping(
   itemName: string,
   country: string = "Malaysia",
   region?: string
 ): Promise<EmissionFactorMapping | null> {
-  const cleanItemName = itemName || "";
+  const cleanItemName = String(itemName || "").trim();
+  const cleanCountry = normalizeCountry(country);
+  const cleanRegion = region ? String(region).trim() : null;
+
+  if (!cleanItemName) {
+    return null;
+  }
 
   const result = await db.query(
     `
-    SELECT *
-    FROM public.emission_factor_mappings
-    WHERE country = $1
-      AND $2 ~* pattern
+    SELECT
+      ef.*,
+
+      -- Old app.ts compatibility aliases
+      ef.climatiq_activity_id AS activity_id,
+      COALESCE(ef.climatiq_region, ef.region) AS requested_region,
+      '^6'::text AS data_version
+
+    FROM public.emission_factor_mappings ef
+    WHERE ef.country = $1
+      AND $2 ~* ef.pattern
       AND (
         $3::text IS NULL
-        OR region = $3
-        OR region = 'Malaysia'
-        OR region IS NULL
+        OR ef.region = $3
+        OR ef.region = 'Malaysia'
+        OR ef.region IS NULL
       )
     ORDER BY
       CASE
-        WHEN region = $3 THEN 1
-        WHEN region = 'Malaysia' THEN 2
-        WHEN region IS NULL THEN 3
+        WHEN ef.region = $3 THEN 1
+        WHEN ef.region = 'Malaysia' THEN 2
+        WHEN ef.region IS NULL THEN 3
         ELSE 4
       END,
-      priority DESC NULLS LAST
+      ef.priority DESC NULLS LAST
     LIMIT 1;
     `,
-    [country, cleanItemName, region || null]
+    [cleanCountry, cleanItemName, cleanRegion]
   );
 
-  return result.rows[0] || null;
+  const row = result.rows[0];
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+
+    // These 3 fields are required by src/app.ts at multiple lines.
+    activity_id: row.activity_id || row.climatiq_activity_id || null,
+    requested_region: row.requested_region || row.climatiq_region || row.region || null,
+    parameter_name: mapUnitTypeToParameterName(row.unit_type),
+
+    // Required by old Climatiq body logic.
+    data_version: row.data_version || "^6",
+  };
 }
 
 export function calculateEmission(
@@ -58,8 +121,9 @@ export function calculateEmission(
   mapping: EmissionFactorMapping
 ) {
   const factor = Number(mapping.fallback_factor_kgco2e_per_unit || 0);
+  const safeQuantity = Number(quantity || 0);
 
-  const totalKgCO2e = quantity * factor;
+  const totalKgCO2e = safeQuantity * factor;
   const totalTCO2e = totalKgCO2e / 1000;
 
   return {
