@@ -186,6 +186,11 @@ function convertAreaMaterialToWeightKg(item: any, normalizedItemData: any) {
     };
 }
 
+function factorUsesSpendParameters(factor: any) {
+    const unit = safeLower(factor?.unit);
+    return unit.includes("/usd") || unit.includes("usd") || unit.includes("/eur") || unit.includes("eur") || unit.includes("/gbp") || unit.includes("gbp");
+}
+
 function getSpendParameters(item: any) {
     const amount = Number(item?.amount || 0);
     const currency = String(item?.currency || item?.parameters?.currency || "").toUpperCase();
@@ -200,7 +205,7 @@ function getSpendParameters(item: any) {
     if (currency === "USD") {
         return {
             money: amount,
-            money_unit: "USD",
+            money_unit: "usd",
             original_money: amount,
             original_money_unit: "USD",
             conversion_method: "spend_based_usd_original",
@@ -211,7 +216,7 @@ function getSpendParameters(item: any) {
         const rate = Number(process.env.INR_TO_USD_RATE || process.env.USD_PER_INR || 0.012);
         return {
             money: Number((amount * rate).toFixed(6)),
-            money_unit: "USD",
+            money_unit: "usd",
             original_money: amount,
             original_money_unit: "INR",
             fx_rate_to_usd: rate,
@@ -223,7 +228,7 @@ function getSpendParameters(item: any) {
         const rate = Number(process.env.MYR_TO_USD_RATE || process.env.USD_PER_MYR || 0.21);
         return {
             money: Number((amount * rate).toFixed(6)),
-            money_unit: "USD",
+            money_unit: "usd",
             original_money: amount,
             original_money_unit: "MYR",
             fx_rate_to_usd: rate,
@@ -314,7 +319,19 @@ async function estimateWithCompatibleCandidates(input: {
     const attempts: any[] = [];
 
     for (const factor of orderedFactors) {
-        for (const parameterCandidate of parameterCandidates) {
+        const spendFactor = factorUsesSpendParameters(factor);
+
+        const orderedParameterCandidates = [...parameterCandidates].sort((a, b) => {
+            const aMoney = a.parameters?.money !== undefined ? 1 : 0;
+            const bMoney = b.parameters?.money !== undefined ? 1 : 0;
+            const aWeight = a.parameters?.weight !== undefined ? 1 : 0;
+            const bWeight = b.parameters?.weight !== undefined ? 1 : 0;
+
+            if (spendFactor) return bMoney - aMoney;
+            return bWeight - aWeight;
+        });
+
+        for (const parameterCandidate of orderedParameterCandidates) {
             if (!isLikelyCompatibleFactor(factor, parameterCandidate.parameters)) {
                 attempts.push({
                     activity_id: factor.activity_id,

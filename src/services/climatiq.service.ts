@@ -182,15 +182,30 @@ export function isLikelyCompatibleFactor(selectedEF: any, parameters: Record<str
     const unit = safeLower(selectedEF?.unit);
     const activity = safeLower(`${selectedEF?.activity_id || ""} ${selectedEF?.name || ""} ${selectedEF?.description || ""}`);
 
+    const isSpendFactor =
+        unit.includes("/usd") ||
+        unit.includes("usd") ||
+        unit.includes("/eur") ||
+        unit.includes("eur") ||
+        unit.includes("/gbp") ||
+        unit.includes("gbp");
+
+    // Example: CEDA "kg/usd" factors must receive money parameters, not weight.
+    if (isSpendFactor) {
+        return parameters.money !== undefined;
+    }
+
     if (parameters.energy !== undefined) {
         return unit.includes("kwh") || activity.includes("electricity");
     }
 
     if (parameters.weight !== undefined) {
         return (
-            unit.includes("kg") ||
+            unit === "kg/kg" ||
+            unit === "kg/t" ||
+            unit.includes("kg/tonne") ||
+            unit.includes("kg/t") ||
             unit.includes("tonne") ||
-            unit.includes("t") ||
             activity.includes("production") ||
             activity.includes("material")
         );
@@ -201,7 +216,7 @@ export function isLikelyCompatibleFactor(selectedEF: any, parameters: Record<str
     }
 
     if (parameters.money !== undefined) {
-        return unit.includes("usd") || unit.includes("eur") || unit.includes("gbp") || unit.includes("money");
+        return isSpendFactor || unit.includes("money");
     }
 
     if (parameters.number !== undefined) {
