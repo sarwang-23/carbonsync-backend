@@ -25,6 +25,12 @@ import { buildClimatiqBody } from "./services/climatiqBody.service.js";
 import { calculateDynamicCountryEmission } from "./services/dynamicEmissionFactor.service.js";
 import { extractInvoiceData } from "./services/extraction.service.js";
 import { processUploadedInvoicePipeline } from "./services/invoicePipeline.service.js";
+import {
+    createInvoiceJob,
+    getInvoiceJob,
+    listInvoiceJobs,
+    startInvoiceJob,
+} from "./services/invoiceJob.service.js";
 dotenv.config();
 const require = createRequire(import.meta.url);
 const pdfParseModule = require("pdf-parse");
@@ -4284,6 +4290,94 @@ function buildUnknownScannedInvoiceFallbackItems({
     },
   ];
 }
+
+// Async upload route: returns immediately, no 502.
+app.post("/api/erp/upload-async", upload.single("invoice"), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: "No invoice file uploaded.",
+            });
+        }
+
+        const job = createInvoiceJob(req.file);
+
+        startInvoiceJob(job.id, async ({ filePath, fileName, mimetype }) => {
+            return processUploadedInvoicePipeline({
+                filePath,
+                fileName,
+                mimetype,
+                reportType: "BRSR",
+                reportTypes: ["BRSR", "CBAM"],
+            });
+        });
+
+        return res.status(202).json({
+            success: true,
+            message: "Invoice received. Processing started in background.",
+            job_id: job.id,
+            status: job.status,
+            progress: job.progress,
+            poll_url: `/api/erp/jobs/${job.id}`,
+            file: {
+                originalname: req.file.originalname,
+                filename: req.file.filename,
+                path: req.file.path,
+                mimetype: req.file.mimetype,
+                size: req.file.size,
+            },
+        });
+    } catch (error: any) {
+        console.error("UPLOAD_ASYNC_ERROR", {
+            message: error?.message,
+            stack: error?.stack,
+        });
+
+        return res.status(500).json({
+            success: false,
+            error_type: "UPLOAD_ASYNC_ERROR",
+            message: error?.message || "Failed to create invoice job.",
+        });
+    }
+});
+
+// Job status route.
+app.get("/api/erp/jobs/:jobId", async (req, res) => {
+    const job = getInvoiceJob(req.params.jobId);
+
+    if (!job) {
+        return res.status(404).json({
+            success: false,
+            message: "Invoice job not found.",
+        });
+    }
+
+    return res.json({
+        success: true,
+        job_id: job.id,
+        status: job.status,
+        progress: job.progress,
+        created_at: job.created_at,
+        updated_at: job.updated_at,
+        file: {
+            fileName: job.fileName,
+            mimetype: job.mimetype,
+            size: job.size,
+        },
+        error_message: job.error_message,
+        warnings: job.warnings,
+        result: job.status === "completed" || job.status === "failed" ? job.result : undefined,
+    });
+});
+
+// Optional: list recent jobs for debugging.
+app.get("/api/erp/jobs", async (_req, res) => {
+    return res.json({
+        success: true,
+        jobs: listInvoiceJobs().slice(0, 50),
+    });
+});
 
 app.post("/api/upload-invoice", upload.single("invoice"), async (req: Request, res: Response) => {
   const uploadStartTime = Date.now();
