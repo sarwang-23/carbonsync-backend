@@ -3,13 +3,18 @@ import path from "path";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { extractTextWithOcr } from "./ocr.service.js";
 import { extractInvoiceWithGeminiVision, convertVisionStructuredToLineItems } from "./vision.service.js";
+import {
+    shouldBlockScannedPdfInFreeMode,
+    buildScannedPdfFreeModeExtractionResult,
+} from "./scannedPdfGuard.service.js";
 
 export type ExtractionMethod =
     | "pdf_text"
     | "ocr_text"
     | "vision_placeholder"
     | "combined_pdf_ocr"
-    | "failed";
+    | "failed"
+    | "scanned_pdf_blocked_free_mode";
 
 export interface ExtractedLineItem {
     item_name: string;
@@ -32,6 +37,8 @@ export interface InvoiceExtractionResult {
     warnings: string[];
     needs_review: boolean;
     confidence: number;
+    error_type?: string;
+    message?: string;
     audit: {
         fileName: string;
         filePath: string;
@@ -448,6 +455,25 @@ export async function extractInvoiceData(input: {
             warnings.push(`OCR extraction failed: ${error?.message || String(error)}`);
             extractionSteps.push("ocr_extraction_failed");
         }
+    }
+
+    if (
+        shouldBlockScannedPdfInFreeMode({
+            mimetype: input.mimetype || "",
+            fileName: input.fileName || "",
+            pdfText,
+            ocrText,
+        })
+    ) {
+        return buildScannedPdfFreeModeExtractionResult({
+            mimetype: input.mimetype || "",
+            fileName: input.fileName || "",
+            filePath: input.filePath || "",
+            pdfText,
+            ocrText,
+            extractionSteps,
+            warnings,
+        });
     }
 
     if (

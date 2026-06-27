@@ -109,6 +109,30 @@ export async function processUploadedInvoicePipeline(input: UploadedInvoicePipel
         mimetype: input.mimetype,
     });
 
+    if (
+        extraction?.error_type === "SCANNED_PDF_REQUIRES_VISION" ||
+        extraction?.method === "scanned_pdf_blocked_free_mode"
+    ) {
+        return {
+            success: false,
+            needs_review: true,
+            retryable: false,
+            error_type: "SCANNED_PDF_REQUIRES_VISION",
+            message:
+                "This scanned PDF requires Vision extraction. Please upload a clear JPG/PNG image or enable Gemini Vision credits.",
+            extraction,
+            total_items: 0,
+            successful_items: 0,
+            failed_items: 0,
+            total_kgco2e: 0,
+            total_tco2e: 0,
+            extracted_items: [],
+            normalized_items: [],
+            calculation_results: [],
+            warnings: extraction?.warnings || [],
+        };
+    }
+
     const extractionItems = extraction.line_items || [];
     const existingItems = input.existingItems || [];
 
