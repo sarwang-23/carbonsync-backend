@@ -12,18 +12,13 @@ const upload = multer({
 });
 
 router.post("/test-affinda", upload.single("file"), async (req, res) => {
-  // ── Debug: confirm .env loaded at route level ────────────────────────────
-  console.log("AFFINDA_API_KEY exists:", !!process.env.AFFINDA_API_KEY);
-  console.log("AFFINDA_WORKSPACE_ID:", process.env.AFFINDA_WORKSPACE_ID);
-  console.log("AFFINDA_COLLECTION_ID:", process.env.AFFINDA_COLLECTION_ID);
-
   try {
     const file = req.file;
 
     if (!file) {
       return res.status(400).json({
         success: false,
-        message: "No file uploaded",
+        message: "No file uploaded. Use form-data key: file",
       });
     }
 
@@ -33,6 +28,7 @@ router.post("/test-affinda", upload.single("file"), async (req, res) => {
       success: true,
       provider: result.provider,
       vendorName: result.vendorName,
+      invoiceNumber: result.invoiceNumber,
       invoiceDate: result.invoiceDate,
       currency: result.currency,
       total: result.total,
