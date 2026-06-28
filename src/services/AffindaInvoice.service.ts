@@ -123,13 +123,13 @@ export async function extractInvoiceWithAffinda(filePath: string) {
   console.log("FILE PATH:", filePath);
   console.log("FILE EXISTS:", fs.existsSync(filePath));
 
-  // ── Build form — ONLY collection, explicit filename to avoid ECONNRESET ────
+  // ── Build form — workspace ONLY (collection removed — causes does_not_exist) ─
   const form = new FormData();
   form.append("file", fs.createReadStream(filePath), {
     filename: "bill.pdf",
   });
-  form.append("collection", AFFINDA_COLLECTION_ID!);
-  console.log("AFFINDA_FORM: sending collection =", AFFINDA_COLLECTION_ID);
+  form.append("workspace", AFFINDA_WORKSPACE_ID!);
+  console.log("AFFINDA_FORM: sending workspace =", AFFINDA_WORKSPACE_ID);
 
   try {
     const response = await axios.post(
