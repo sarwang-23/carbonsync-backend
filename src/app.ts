@@ -32,6 +32,7 @@ import {
     startInvoiceJob,
 } from "./services/invoiceJob.service.js";
 import { buildStructuredInvoiceResponse } from "./services/responseFormatter.service.js";
+import affindaTestRoutes from "./routes/affinda-test.routes.js";
 dotenv.config();
 const require = createRequire(import.meta.url);
 const pdfParseModule = require("pdf-parse");
@@ -6182,6 +6183,7 @@ app.get("/api/test-climatiq", async (_req: Request, res: Response) => {
   }
 });
 
+app.use("/api/affinda", affindaTestRoutes);
 app.use("/api", limiter, router);
 
 // Global Error Handler to catch all unhandled errors (like Multer) and return JSON
