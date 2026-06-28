@@ -12,6 +12,11 @@ const upload = multer({
 });
 
 router.post("/test-affinda", upload.single("file"), async (req, res) => {
+  // ── Debug: confirm .env loaded at route level ────────────────────────────
+  console.log("AFFINDA_API_KEY exists:", !!process.env.AFFINDA_API_KEY);
+  console.log("AFFINDA_WORKSPACE_ID:", process.env.AFFINDA_WORKSPACE_ID);
+  console.log("AFFINDA_COLLECTION_ID:", process.env.AFFINDA_COLLECTION_ID);
+
   try {
     const file = req.file;
 

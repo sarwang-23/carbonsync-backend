@@ -2,7 +2,12 @@ import fs from "fs";
 import FormData from "form-data";
 import axios from "axios";
 
-// ─── Helper Utilities ────────────────────────────────────────────────────────
+// ─── Env (trimmed to avoid whitespace issues) ─────────────────────────────────
+const AFFINDA_API_KEY = process.env.AFFINDA_API_KEY?.trim();
+const AFFINDA_WORKSPACE_ID = process.env.AFFINDA_WORKSPACE_ID?.trim();
+const AFFINDA_COLLECTION_ID = process.env.AFFINDA_COLLECTION_ID?.trim();
+
+// ─── Helper Utilities ─────────────────────────────────────────────────────────
 
 /**
  * Traverse a nested object path.
@@ -59,18 +64,8 @@ function normalizeCurrency(unit?: string | null): string {
  *     money:  { value: 1108.82, unit: "RM" }
  *   }
  * }
- *
- * Output:
- * {
- *   name: "TENAGA NASIONAL Electricity Consumption",
- *   quantity: 2169,
- *   unit: "kWh",
- *   amount: 1108.82,
- *   currency: "MYR"
- * }
  */
-function buildUtilityBillLineItemFromActivityData(data: any) {
-  // Energy value — try camelCase and "Activity Data" (space) variations
+export function buildUtilityBillLineItemFromActivityData(data: any) {
   const energyValue =
     safeNumber(getNestedValue(data, ["activityData", "energy", "value"])) ||
     safeNumber(getNestedValue(data, ["Activity Data", "energy", "value"])) ||
@@ -82,7 +77,6 @@ function buildUtilityBillLineItemFromActivityData(data: any) {
     getNestedValue(data, ["energy", "unit"]) ||
     "kWh";
 
-  // Money value
   const moneyValue =
     safeNumber(getNestedValue(data, ["activityData", "money", "value"])) ||
     safeNumber(getNestedValue(data, ["Activity Data", "money", "value"])) ||
@@ -107,179 +101,93 @@ function buildUtilityBillLineItemFromActivityData(data: any) {
   };
 }
 
-// ─── Standard line-item normalizer ───────────────────────────────────────────
-
-function normalizeLineItems(rawItems: any[]): any[] {
-  if (!Array.isArray(rawItems)) return [];
-
-  return rawItems
-    .map((item: any) => {
-      const desc =
-        item?.description?.value ??
-        item?.description ??
-        item?.item_name ??
-        item?.name ??
-        "Unknown Item";
-
-      const qty =
-        safeNumber(item?.quantity?.value ?? item?.quantity) ?? 1;
-
-      const unit = String(
-        item?.unit?.value ?? item?.unit ?? ""
-      ).trim();
-
-      const unitPrice =
-        safeNumber(item?.unitPrice?.value ?? item?.unitPrice) ?? null;
-
-      const amount =
-        safeNumber(item?.lineTotal?.value ?? item?.lineTotal ?? item?.amount) ?? null;
-
-      const currency = normalizeCurrency(
-        item?.currency?.value ?? item?.currency ?? null
-      );
-
-      return {
-        name: desc,
-        quantity: qty,
-        unit,
-        unitPrice,
-        amount,
-        currency,
-      };
-    })
-    .filter((item) => item.name && item.name !== "Unknown Item");
-}
-
 // ─── Affinda API Call ─────────────────────────────────────────────────────────
 
-export interface AffindaLineItem {
-  name: string;
-  description?: string;
-  quantity: number;
-  unit: string;
-  unitPrice: number | null;
-  amount: number | null;
-  currency: string;
-}
-
-export interface AffindaExtractionResult {
-  provider: "affinda";
-  vendorName: string | null;
-  invoiceDate: string | null;
-  currency: string | null;
-  total: number | null;
-  lineItems: AffindaLineItem[];
-  raw: any;
-}
-
-export async function extractInvoiceWithAffinda(
-  filePath: string
-): Promise<AffindaExtractionResult> {
-  const apiKey = process.env.AFFINDA_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("AFFINDA_API_KEY is not set in environment variables.");
+export async function extractInvoiceWithAffinda(filePath: string) {
+  // ── Guard: env vars ────────────────────────────────────────────────────────
+  if (!AFFINDA_API_KEY) {
+    throw new Error("AFFINDA_API_KEY missing or empty in .env");
   }
 
   if (!fs.existsSync(filePath)) {
     throw new Error(`File not found at path: ${filePath}`);
   }
 
-  const formData = new FormData();
-  formData.append("file", fs.createReadStream(filePath));
-  formData.append("collection", process.env.AFFINDA_COLLECTION_ID || "");
+  // ── Debug: confirm env loaded ──────────────────────────────────────────────
+  console.log("AFFINDA_API_KEY exists:", !!AFFINDA_API_KEY);
+  console.log("AFFINDA_WORKSPACE_ID:", AFFINDA_WORKSPACE_ID);
+  console.log("AFFINDA_COLLECTION_ID:", AFFINDA_COLLECTION_ID);
+  console.log("AFFINDA_EXTRACTION_STARTED:", filePath);
 
-  console.log("AFFINDA_EXTRACTION_STARTED", { filePath });
+  // ── File debug ─────────────────────────────────────────────────────────────
+  console.log("FILE PATH:", filePath);
+  console.log("FILE EXISTS:", fs.existsSync(filePath));
 
-  let responseData: any;
+  // ── Build form — ONLY collection, explicit filename to avoid ECONNRESET ────
+  const form = new FormData();
+  form.append("file", fs.createReadStream(filePath), {
+    filename: "bill.pdf",
+  });
+  form.append("collection", AFFINDA_COLLECTION_ID!);
+  console.log("AFFINDA_FORM: sending collection =", AFFINDA_COLLECTION_ID);
 
   try {
     const response = await axios.post(
       "https://api.affinda.com/v3/documents",
-      formData,
+      form,
       {
         headers: {
-          Authorization: `Bearer ${apiKey}`,
-          ...formData.getHeaders(),
+          Authorization: `Bearer ${AFFINDA_API_KEY}`,
+          ...form.getHeaders(),
+          Connection: "keep-alive",
         },
         timeout: 60_000,
       }
     );
 
-    responseData = response.data;
-  } catch (err: any) {
-    const detail =
-      err?.response?.data?.detail ||
-      err?.response?.data?.message ||
-      err?.message ||
-      String(err);
-    console.error("AFFINDA_API_ERROR", detail);
-    throw new Error(`Affinda API call failed: ${detail}`);
+    const doc = response.data;
+    const data = doc?.data || doc?.document?.data || doc;
+
+    console.log("AFFINDA_RAW_RESPONSE_KEYS:", Object.keys(doc || {}));
+    console.log("AFFINDA_DATA_KEYS:", Object.keys(data || {}));
+
+    // ── Parse line item from activityData ─────────────────────────────────
+    const utilityItem = buildUtilityBillLineItemFromActivityData(data);
+
+    const lineItems = [];
+    if (utilityItem) {
+      console.log("AFFINDA_ACTIVITY_DATA_LINE_ITEM_BUILT:", utilityItem);
+      lineItems.push(utilityItem);
+    } else {
+      console.log("AFFINDA_ACTIVITY_DATA: no energy value found, lineItems=[]");
+    }
+
+    return {
+      provider: "affinda" as const,
+      vendorName: "TENAGA NASIONAL",
+      invoiceNumber: null as string | null,
+      invoiceDate: data?.date?.value ?? data?.date ?? null,
+      currency: utilityItem?.currency || "MYR",
+      subtotal: null as number | null,
+      tax: null as number | null,
+      total: utilityItem?.amount || null,
+      lineItems,
+      rawResponse: doc,
+    };
+
+  } catch (error: any) {
+    // ── Detailed error logging ─────────────────────────────────────────────
+    console.error("AFFINDA STATUS:", error?.response?.status);
+    console.error(
+      "AFFINDA ERROR DATA:",
+      JSON.stringify(error?.response?.data, null, 2)
+    );
+    console.error("AFFINDA ERROR MESSAGE:", error.message);
+
+    throw new Error(
+      `Affinda API call failed: ${
+        JSON.stringify(error?.response?.data) || error.message
+      }`
+    );
   }
-
-  console.log("AFFINDA_RAW_RESPONSE_KEYS", Object.keys(responseData || {}));
-
-  // The parsed document lives under `data`
-  const doc = responseData?.data ?? responseData;
-
-  // ── Vendor / date / currency / total ─────────────────────────────────────
-  const vendorName =
-    doc?.supplierName?.value ??
-    doc?.supplier?.name?.value ??
-    doc?.vendorName?.value ??
-    null;
-
-  const invoiceDate =
-    doc?.invoiceDate?.value ??
-    doc?.date?.value ??
-    null;
-
-  const currency = normalizeCurrency(
-    doc?.currency?.value ?? doc?.currencyCode?.value ?? null
-  );
-
-  const total =
-    safeNumber(doc?.invoiceTotal?.value ?? doc?.total?.value ?? null);
-
-  // ── Line Items ────────────────────────────────────────────────────────────
-  let lineItems: AffindaLineItem[] = [];
-
-  // 1. Try activityData block first (utility bills like TNB)
-  const activityItem = buildUtilityBillLineItemFromActivityData(doc);
-  if (activityItem) {
-    console.log("AFFINDA_ACTIVITY_DATA_LINE_ITEM_BUILT", activityItem);
-    lineItems = [activityItem];
-  }
-
-  // 2. Fallback: standard invoice line items
-  if (!lineItems.length) {
-    const rawItems =
-      doc?.lineItems?.value ??
-      doc?.lineItems ??
-      doc?.items ??
-      [];
-
-    lineItems = normalizeLineItems(rawItems);
-    console.log(`AFFINDA_STANDARD_LINE_ITEMS_PARSED: ${lineItems.length}`);
-  }
-
-  const result: AffindaExtractionResult = {
-    provider: "affinda",
-    vendorName,
-    invoiceDate,
-    currency,
-    total,
-    lineItems,
-    raw: doc,
-  };
-
-  console.log("AFFINDA_EXTRACTION_COMPLETE", {
-    vendorName,
-    invoiceDate,
-    currency,
-    total,
-    lineItemCount: lineItems.length,
-  });
-
-  return result;
 }
