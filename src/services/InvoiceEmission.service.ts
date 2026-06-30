@@ -138,6 +138,10 @@ function calculateLocalCo2e(
 export async function processInvoiceEmissions(
   input: ProcessInvoiceEmissionInput
 ) {
+  console.log("EMISSION INPUT REGION:", input.region);
+  console.log("EMISSION INPUT COUNTRY:", input.country_name);
+  console.log("EMISSION ITEMS:", input.items);
+
   const results: any[] = [];
   let totalCo2e = 0;
   let calculatedCount = 0;
@@ -156,6 +160,13 @@ export async function processInvoiceEmissions(
       const category = item.category || "unknown";
       const value = Number(item.value || item.quantity);
       const unit = item.unit;
+
+      console.log("ITEM ROUTING CHECK:", {
+        region: input.region,
+        category,
+        value,
+        unit,
+      });
 
       if (!value || !Number.isFinite(value)) {
         reviewCount++;
@@ -189,6 +200,8 @@ export async function processInvoiceEmissions(
 
       // ── India ─── Hybrid Fixed EF + Climatiq Fallback route ──────────────────
       if (input.region === "IN") {
+        console.log("USING INDIA FIXED/HYBRID ROUTE");
+
         const indiaResult = await calculateIndiaEmission({
           category,
           itemName,

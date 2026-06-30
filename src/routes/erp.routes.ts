@@ -119,8 +119,8 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       currency: detectedCountry.currency,
     });
 
-    // ── Malaysia / India: keep existing pipeline intact ─────────────────────
-    if (detectedCountry.region === "MY" || detectedCountry.region === "IN") {
+    // ── Malaysia: keep existing pipeline intact ─────────────────────
+    if (detectedCountry.region === "MY") {
       const emissionResult = await processMalaysiaInvoiceItems({
         extractionId,
         fileName: file.originalname,
@@ -169,6 +169,37 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     // ── DE / US / GB / FR / AU: generic emission pipeline ──────────────────
     const normalizedItems = normalizeInvoiceItems(items);
+
+    function extractElectricityKwhFromText(text: string): number | null {
+      const normalized = text.replace(/\s+/g, " ");
+
+      const netBilledMatch = normalized.match(
+        /net\s+billed\s+unit\s*[:\-]?\s*([\d,.]+)\s*kwh/i
+      );
+
+      if (netBilledMatch) {
+        return Number(netBilledMatch[1].replace(/,/g, ""));
+      }
+
+      const assessedMatch = normalized.match(
+        /assessed\s+unit\s*[:\-]?\s*([\d,.]+)/i
+      );
+
+      if (assessedMatch) {
+        return Number(assessedMatch[1].replace(/,/g, ""));
+      }
+
+      return null;
+    }
+
+    const electricityUnits = extractElectricityKwhFromText(fullText);
+
+    for (const item of normalizedItems) {
+      if (electricityUnits && item.category === "electricity") {
+        item.value = electricityUnits;
+        item.unit = "kWh";
+      }
+    }
 
     const emissionResult = await processInvoiceEmissions({
       region: detectedCountry.region,

@@ -121,38 +121,42 @@ export function detectCountryFromText(text: string, fileName = ""): DetectedCoun
 
   // 2. Vendor/country keywords
   if (
-    lower.includes("tenaga nasional") ||
-    lower.includes("tnb") ||
-    lower.includes("malaysia") ||
-    lower.includes("myr") ||
-    lower.includes("kwj")
-  ) {
-    return {
-      region: "MY",
-      country_name: "Malaysia",
-      currency: "MYR",
-      confidence: 95,
-      reason: "Malaysia/TNB/MYR keyword found",
-    };
-  }
-
-  if (
-    lower.includes("dhbvn") ||
     lower.includes("uppcl") ||
+    lower.includes("dakshinanchal vidyut") ||
+    lower.includes("vidyut vitran") ||
+    lower.includes("account no.") ||
+    lower.includes("net billed unit") ||
+    (lower.includes("kwh") && lower.includes("ind")) ||
+    lower.includes("india") ||
+    lower.includes("inr") ||
+    lower.includes("gstin") ||
+    lower.includes("dhbvn") ||
     lower.includes("bses") ||
     lower.includes("tata power") ||
     lower.includes("adani electricity") ||
-    lower.includes("gstin") ||
-    lower.includes("india") ||
-    lower.includes("inr") ||
     lower.includes("₹")
   ) {
     return {
       region: "IN",
       country_name: "India",
       currency: "INR",
+      confidence: 98,
+      reason: "India electricity utility keyword found",
+    };
+  }
+
+  if (
+    lower.includes("tenaga nasional") ||
+    lower.includes("tnb") ||
+    lower.includes("malaysia") ||
+    lower.includes("region code: my")
+  ) {
+    return {
+      region: "MY",
+      country_name: "Malaysia",
+      currency: "MYR",
       confidence: 95,
-      reason: "India/INR/GSTIN/utility keyword found",
+      reason: "Malaysia/TNB keyword found",
     };
   }
 
