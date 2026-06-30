@@ -1,5 +1,6 @@
 import { calculateGermanyEmission } from "./GermanyEmission.service.js";
 import { calculateIndiaEmission } from "./IndiaEmission.service.js";
+import { calculateWithClimatiqFallback } from "./ClimatiqFallback.service.js";
 import { pool } from "../db.js";
 
 type InvoiceEmissionItem = {
@@ -303,18 +304,58 @@ export async function processInvoiceEmissions(
       });
 
       if (!factor) {
-        reviewCount++;
+        const fallbackResult = await calculateWithClimatiqFallback({
+          region: input.region,
+          countryName: input.country_name,
+          category: item.category,
+          itemName: item.item_name,
+          value: Number(item.value),
+          unit: item.unit,
+        });
+
+        if (!fallbackResult.success) {
+          reviewCount++;
+
+          results.push({
+            item_name: item.item_name,
+            category: item.category,
+            value: item.value,
+            unit: item.unit,
+            status: "review",
+            source_engine: "official_factor_db_then_climatiq",
+            region: input.region,
+            reason: fallbackResult.reason || "NO_LOCAL_FACTOR_AND_CLIMATIQ_FAILED",
+            message: fallbackResult.message,
+          });
+
+          continue;
+        }
+
+        calculatedCount++;
+        totalCo2e += fallbackResult.co2e;
+
         results.push({
           item_name: item.item_name,
           category: item.category,
           value: item.value,
           unit: item.unit,
-          status: "review",
-          source_engine: "official_factor_db",
+          status: "calculated",
+          source_engine: "climatiq",
+          fallback_used: true,
+          preferred_source: "Climatiq",
           region: input.region,
-          reason: "NO_LOCAL_FACTOR_FOUND",
-          message: "This item needs manual review or mapping update",
+          country_name: input.country_name,
+          activity_id: fallbackResult.activity_id,
+          parameter_name: fallbackResult.parameter_name,
+          parameter_unit: fallbackResult.parameter_unit,
+          converted: fallbackResult.converted,
+          co2e: fallbackResult.co2e,
+          co2e_unit: fallbackResult.co2e_unit,
+          factor_name: fallbackResult.factor_name,
+          factor_source: fallbackResult.factor_source,
+          factor_region: fallbackResult.factor_region,
         });
+
         continue;
       }
 
@@ -326,20 +367,60 @@ export async function processInvoiceEmissions(
       );
 
       if (co2e === null) {
-        reviewCount++;
+        const fallbackResult = await calculateWithClimatiqFallback({
+          region: input.region,
+          countryName: input.country_name,
+          category: item.category,
+          itemName: item.item_name,
+          value: Number(item.value),
+          unit: item.unit,
+        });
+
+        if (!fallbackResult.success) {
+          reviewCount++;
+
+          results.push({
+            item_name: item.item_name,
+            category: item.category,
+            value: item.value,
+            unit: item.unit,
+            status: "review",
+            source_engine: "official_factor_db_then_climatiq",
+            region: input.region,
+            reason: "UNIT_MISMATCH_AND_CLIMATIQ_FAILED",
+            message: fallbackResult.message,
+            factor_unit: factor.unit,
+            factor_name: factor.name,
+          });
+
+          continue;
+        }
+
+        calculatedCount++;
+        totalCo2e += fallbackResult.co2e;
+
         results.push({
           item_name: item.item_name,
           category: item.category,
           value: item.value,
           unit: item.unit,
-          status: "review",
-          source_engine: "official_factor_db",
+          status: "calculated",
+          source_engine: "climatiq",
+          fallback_used: true,
+          fallback_reason: "LOCAL_UNIT_MISMATCH",
           region: input.region,
-          reason: "UNIT_MISMATCH",
-          factor_unit: factor.unit,
-          factor_name: factor.name,
-          message: "This item needs manual review or mapping update",
+          country_name: input.country_name,
+          activity_id: fallbackResult.activity_id,
+          parameter_name: fallbackResult.parameter_name,
+          parameter_unit: fallbackResult.parameter_unit,
+          converted: fallbackResult.converted,
+          co2e: fallbackResult.co2e,
+          co2e_unit: fallbackResult.co2e_unit,
+          factor_name: fallbackResult.factor_name,
+          factor_source: fallbackResult.factor_source,
+          factor_region: fallbackResult.factor_region,
         });
+
         continue;
       }
 

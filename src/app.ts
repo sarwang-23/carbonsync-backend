@@ -6,6 +6,7 @@ import affindaTestRoutes from "./routes/affinda-test.routes.js";
 import { calculateGermanyEmission } from "./services/GermanyEmission.service.js";
 import { calculateIndiaFixedEmission } from "./services/IndiaFixedEmission.service.js";
 import { calculateIndiaEmission } from "./services/IndiaEmission.service.js";
+import { processInvoiceEmissions } from "./services/InvoiceEmission.service.js";
 
 const app = express();
 
@@ -93,6 +94,34 @@ app.post("/api/test/india-hybrid-emission", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || "India hybrid emission failed",
+    });
+  }
+});
+
+app.post("/api/test/country-emission", async (req, res) => {
+  try {
+    const { region, country_name, items } = req.body;
+
+    if (!region || !country_name || !Array.isArray(items)) {
+      return res.status(400).json({
+        success: false,
+        message: "region, country_name and items[] are required",
+      });
+    }
+
+    const result = await processInvoiceEmissions({
+      region,
+      country_name,
+      invoice_year: null,
+      items,
+    });
+
+    return res.json(result);
+  } catch (error: any) {
+    console.error("Country emission test failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Country emission test failed",
     });
   }
 });
