@@ -1,4 +1,5 @@
 import { calculateGermanyEmission } from "./GermanyEmission.service.js";
+import { calculateIndiaEmission } from "./IndiaEmission.service.js";
 import { pool } from "../db.js";
 
 type InvoiceEmissionItem = {
@@ -169,6 +170,63 @@ export async function processInvoiceEmissions(
           reason: "UNKNOWN_CATEGORY",
           message: "This item needs manual review or mapping update",
         });
+        continue;
+      }
+
+      // ── India ─── Hybrid Fixed EF + Climatiq Fallback route ──────────────────
+      if (input.region === "IN") {
+        const indiaResult = await calculateIndiaEmission({
+          category: item.category,
+          itemName: item.item_name,
+          value: Number(item.value),
+          unit: item.unit,
+        });
+
+        if (!indiaResult.success) {
+          reviewCount++;
+
+          results.push({
+            item_name: item.item_name,
+            category: item.category,
+            value: item.value,
+            unit: item.unit,
+            status: "review",
+            source_engine: (indiaResult as any).source_engine || "india_hybrid",
+            region: "IN",
+            reason: (indiaResult as any).reason,
+            message: (indiaResult as any).message,
+            expected_factor_unit: (indiaResult as any).expected_factor_unit,
+          });
+
+          continue;
+        }
+
+        calculatedCount++;
+        totalCo2e += (indiaResult as any).co2e;
+
+        results.push({
+          item_name: item.item_name,
+          category: item.category,
+          value: item.value,
+          unit: item.unit,
+          status: "calculated",
+          source_engine: (indiaResult as any).source_engine || (indiaResult as any).engine,
+          preferred_source: (indiaResult as any).preferred_source || (indiaResult as any).source,
+          region: "IN",
+          country_name: "India",
+          factor_name: (indiaResult as any).factor_name,
+          factor_value: (indiaResult as any).factor_value,
+          factor_unit: (indiaResult as any).factor_unit,
+          source_dataset: (indiaResult as any).source_dataset,
+          year: (indiaResult as any).year,
+          activity_id: (indiaResult as any).activity_id,
+          parameter_name: (indiaResult as any).parameter_name,
+          parameter_unit: (indiaResult as any).parameter_unit,
+          converted: (indiaResult as any).converted,
+          co2e: (indiaResult as any).co2e,
+          co2e_unit: (indiaResult as any).co2e_unit,
+        });
+
         continue;
       }
 
