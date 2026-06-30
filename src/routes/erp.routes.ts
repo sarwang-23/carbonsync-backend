@@ -8,6 +8,7 @@ import { fillNullValues } from "../utils/fillNullValues.js";
 import { detectCountryFromText } from "../services/CountryDetection.service.js";
 import { normalizeInvoiceItems } from "../services/InvoiceItemNormalize.service.js";
 import { processInvoiceEmissions } from "../services/InvoiceEmission.service.js";
+import { parseFallbackLineItems } from "../services/FallbackLineItemParser.service.js";
 
 const router = express.Router();
 
@@ -58,18 +59,6 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     const extractionId = extractionRow?.id;
 
-    if (!invoice.lineItems || invoice.lineItems.length === 0) {
-      return res.status(200).json({
-        success: true,
-        status: "extraction_empty",
-        message: "Invoice uploaded, but no line items were extracted",
-        extraction_provider: extraction.provider,
-        extraction_score: extraction.score,
-        attempts: extraction.attempts,
-        next_action: "Check Affinda field mapping or Mistral OCR fallback"
-      });
-    }
-
     const invoiceYear = extractYearFromInvoice(invoice);
 
     // ── Country detection ───────────────────────────────────────────────────
@@ -83,7 +72,46 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       .filter(Boolean)
       .join(" ");
 
-    const detectedCountry = detectCountryFromText(fullText);
+    const detectedCountry = detectCountryFromText(fullText, file.originalname || "");
+
+    if (!detectedCountry) {
+      return res.status(400).json({
+        success: false,
+        message: "Country could not be detected. Please review invoice country/region.",
+        type: "COUNTRY_DETECTION_FAILED",
+      });
+    }
+
+    // ── Fallback line item parser ──────────────────────────────────────────
+    let items = invoice.lineItems || [];
+
+    if (!items.length || items.length === 1) {
+      const fallbackItems = parseFallbackLineItems(fullText);
+
+      if (fallbackItems.length > items.length) {
+        items = fallbackItems.map((fi) => ({
+          name: fi.item_name,
+          description: fi.category,
+          quantity: fi.value,
+          unit: fi.unit,
+          amount: null,
+          currency: detectedCountry.currency,
+        })) as any[];
+      }
+    }
+
+    // Still empty?
+    if (items.length === 0) {
+      return res.status(200).json({
+        success: true,
+        status: "extraction_empty",
+        message: "Invoice uploaded, but no line items were extracted",
+        extraction_provider: extraction.provider,
+        extraction_score: extraction.score,
+        attempts: extraction.attempts,
+        next_action: "Check Affinda field mapping or Mistral OCR fallback"
+      });
+    }
 
     console.log("COUNTRY_DETECTED", {
       region: detectedCountry.region,
@@ -96,7 +124,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       const emissionResult = await processMalaysiaInvoiceItems({
         extractionId,
         fileName: file.originalname,
-        items: invoice.lineItems,
+        items,
         invoiceYear,
       });
 
@@ -119,7 +147,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
           invoice_year: invoiceYear,
           currency: invoice.currency,
           total: invoice.total,
-          item_count: invoice.lineItems.length,
+          item_count: items.length,
           attempts: extraction.attempts,
         },
         emission: {
@@ -140,7 +168,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     }
 
     // ── DE / US / GB / FR / AU: generic emission pipeline ──────────────────
-    const normalizedItems = normalizeInvoiceItems(invoice.lineItems || []);
+    const normalizedItems = normalizeInvoiceItems(items);
 
     const emissionResult = await processInvoiceEmissions({
       region: detectedCountry.region,
@@ -173,7 +201,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
         invoice_year: invoiceYear,
         currency: invoice.currency,
         total: invoice.total,
-        item_count: invoice.lineItems.length,
+        item_count: items.length,
         attempts: extraction.attempts,
       },
       emission: {

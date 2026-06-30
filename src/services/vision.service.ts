@@ -441,7 +441,7 @@ export function convertVisionStructuredToLineItems(structured: any, rawText = ""
                 vendor && String(vendor).toLowerCase().includes("tenaga")
                     ? "TNB Malaysia Electricity Bill"
                     : "Electricity consumption",
-            description: "Grid electricity consumption extracted by Vision fallback",
+            description: "Grid Electricity Consumption",
             quantity: Number(usageKwh),
             unit: "kWh",
             amount: structured?.line_items?.[0]?.amount ?? null,

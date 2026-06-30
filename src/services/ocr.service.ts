@@ -462,7 +462,7 @@ function parseStructuredFromMistralText(text: string) {
             line_items: [
                 {
                     item_name: "TNB Malaysia Electricity Bill",
-                    description: "Grid electricity consumption extracted by Mistral OCR",
+                    description: "Grid Electricity Consumption",
                     quantity: kwh,
                     unit: "kWh",
                     amount: null,

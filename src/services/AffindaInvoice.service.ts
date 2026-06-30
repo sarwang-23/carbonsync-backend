@@ -257,7 +257,7 @@ function buildTnbElectricityItems(data: any): NormalizedInvoiceItem[] {
     return [
       {
         name: `${supplierName} Electricity Consumption`,
-        description: "Electricity consumption extracted from TNB utility bill",
+        description: `${supplierName} Electricity Consumption`,
         quantity: directConsumption,
         unit: String(unit || "kWh"),
         unitPrice: null,
@@ -278,7 +278,7 @@ function buildTnbElectricityItems(data: any): NormalizedInvoiceItem[] {
       return [
         {
           name: `${supplierName} Electricity Consumption`,
-          description: "Electricity consumption extracted from meter usage table",
+          description: `${supplierName} Electricity Consumption`,
           quantity: usageFromTable.value,
           unit: "kWh",
           unitPrice: null,
