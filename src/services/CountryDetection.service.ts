@@ -119,7 +119,48 @@ export function detectCountryFromText(text: string, fileName = ""): DetectedCoun
     };
   }
 
-  // 2. Vendor/country keywords
+  // 2. Vendor/country keywords — Flight first (highest specificity)
+  if (
+    lower.includes("flight booking") ||
+    lower.includes("indigo") ||
+    lower.includes("air india") ||
+    lower.includes("vistara") ||
+    lower.includes("akasa") ||
+    lower.includes("spicejet") ||
+    (lower.includes("pnr") && lower.includes("airport"))
+  ) {
+    return {
+      region: "IN",
+      country_name: "India",
+      currency: "INR",
+      confidence: 98,
+      reason: "India flight ticket keyword found",
+    };
+  }
+
+  // Railway — second priority
+  if (
+    lower.includes("indian railways") ||
+    lower.includes("irctc") ||
+    lower.includes("e-ticket") ||
+    lower.includes("eticket") ||
+    lower.includes("electronic reservation slip") ||
+    lower.includes("pnr") ||
+    lower.includes("train no") ||
+    lower.includes("train number") ||
+    lower.includes("boarding at") ||
+    lower.includes("passenger details") ||
+    lower.includes("current booking")
+  ) {
+    return {
+      region: "IN",
+      country_name: "India",
+      currency: "INR",
+      confidence: 98,
+      reason: "Indian Railways / IRCTC keyword found",
+    };
+  }
+
   if (
     lower.includes("uppcl") ||
     lower.includes("dakshinanchal vidyut") ||

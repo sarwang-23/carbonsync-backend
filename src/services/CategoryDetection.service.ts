@@ -2,6 +2,27 @@ export function detectCategoryFromText(text: string): string {
   const lower = text.toLowerCase();
 
   if (
+    lower.includes("indian railways") ||
+    lower.includes("irctc") ||
+    lower.includes("e-ticket") ||
+    lower.includes("eticket") ||
+    lower.includes("electronic reservation slip") ||
+    lower.includes("pnr") ||
+    lower.includes("train no") ||
+    lower.includes("train number") ||
+    lower.includes("boarding at") ||
+    lower.includes("passenger details") ||
+    lower.includes("current booking") ||
+    lower.includes("railway") ||
+    lower.includes("train") ||
+    lower.includes("passenger-km") ||
+    lower.includes("passenger km") ||
+    lower.includes("pkm")
+  ) {
+    return "railway";
+  }
+
+  if (
     lower.includes("electricity") ||
     lower.includes("power bill") ||
     lower.includes("electric bill") ||
@@ -16,18 +37,6 @@ export function detectCategoryFromText(text: string): string {
     lower.includes("adani electricity")
   ) {
     return "electricity";
-  }
-
-  if (
-    lower.includes("railway") ||
-    lower.includes("train") ||
-    lower.includes("indian railways") ||
-    lower.includes("irctc") ||
-    lower.includes("passenger-km") ||
-    lower.includes("passenger km") ||
-    lower.includes("pkm")
-  ) {
-    return "railway";
   }
 
   if (

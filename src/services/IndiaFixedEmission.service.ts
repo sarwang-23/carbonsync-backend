@@ -35,6 +35,88 @@ function factorUnitMatches(invoiceUnit: string, factorUnit: string) {
 }
 
 export async function calculateIndiaFixedEmission(input: IndiaFixedInput) {
+  if (input.category === "flight") {
+    const factor = 0.18;
+    const u = input.unit.toLowerCase();
+
+    if (u !== "km" && u !== "kms") {
+      return {
+        success: false,
+        status: "review",
+        region: "IN",
+        country_name: "India",
+        category: "flight",
+        source_engine: "india_fixed_ef",
+        reason: "UNIT_MISMATCH",
+        message: `Flight fixed EF expects km, received ${input.unit}`,
+        expected_factor_unit: "kg/km",
+      };
+    }
+
+    return {
+      success: true,
+      status: "calculated",
+      source_engine: "india_fixed_ef",
+      preferred_source: "India Fixed EF",
+      region: "IN",
+      country_name: "India",
+      category: "flight",
+      factor_name: "India fixed flight emission factor",
+      factor_value: factor,
+      factor_unit: "kg/km",
+      source_dataset: "CarbonSync India fixed factors",
+      year: 2025,
+      converted: {
+        value: Number(input.value),
+        unit: "km",
+        converted: false,
+      },
+      co2e: Number((Number(input.value) * factor).toFixed(6)),
+      co2e_unit: "kg",
+    };
+  }
+
+  if (input.category === "railway") {
+    const factor = 0.007976;
+    const u = input.unit.toLowerCase();
+
+    if (u !== "passenger-km" && u !== "passenger km" && u !== "pkm") {
+      return {
+        success: false,
+        status: "review",
+        region: "IN",
+        country_name: "India",
+        category: "railway",
+        source_engine: "india_fixed_ef",
+        reason: "UNIT_MISMATCH",
+        message: `Railway fixed EF expects passenger-km, received ${input.unit}`,
+        expected_factor_unit: "kg/passenger-km",
+      };
+    }
+
+    return {
+      success: true,
+      status: "calculated",
+      source_engine: "india_fixed_ef",
+      preferred_source: "India Fixed EF",
+      region: "IN",
+      country_name: "India",
+      category: "railway",
+      factor_name: "India fixed railway emission factor",
+      factor_value: factor,
+      factor_unit: "kg/passenger-km",
+      source_dataset: "CarbonSync India fixed factors",
+      year: 2025,
+      converted: {
+        value: Number(input.value),
+        unit: "passenger-km",
+        converted: false,
+      },
+      co2e: Number((Number(input.value) * factor).toFixed(6)),
+      co2e_unit: "kg",
+    };
+  }
+
   const result = await pool.query(
     `
     select

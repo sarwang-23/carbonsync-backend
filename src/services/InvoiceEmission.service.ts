@@ -168,6 +168,21 @@ export async function processInvoiceEmissions(
         unit,
       });
 
+      if (category === "railway_review") {
+        reviewCount++;
+        results.push({
+          line_index: i,
+          item_name: itemName,
+          category: "railway",
+          value,
+          unit,
+          status: "review",
+          reason: "RAILWAY_DISTANCE_NOT_FOUND",
+          message: "Railway ticket detected but distance could not be extracted",
+        });
+        continue;
+      }
+
       if (!value || !Number.isFinite(value)) {
         reviewCount++;
         results.push({
@@ -194,6 +209,22 @@ export async function processInvoiceEmissions(
           status: "review",
           reason: "UNKNOWN_CATEGORY",
           message: "This item needs manual review or mapping update",
+        });
+        continue;
+      }
+
+      if (category === "flight_review") {
+        reviewCount++;
+        results.push({
+          line_index: i,
+          item_name: itemName,
+          category: "flight",
+          value,
+          unit,
+          status: "review",
+          reason: "FLIGHT_DISTANCE_NOT_FOUND",
+          message: "Flight ticket detected but airport pair/distance mapping could not be extracted",
+          metadata: (item as any).metadata || null,
         });
         continue;
       }

@@ -9,6 +9,8 @@ import { detectCountryFromText } from "../services/CountryDetection.service.js";
 import { normalizeInvoiceItems } from "../services/InvoiceItemNormalize.service.js";
 import { processInvoiceEmissions } from "../services/InvoiceEmission.service.js";
 import { parseFallbackLineItems } from "../services/FallbackLineItemParser.service.js";
+import { parseRailwayTicketItem } from "../services/RailwayTicketParser.service.js";
+import { parseFlightTicketItem } from "../services/FlightTicketParser.service.js";
 
 const router = express.Router();
 
@@ -168,7 +170,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     }
 
     // ── DE / US / GB / FR / AU: generic emission pipeline ──────────────────
-    const normalizedItems = normalizeInvoiceItems(items);
+    let normalizedItems = normalizeInvoiceItems(items);
 
     function extractElectricityKwhFromText(text: string): number | null {
       const normalized = text.replace(/\s+/g, " ");
@@ -201,6 +203,41 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       }
     }
 
+    const lowerText = fullText.toLowerCase();
+
+    // ── Flight parser runs FIRST (priority over railway) ─────────────────────
+    const isFlightTicket =
+      lowerText.includes("flight booking") ||
+      lowerText.includes("indigo") ||
+      lowerText.includes("air india") ||
+      lowerText.includes("vistara") ||
+      lowerText.includes("akasa") ||
+      lowerText.includes("spicejet") ||
+      (lowerText.includes("pnr") && lowerText.includes("airport")) ||
+      (lowerText.includes("e-ticket") && lowerText.includes("airport"));
+
+    if (isFlightTicket) {
+      const flightItem = await parseFlightTicketItem(fullText, file.originalname);
+      if (flightItem) {
+        normalizedItems = [flightItem as any];
+      }
+    } else {
+      // ── Railway parser runs if NOT a flight ticket ────────────────────────
+      const isRailwayTicket =
+        lowerText.includes("indian railways") ||
+        lowerText.includes("irctc") ||
+        lowerText.includes("train no") ||
+        lowerText.includes("electronic reservation slip") ||
+        lowerText.includes("passenger details");
+
+      if (isRailwayTicket) {
+        const railwayItem = parseRailwayTicketItem(fullText);
+        if (railwayItem) {
+          normalizedItems = [railwayItem as any];
+        }
+      }
+    }
+
     const emissionResult = await processInvoiceEmissions({
       region: detectedCountry.region,
       country_name: detectedCountry.country_name,
@@ -210,6 +247,11 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     let sourceEngine = "official_factor_db";
     let preferredSource: string | undefined = undefined;
+
+    if (detectedCountry.region === "IN") {
+      sourceEngine = "india_hybrid";
+      preferredSource = "India Fixed EF";
+    }
 
     if (detectedCountry.region === "DE") {
       sourceEngine = "climatiq";
