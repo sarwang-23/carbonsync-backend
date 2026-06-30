@@ -11,16 +11,18 @@ type IndiaEmissionInput = {
 const INDIA_FIXED_CATEGORIES = ["electricity", "railway", "flight"];
 
 export async function calculateIndiaEmission(input: IndiaEmissionInput) {
-  if (INDIA_FIXED_CATEGORIES.includes(input.category)) {
+  const category = input.category.toLowerCase();
+
+  if (INDIA_FIXED_CATEGORIES.includes(category)) {
     return await calculateIndiaFixedEmission({
-      category: input.category,
+      category,
       value: input.value,
       unit: input.unit,
     });
   }
 
   return await calculateIndiaClimatiqFallback({
-    category: input.category,
+    category,
     itemName: input.itemName,
     value: input.value,
     unit: input.unit,

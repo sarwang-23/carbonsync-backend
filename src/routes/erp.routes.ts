@@ -145,7 +145,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
             invoice.invoiceDate ||
             (invoiceYear ? String(invoiceYear) : "not_available"),
           invoice_year: invoiceYear,
-          currency: invoice.currency,
+          currency: detectedCountry.currency || invoice.currency || "not_available",
           total: invoice.total,
           item_count: items.length,
           attempts: extraction.attempts,
@@ -199,7 +199,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
           invoice.invoiceDate ||
           (invoiceYear ? String(invoiceYear) : "not_available"),
         invoice_year: invoiceYear,
-        currency: invoice.currency,
+        currency: detectedCountry.currency || invoice.currency || "not_available",
         total: invoice.total,
         item_count: items.length,
         attempts: extraction.attempts,

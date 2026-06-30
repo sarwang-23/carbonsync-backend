@@ -86,8 +86,9 @@ export async function calculateIndiaFixedEmission(input: IndiaFixedInput) {
 
   return {
     success: true,
-    engine: "india_fixed_ef",
-    source: factor.source,
+    status: "calculated",
+    source_engine: "india_fixed_ef",
+    preferred_source: factor.source || "India Fixed EF",
     region: "IN",
     country_name: "India",
     category: input.category,
@@ -98,6 +99,11 @@ export async function calculateIndiaFixedEmission(input: IndiaFixedInput) {
     factor_unit: factor.unit,
     source_dataset: factor.source_dataset,
     year: factor.year,
+    converted: {
+      value: Number(input.value),
+      unit: input.unit,
+      converted: false,
+    },
     co2e: Number(co2e.toFixed(6)),
     co2e_unit: "kg",
   };

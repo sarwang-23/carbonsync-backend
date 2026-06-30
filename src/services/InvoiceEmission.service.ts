@@ -144,15 +144,27 @@ export async function processInvoiceEmissions(
   let reviewCount = 0;
   let failedCount = 0;
 
-  for (const item of input.items) {
+  for (let i = 0; i < input.items.length; i++) {
+    const item = input.items[i] as any;
     try {
-      if (!item.value || !Number.isFinite(Number(item.value))) {
+      const itemName =
+        item.item_name ||
+        item.name ||
+        item.description ||
+        "Unknown item";
+
+      const category = item.category || "unknown";
+      const value = Number(item.value || item.quantity);
+      const unit = item.unit;
+
+      if (!value || !Number.isFinite(value)) {
         reviewCount++;
         results.push({
-          item_name: item.item_name,
-          category: item.category,
-          value: item.value,
-          unit: item.unit,
+          line_index: i,
+          item_name: itemName,
+          category,
+          value,
+          unit,
           status: "review",
           reason: "INVALID_VALUE",
           message: "This item needs manual review or mapping update",
@@ -160,13 +172,14 @@ export async function processInvoiceEmissions(
         continue;
       }
 
-      if (!item.category || item.category === "unknown") {
+      if (category === "unknown") {
         reviewCount++;
         results.push({
-          item_name: item.item_name,
-          category: item.category,
-          value: item.value,
-          unit: item.unit,
+          line_index: i,
+          item_name: itemName,
+          category,
+          value,
+          unit,
           status: "review",
           reason: "UNKNOWN_CATEGORY",
           message: "This item needs manual review or mapping update",
@@ -177,20 +190,21 @@ export async function processInvoiceEmissions(
       // ── India ─── Hybrid Fixed EF + Climatiq Fallback route ──────────────────
       if (input.region === "IN") {
         const indiaResult = await calculateIndiaEmission({
-          category: item.category,
-          itemName: item.item_name,
-          value: Number(item.value),
-          unit: item.unit,
+          category,
+          itemName,
+          value,
+          unit,
         });
 
         if (!indiaResult.success) {
           reviewCount++;
 
           results.push({
-            item_name: item.item_name,
-            category: item.category,
-            value: item.value,
-            unit: item.unit,
+            line_index: i,
+            item_name: itemName,
+            category,
+            value,
+            unit,
             status: "review",
             source_engine: (indiaResult as any).source_engine || "india_hybrid",
             region: "IN",
@@ -206,10 +220,11 @@ export async function processInvoiceEmissions(
         totalCo2e += (indiaResult as any).co2e;
 
         results.push({
-          item_name: item.item_name,
-          category: item.category,
-          value: item.value,
-          unit: item.unit,
+          line_index: i,
+          item_name: itemName,
+          category,
+          value,
+          unit,
           status: "calculated",
           source_engine: (indiaResult as any).source_engine || (indiaResult as any).engine,
           preferred_source: (indiaResult as any).preferred_source || (indiaResult as any).source,
