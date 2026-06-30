@@ -1,4 +1,4 @@
-export type SupportedCountry = "IN" | "MY";
+export type SupportedCountry = "IN" | "MY" | "DE" | "US" | "GB" | "FR" | "AU";
 
 export type DocumentType =
     | "ELECTRICITY_BILL"
@@ -10,6 +10,7 @@ export type DocumentType =
     | "WATER_BILL"
     | "WASTE_INVOICE"
     | "HOTEL_INVOICE"
+    | "DISTRICT_HEATING_BILL"
     | "GENERIC_INVOICE"
     | "UNKNOWN";
 
@@ -23,6 +24,7 @@ export type DetectedCategory =
     | "water"
     | "waste"
     | "hotel"
+    | "district_heating"
     | "unknown";
 
 export interface ClassificationResult {
@@ -136,6 +138,10 @@ const ELECTRICITY_SIGNALS = [
     "dhbvn",
     "tata power",
     "adani electricity",
+    "grid electricity",
+    "strom",
+    "stromrechnung",
+    "netzstrom",
 ];
 
 const TRAIN_SIGNALS = [
@@ -183,6 +189,20 @@ const FUEL_SIGNALS = [
     "litre",
     "liter",
     "ltr",
+    "gas bill",
+    "erdgas",
+    "gasrechnung",
+    "heating oil",
+    "heizöl",
+    "fuel oil",
+];
+
+const DISTRICT_HEATING_SIGNALS = [
+    "district heating",
+    "heat",
+    "heating",
+    "fernwärme",
+    "wärme",
 ];
 
 const LOGISTICS_SIGNALS = [
@@ -251,6 +271,61 @@ const HOTEL_SIGNALS = [
     "check out",
 ];
 
+const GERMANY_SIGNALS = [
+    "deutschland",
+    "germany",
+    "strom",
+    "stromrechnung",
+    "erdgas",
+    "gasrechnung",
+    "fernwärme",
+    "heizöl",
+    "vat id",
+    "ust-idnr",
+];
+
+const US_SIGNALS = [
+    "united states",
+    "usa",
+    "usd",
+    "$",
+    "dollar",
+    "washington",
+    "new york",
+    "california",
+    "texas",
+];
+
+const GB_SIGNALS = [
+    "united kingdom",
+    "great britain",
+    "gbp",
+    "£",
+    "pound",
+    "london",
+    "england",
+    "scotland",
+    "wales",
+];
+
+const FR_SIGNALS = [
+    "france",
+    "paris",
+    "french",
+    "tva",
+    "siret",
+];
+
+const AU_SIGNALS = [
+    "australia",
+    "aud",
+    "sydney",
+    "melbourne",
+    "brisbane",
+    "abn",
+    "acn",
+];
+
 /**
  * Detect country with scoring.
  * Region-specific fixed EF logic depends on this being stable.
@@ -260,9 +335,19 @@ export function detectCountry(text: string, fileName = "") {
 
     const malaysiaSignals = findSignals(combined, MALAYSIA_SIGNALS);
     const indiaSignals = findSignals(combined, INDIA_SIGNALS);
+    const germanySignals = findSignals(combined, GERMANY_SIGNALS);
+    const usSignals = findSignals(combined, US_SIGNALS);
+    const gbSignals = findSignals(combined, GB_SIGNALS);
+    const frSignals = findSignals(combined, FR_SIGNALS);
+    const auSignals = findSignals(combined, AU_SIGNALS);
 
     let malaysiaScore = scoreFromSignals(malaysiaSignals, 2);
     let indiaScore = scoreFromSignals(indiaSignals, 2);
+    let germanyScore = scoreFromSignals(germanySignals, 2);
+    let usScore = scoreFromSignals(usSignals, 2);
+    let gbScore = scoreFromSignals(gbSignals, 2);
+    let frScore = scoreFromSignals(frSignals, 2);
+    let auScore = scoreFromSignals(auSignals, 2);
 
     if (/\brm\s?\d/i.test(combined)) malaysiaScore += 3;
     if (combined.includes(" myr")) malaysiaScore += 3;
@@ -271,17 +356,36 @@ export function detectCountry(text: string, fileName = "") {
     if (/\binr\s?\d/i.test(combined)) indiaScore += 3;
     if (/\brs\.?\s?\d/i.test(combined)) indiaScore += 2;
 
+    if (combined.includes("eur") || combined.includes("€")) {
+        germanyScore += 1;
+        frScore += 1;
+    }
+    if (combined.includes("aud") || /\babn\b/.test(combined)) auScore += 3;
+    if (combined.includes("gbp") || combined.includes("£")) gbScore += 3;
+    if (combined.includes("usd") || (combined.includes("$") && !combined.includes("aud"))) usScore += 2;
+
+    const scores = {
+        MY: malaysiaScore,
+        IN: indiaScore,
+        DE: germanyScore,
+        US: usScore,
+        GB: gbScore,
+        FR: frScore,
+        AU: auScore
+    };
+
     const defaultRegion = (process.env.DEFAULT_INVOICE_REGION as SupportedCountry) || "IN";
 
     let country: SupportedCountry = defaultRegion;
     let confidence = 0.55;
+    let maxScore = 0;
 
-    if (malaysiaScore > indiaScore && malaysiaScore >= 2) {
-        country = "MY";
-        confidence = malaysiaScore >= 8 ? 0.98 : malaysiaScore >= 4 ? 0.9 : 0.75;
-    } else if (indiaScore > malaysiaScore && indiaScore >= 2) {
-        country = "IN";
-        confidence = indiaScore >= 8 ? 0.98 : indiaScore >= 4 ? 0.9 : 0.75;
+    for (const [region, score] of Object.entries(scores)) {
+        if (score > maxScore && score >= 2) {
+            maxScore = score;
+            country = region as SupportedCountry;
+            confidence = score >= 8 ? 0.98 : score >= 4 ? 0.9 : 0.75;
+        }
     }
 
     return {
@@ -310,6 +414,7 @@ export function detectDocumentType(text: string, itemName = "", unit = "") {
     const waterSignals = findSignals(combined, WATER_SIGNALS);
     const wasteSignals = findSignals(combined, WASTE_SIGNALS);
     const hotelSignals = findSignals(combined, HOTEL_SIGNALS);
+    const districtHeatingSignals = findSignals(combined, DISTRICT_HEATING_SIGNALS);
 
     const scores: Record<string, number> = {
         ELECTRICITY_BILL: scoreFromSignals(electricitySignals, 3),
@@ -321,6 +426,7 @@ export function detectDocumentType(text: string, itemName = "", unit = "") {
         WATER_BILL: scoreFromSignals(waterSignals, 2),
         WASTE_INVOICE: scoreFromSignals(wasteSignals, 2),
         HOTEL_INVOICE: scoreFromSignals(hotelSignals, 2),
+        DISTRICT_HEATING_BILL: scoreFromSignals(districtHeatingSignals, 3),
         GENERIC_INVOICE: combined.includes("invoice") || combined.includes("bill") ? 1 : 0,
         UNKNOWN: 0,
     };
@@ -340,6 +446,7 @@ export function detectDocumentType(text: string, itemName = "", unit = "") {
     else if (documentType === "WATER_BILL") category = "water";
     else if (documentType === "WASTE_INVOICE") category = "waste";
     else if (documentType === "HOTEL_INVOICE") category = "hotel";
+    else if (documentType === "DISTRICT_HEATING_BILL") category = "district_heating";
 
     let confidence = 0.45;
     if (bestScore >= 9) confidence = 0.97;

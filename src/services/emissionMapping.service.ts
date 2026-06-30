@@ -371,7 +371,52 @@ export function buildSelectedEmissionFactorSummary(selected: any) {
         region_name: selected.region_name,
         unit: selected.unit,
         scope: selected.scopes,
-        source_lca_activity: selected.source_lca_activity,
         mapping_score: selected.mapping_score,
     };
+}
+
+import { pool } from "../db.js";
+
+export type EmissionMapping = {
+  id: number;
+  region: string;
+  country_name: string;
+  category: string;
+  keywords: string[];
+  activity_id: string | null;
+  preferred_source: string | null;
+  preferred_lca_activity: string | null;
+  parameter_name: string | null;
+  parameter_unit: string | null;
+  data_version: string | null;
+};
+
+export async function getEmissionMapping(
+  region: string,
+  category: string
+): Promise<EmissionMapping | null> {
+  const result = await pool.query(
+    `
+    select
+      id,
+      region,
+      country_name,
+      category,
+      keywords,
+      activity_id,
+      preferred_source,
+      preferred_lca_activity,
+      parameter_name,
+      parameter_unit,
+      data_version
+    from emission_factor_mappings
+    where region = $1
+      and category = $2
+      and is_active = true
+    order by id asc
+    limit 1
+    `,
+    [region, category]
+  );
+  return result.rows[0] || null;
 }

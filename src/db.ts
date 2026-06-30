@@ -21,5 +21,6 @@ console.log("DB ENV CHECK:", {
   passwordExists: Boolean(process.env.DB_PASSWORD),
   database: process.env.DB_NAME,
 });
+export const pool = db;
 
 export default db;

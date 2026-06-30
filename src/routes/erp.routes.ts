@@ -5,6 +5,9 @@ import { processMalaysiaInvoiceItems } from "../services/MalaysiaInvoiceEmission
 import { supabase } from "../lib/supabase.js";
 import { extractYearFromInvoice } from "../services/BillYear.service.js";
 import { fillNullValues } from "../utils/fillNullValues.js";
+import { detectCountryFromText } from "../services/CountryDetection.service.js";
+import { normalizeInvoiceItems } from "../services/InvoiceItemNormalize.service.js";
+import { processInvoiceEmissions } from "../services/InvoiceEmission.service.js";
 
 const router = express.Router();
 
@@ -69,30 +72,89 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     const invoiceYear = extractYearFromInvoice(invoice);
 
-    const emissionResult = await processMalaysiaInvoiceItems({
-      extractionId,
-      fileName: file.originalname,
-      items: invoice.lineItems,
-      invoiceYear,
+    // ── Country detection ───────────────────────────────────────────────────
+    const fullText = [
+      invoice.vendorName,
+      invoice.vendorAddress,
+      invoice.currency,
+      JSON.stringify(invoice.lineItems || []),
+      JSON.stringify(invoice.rawResponse || {}),
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const detectedCountry = detectCountryFromText(fullText);
+
+    console.log("COUNTRY_DETECTED", {
+      region: detectedCountry.region,
+      country_name: detectedCountry.country_name,
+      currency: detectedCountry.currency,
+    });
+
+    // ── Malaysia / India: keep existing pipeline intact ─────────────────────
+    if (detectedCountry.region === "MY" || detectedCountry.region === "IN") {
+      const emissionResult = await processMalaysiaInvoiceItems({
+        extractionId,
+        fileName: file.originalname,
+        items: invoice.lineItems,
+        invoiceYear,
+      });
+
+      const responseBody = {
+        success: true,
+        message: `${detectedCountry.country_name} invoice processed`,
+        file_name: file.originalname,
+        country: detectedCountry,
+        extraction: {
+          provider: extraction.provider,
+          score: extraction.score,
+          vendor_name: invoice.vendorName,
+          invoice_number: invoice.invoiceNumber,
+          invoice_date:
+            invoice.invoiceDate ||
+            (invoiceYear ? String(invoiceYear) : "not_available"),
+          invoice_year: invoiceYear,
+          currency: invoice.currency,
+          total: invoice.total,
+          item_count: invoice.lineItems.length,
+          attempts: extraction.attempts,
+        },
+        emission: emissionResult,
+      };
+
+      return res.status(200).json(fillNullValues(responseBody));
+    }
+
+    // ── DE / US / GB / FR / AU: generic emission pipeline ──────────────────
+    const normalizedItems = normalizeInvoiceItems(invoice.lineItems || []);
+
+    const emissionResult = await processInvoiceEmissions({
+      region: detectedCountry.region,
+      country_name: detectedCountry.country_name,
+      invoice_year: invoiceYear,
+      items: normalizedItems,
     });
 
     const responseBody = {
       success: true,
-      message: "Malaysia invoice processed",
+      message: `${detectedCountry.country_name} invoice processed`,
       file_name: file.originalname,
+      country: detectedCountry,
       extraction: {
         provider: extraction.provider,
         score: extraction.score,
         vendor_name: invoice.vendorName,
         invoice_number: invoice.invoiceNumber,
-        invoice_date: invoice.invoiceDate || (invoiceYear ? String(invoiceYear) : "not_available"),
+        invoice_date:
+          invoice.invoiceDate ||
+          (invoiceYear ? String(invoiceYear) : "not_available"),
         invoice_year: invoiceYear,
         currency: invoice.currency,
         total: invoice.total,
         item_count: invoice.lineItems.length,
-        attempts: extraction.attempts
+        attempts: extraction.attempts,
       },
-      emission: emissionResult
+      emission: emissionResult,
     };
 
     return res.status(200).json(fillNullValues(responseBody));

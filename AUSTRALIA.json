@@ -1,0 +1,1263 @@
+[
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-nsw-act-location-based-scope2-scope3",
+    "activity_id": "au-electricity-location-based-nsw-act",
+    "use_case": "electricity",
+    "name": "Electricity - New South Wales and Australian Capital Territory - location based",
+    "sector": "Energy",
+    "category": "Electricity",
+    "source_lca_activity": "scope_2_scope_3_location_based",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.67,
+    "factor_calculation_origin": "reported_combined",
+    "scopes": [
+      "2",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.67,
+      "scope2": 0.64,
+      "scope3": 0.03
+    },
+    "additional_indicators": {
+      "state": "NSW_ACT",
+      "method": "location_based"
+    },
+    "keywords": [
+      "electricity",
+      "kwh",
+      "new south wales",
+      "nsw",
+      "act",
+      "australian capital territory"
+    ],
+    "description": "Location-based electricity factor calculated as scope 2 0.64 + scope 3 0.03 = 0.67 kg CO2e/kWh."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-victoria-location-based-scope2-scope3",
+    "activity_id": "au-electricity-location-based-victoria",
+    "use_case": "electricity",
+    "name": "Electricity - Victoria - location based",
+    "sector": "Energy",
+    "category": "Electricity",
+    "source_lca_activity": "scope_2_scope_3_location_based",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.87,
+    "factor_calculation_origin": "reported_combined",
+    "scopes": [
+      "2",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.87,
+      "scope2": 0.78,
+      "scope3": 0.09
+    },
+    "additional_indicators": {
+      "state": "VIC",
+      "method": "location_based"
+    },
+    "keywords": [
+      "electricity",
+      "kwh",
+      "victoria",
+      "vic"
+    ],
+    "description": "Location-based electricity factor calculated as scope 2 0.78 + scope 3 0.09 = 0.87 kg CO2e/kWh."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-queensland-location-based-scope2-scope3",
+    "activity_id": "au-electricity-location-based-queensland",
+    "use_case": "electricity",
+    "name": "Electricity - Queensland - location based",
+    "sector": "Energy",
+    "category": "Electricity",
+    "source_lca_activity": "scope_2_scope_3_location_based",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.76,
+    "factor_calculation_origin": "reported_combined",
+    "scopes": [
+      "2",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.76,
+      "scope2": 0.67,
+      "scope3": 0.09
+    },
+    "additional_indicators": {
+      "state": "QLD",
+      "method": "location_based"
+    },
+    "keywords": [
+      "electricity",
+      "kwh",
+      "queensland",
+      "qld"
+    ],
+    "description": "Location-based electricity factor calculated as scope 2 0.67 + scope 3 0.09 = 0.76 kg CO2e/kWh."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-south-australia-location-based-scope2-scope3",
+    "activity_id": "au-electricity-location-based-south-australia",
+    "use_case": "electricity",
+    "name": "Electricity - South Australia - location based",
+    "sector": "Energy",
+    "category": "Electricity",
+    "source_lca_activity": "scope_2_scope_3_location_based",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.26,
+    "factor_calculation_origin": "reported_combined",
+    "scopes": [
+      "2",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.26,
+      "scope2": 0.22,
+      "scope3": 0.04
+    },
+    "additional_indicators": {
+      "state": "SA",
+      "method": "location_based"
+    },
+    "keywords": [
+      "electricity",
+      "kwh",
+      "south australia",
+      "sa"
+    ],
+    "description": "Location-based electricity factor calculated as scope 2 0.22 + scope 3 0.04 = 0.26 kg CO2e/kWh."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-wa-swis-location-based-scope2-scope3",
+    "activity_id": "au-electricity-location-based-wa-swis",
+    "use_case": "electricity",
+    "name": "Electricity - Western Australia SWIS - location based",
+    "sector": "Energy",
+    "category": "Electricity",
+    "source_lca_activity": "scope_2_scope_3_location_based",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.56,
+    "factor_calculation_origin": "reported_combined",
+    "scopes": [
+      "2",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.56,
+      "scope2": 0.5,
+      "scope3": 0.06
+    },
+    "additional_indicators": {
+      "state": "WA_SWIS",
+      "method": "location_based"
+    },
+    "keywords": [
+      "electricity",
+      "kwh",
+      "western australia",
+      "wa",
+      "swis"
+    ],
+    "description": "Location-based electricity factor calculated as scope 2 0.5 + scope 3 0.06 = 0.56 kg CO2e/kWh."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-wa-nwis-location-based-scope2-scope3",
+    "activity_id": "au-electricity-location-based-wa-nwis",
+    "use_case": "electricity",
+    "name": "Electricity - Western Australia NWIS - location based",
+    "sector": "Energy",
+    "category": "Electricity",
+    "source_lca_activity": "scope_2_scope_3_location_based",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.65,
+    "factor_calculation_origin": "reported_combined",
+    "scopes": [
+      "2",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.65,
+      "scope2": 0.56,
+      "scope3": 0.09
+    },
+    "additional_indicators": {
+      "state": "WA_NWIS",
+      "method": "location_based"
+    },
+    "keywords": [
+      "electricity",
+      "kwh",
+      "western australia",
+      "wa",
+      "nwis"
+    ],
+    "description": "Location-based electricity factor calculated as scope 2 0.56 + scope 3 0.09 = 0.65 kg CO2e/kWh."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-tasmania-location-based-scope2-scope3",
+    "activity_id": "au-electricity-location-based-tasmania",
+    "use_case": "electricity",
+    "name": "Electricity - Tasmania - location based",
+    "sector": "Energy",
+    "category": "Electricity",
+    "source_lca_activity": "scope_2_scope_3_location_based",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.23,
+    "factor_calculation_origin": "reported_combined",
+    "scopes": [
+      "2",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.23,
+      "scope2": 0.2,
+      "scope3": 0.03
+    },
+    "additional_indicators": {
+      "state": "TAS",
+      "method": "location_based"
+    },
+    "keywords": [
+      "electricity",
+      "kwh",
+      "tasmania",
+      "tas"
+    ],
+    "description": "Location-based electricity factor calculated as scope 2 0.2 + scope 3 0.03 = 0.23 kg CO2e/kWh."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-nt-dkis-location-based-scope2-scope3",
+    "activity_id": "au-electricity-location-based-nt-dkis",
+    "use_case": "electricity",
+    "name": "Electricity - Northern Territory DKIS - location based",
+    "sector": "Energy",
+    "category": "Electricity",
+    "source_lca_activity": "scope_2_scope_3_location_based",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.65,
+    "factor_calculation_origin": "reported_combined",
+    "scopes": [
+      "2",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.65,
+      "scope2": 0.56,
+      "scope3": 0.09
+    },
+    "additional_indicators": {
+      "state": "NT_DKIS",
+      "method": "location_based"
+    },
+    "keywords": [
+      "electricity",
+      "kwh",
+      "northern territory",
+      "nt",
+      "dkis"
+    ],
+    "description": "Location-based electricity factor calculated as scope 2 0.56 + scope 3 0.09 = 0.65 kg CO2e/kWh."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-national-location-based-scope2-scope3",
+    "activity_id": "au-electricity-location-based-national",
+    "use_case": "electricity",
+    "name": "Electricity - National - location based",
+    "sector": "Energy",
+    "category": "Electricity",
+    "source_lca_activity": "scope_2_scope_3_location_based",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.69,
+    "factor_calculation_origin": "reported_combined",
+    "scopes": [
+      "2",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.69,
+      "scope2": 0.62,
+      "scope3": 0.07
+    },
+    "additional_indicators": {
+      "state": "NATIONAL",
+      "method": "location_based"
+    },
+    "keywords": [
+      "electricity",
+      "kwh",
+      "national",
+      "australia"
+    ],
+    "description": "Location-based electricity factor calculated as scope 2 0.62 + scope 3 0.07 = 0.69 kg CO2e/kWh."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-national-market-based-residual-mix-scope2-scope3",
+    "activity_id": "au-electricity-market-based-national-residual-mix",
+    "use_case": "electricity",
+    "name": "Electricity - National residual mix factor - market based",
+    "sector": "Energy",
+    "category": "Electricity",
+    "source_lca_activity": "scope_2_scope_3_market_based",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.92,
+    "factor_calculation_origin": "reported_combined",
+    "scopes": [
+      "2",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.92,
+      "scope2": 0.81,
+      "scope3": 0.11
+    },
+    "additional_indicators": {
+      "state": "NATIONAL",
+      "method": "market_based_residual_mix"
+    },
+    "keywords": [
+      "electricity",
+      "market based",
+      "residual mix",
+      "national"
+    ]
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-grid-nem-scope2",
+    "activity_id": "au-electricity-grid-nem-scope2",
+    "use_case": "electricity_grid",
+    "name": "Electricity grid - National Electricity Market (NEM)",
+    "sector": "Energy",
+    "category": "Electricity grids",
+    "source_lca_activity": "scope_2_grid",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.64,
+    "factor_calculation_origin": "reported",
+    "scopes": [
+      "2"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.64
+    },
+    "additional_indicators": {
+      "grid": "NEM"
+    },
+    "keywords": [
+      "electricity",
+      "grid",
+      "kwh",
+      "nem",
+      "national electricity market"
+    ],
+    "description": "Scope 2 electricity grid factor."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-grid-swis-scope2",
+    "activity_id": "au-electricity-grid-swis-scope2",
+    "use_case": "electricity_grid",
+    "name": "Electricity grid - Western Australia SWIS",
+    "sector": "Energy",
+    "category": "Electricity grids",
+    "source_lca_activity": "scope_2_grid",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.51,
+    "factor_calculation_origin": "reported",
+    "scopes": [
+      "2"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.51
+    },
+    "additional_indicators": {
+      "grid": "SWIS"
+    },
+    "keywords": [
+      "electricity",
+      "grid",
+      "kwh",
+      "swis",
+      "western australia"
+    ],
+    "description": "Scope 2 electricity grid factor."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-grid-dkis-scope2",
+    "activity_id": "au-electricity-grid-dkis-scope2",
+    "use_case": "electricity_grid",
+    "name": "Electricity grid - Northern Territory DKIS",
+    "sector": "Energy",
+    "category": "Electricity grids",
+    "source_lca_activity": "scope_2_grid",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.56,
+    "factor_calculation_origin": "reported",
+    "scopes": [
+      "2"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.56
+    },
+    "additional_indicators": {
+      "grid": "DKIS"
+    },
+    "keywords": [
+      "electricity",
+      "grid",
+      "kwh",
+      "dkis",
+      "northern territory",
+      "nt"
+    ],
+    "description": "Scope 2 electricity grid factor."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-grid-nwis-scope2",
+    "activity_id": "au-electricity-grid-nwis-scope2",
+    "use_case": "electricity_grid",
+    "name": "Electricity grid - Western Australia NWIS",
+    "sector": "Energy",
+    "category": "Electricity grids",
+    "source_lca_activity": "scope_2_grid",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.61,
+    "factor_calculation_origin": "reported",
+    "scopes": [
+      "2"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.61
+    },
+    "additional_indicators": {
+      "grid": "NWIS"
+    },
+    "keywords": [
+      "electricity",
+      "grid",
+      "kwh",
+      "nwis",
+      "western australia"
+    ],
+    "description": "Scope 2 electricity grid factor."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-electricity-grid-off-grid-scope2",
+    "activity_id": "au-electricity-grid-off-grid-scope2",
+    "use_case": "electricity_grid",
+    "name": "Electricity grid - Off-grid",
+    "sector": "Energy",
+    "category": "Electricity grids",
+    "source_lca_activity": "scope_2_grid",
+    "unit_type": "Energy",
+    "unit": "kg/kWh",
+    "factor": 0.67,
+    "factor_calculation_origin": "reported",
+    "scopes": [
+      "2"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.67
+    },
+    "additional_indicators": {
+      "grid": "OFF_GRID"
+    },
+    "keywords": [
+      "electricity",
+      "grid",
+      "kwh",
+      "off-grid",
+      "off grid"
+    ],
+    "description": "Scope 2 electricity grid factor."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-bituminous-coal-tonne-scope1-scope3",
+    "activity_id": "au-nga-bituminous-coal-tonne",
+    "use_case": "fuel_combustion",
+    "name": "Bituminous coal",
+    "sector": "Energy",
+    "category": "Solid fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Mass",
+    "unit": "kg/tonne",
+    "factor": 2517.48,
+    "factor_calculation_origin": "calculated_from_table_4",
+    "scopes": [
+      "1",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 2517.48,
+      "energy_content_gj_per_tonne": 27,
+      "scope1_combined_kg_per_gj": 90.24,
+      "scope3_kg_per_gj": 3
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "bituminous coal",
+      "coal",
+      "tonne"
+    ],
+    "description": "Final factor calculated as 27 GJ/t × (90.24 + 3) kg CO2e/GJ."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-sub-bituminous-coal-tonne-scope1-scope3",
+    "activity_id": "au-nga-sub-bituminous-coal-tonne",
+    "use_case": "fuel_combustion",
+    "name": "Sub-bituminous coal",
+    "sector": "Energy",
+    "category": "Solid fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Mass",
+    "unit": "kg/tonne",
+    "factor": 1947.54,
+    "factor_calculation_origin": "calculated_from_table_4",
+    "scopes": [
+      "1",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 1947.54,
+      "energy_content_gj_per_tonne": 21,
+      "scope1_combined_kg_per_gj": 90.24,
+      "scope3_kg_per_gj": 2.5
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "sub-bituminous coal",
+      "coal",
+      "tonne"
+    ],
+    "description": "Final factor calculated as 21 GJ/t × (90.24 + 2.5) kg CO2e/GJ."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-anthracite-tonne-scope1",
+    "activity_id": "au-nga-anthracite-tonne",
+    "use_case": "fuel_combustion",
+    "name": "Anthracite",
+    "sector": "Energy",
+    "category": "Solid fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Mass",
+    "unit": "kg/tonne",
+    "factor": 2616.96,
+    "factor_calculation_origin": "calculated_from_table_4",
+    "scopes": [
+      "1"
+    ],
+    "constituent_gases": {
+      "co2e_total": 2616.96,
+      "energy_content_gj_per_tonne": 29,
+      "scope1_combined_kg_per_gj": 90.24,
+      "scope3_kg_per_gj": null
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "anthracite",
+      "coal",
+      "tonne"
+    ],
+    "description": "Scope 3 was NE, so factor uses Scope 1 combined only: 29 × 90.24."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-brown-coal-lignite-tonne-scope1-scope3",
+    "activity_id": "au-nga-brown-coal-lignite-tonne",
+    "use_case": "fuel_combustion",
+    "name": "Brown coal / lignite",
+    "sector": "Energy",
+    "category": "Solid fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Mass",
+    "unit": "kg/tonne",
+    "factor": 961.044,
+    "factor_calculation_origin": "calculated_from_table_4",
+    "scopes": [
+      "1",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 961.044,
+      "energy_content_gj_per_tonne": 10.2,
+      "scope1_combined_kg_per_gj": 93.82,
+      "scope3_kg_per_gj": 0.4
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "brown coal",
+      "lignite",
+      "coal",
+      "tonne"
+    ],
+    "description": "Final factor calculated as 10.2 GJ/t × (93.82 + 0.4) kg CO2e/GJ."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-coking-coal-tonne-scope1-scope3",
+    "activity_id": "au-nga-coking-coal-tonne",
+    "use_case": "fuel_combustion",
+    "name": "Coking coal",
+    "sector": "Energy",
+    "category": "Solid fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Mass",
+    "unit": "kg/tonne",
+    "factor": 2952.9,
+    "factor_calculation_origin": "calculated_from_table_4",
+    "scopes": [
+      "1",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 2952.9,
+      "energy_content_gj_per_tonne": 30,
+      "scope1_combined_kg_per_gj": 92.03,
+      "scope3_kg_per_gj": 6.4
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "coking coal",
+      "metallurgical coal",
+      "coal",
+      "tonne"
+    ],
+    "description": "Final factor calculated as 30 GJ/t × (92.03 + 6.4) kg CO2e/GJ."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-coal-briquettes-tonne-scope1",
+    "activity_id": "au-nga-coal-briquettes-tonne",
+    "use_case": "fuel_combustion",
+    "name": "Coal briquettes",
+    "sector": "Energy",
+    "category": "Solid fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Mass",
+    "unit": "kg/tonne",
+    "factor": 2107.898,
+    "factor_calculation_origin": "calculated_from_table_4",
+    "scopes": [
+      "1"
+    ],
+    "constituent_gases": {
+      "co2e_total": 2107.898,
+      "energy_content_gj_per_tonne": 22.1,
+      "scope1_combined_kg_per_gj": 95.38,
+      "scope3_kg_per_gj": null
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "coal briquettes",
+      "coal",
+      "tonne"
+    ],
+    "description": "Scope 3 was NE, so factor uses Scope 1 combined only: 22.1 × 95.38."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-coal-coke-tonne-scope1",
+    "activity_id": "au-nga-coal-coke-tonne",
+    "use_case": "fuel_combustion",
+    "name": "Coal coke",
+    "sector": "Energy",
+    "category": "Solid fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Mass",
+    "unit": "kg/tonne",
+    "factor": 2895.21,
+    "factor_calculation_origin": "calculated_from_table_4",
+    "scopes": [
+      "1"
+    ],
+    "constituent_gases": {
+      "co2e_total": 2895.21,
+      "energy_content_gj_per_tonne": 27,
+      "scope1_combined_kg_per_gj": 107.23,
+      "scope3_kg_per_gj": null
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "coal coke",
+      "coke",
+      "coal",
+      "tonne"
+    ],
+    "description": "Scope 3 was NE, so factor uses Scope 1 combined only: 27 × 107.23."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-coal-tar-tonne-scope1",
+    "activity_id": "au-nga-coal-tar-tonne",
+    "use_case": "fuel_combustion",
+    "name": "Coal tar",
+    "sector": "Energy",
+    "category": "Solid fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Mass",
+    "unit": "kg/tonne",
+    "factor": 3076.125,
+    "factor_calculation_origin": "calculated_from_table_4",
+    "scopes": [
+      "1"
+    ],
+    "constituent_gases": {
+      "co2e_total": 3076.125,
+      "energy_content_gj_per_tonne": 37.5,
+      "scope1_combined_kg_per_gj": 82.03,
+      "scope3_kg_per_gj": null
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "coal tar",
+      "coal",
+      "tonne"
+    ],
+    "description": "Scope 3 was NE, so factor uses Scope 1 combined only: 37.5 × 82.03."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-natural-gas-pipeline-m3-scope1",
+    "activity_id": "au-nga-natural-gas-pipeline-m3",
+    "use_case": "fuel_combustion",
+    "name": "Natural gas distributed in a pipeline",
+    "sector": "Energy",
+    "category": "Gaseous fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Volume",
+    "unit": "kg/m3",
+    "factor": 2.025129,
+    "factor_calculation_origin": "calculated_from_table_5",
+    "scopes": [
+      "1"
+    ],
+    "constituent_gases": {
+      "co2e_total": 2.025129,
+      "energy_content_gj_per_m3": 0.0393,
+      "combined_gases_kg_per_gj": 51.53
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "natural gas",
+      "pipeline gas",
+      "gas bill",
+      "m3"
+    ],
+    "description": "Final factor calculated as 0.0393 GJ/m3 × 51.53 kg CO2e/GJ."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-compressed-natural-gas-m3-scope1",
+    "activity_id": "au-nga-compressed-natural-gas-m3",
+    "use_case": "fuel_combustion",
+    "name": "Compressed natural gas",
+    "sector": "Energy",
+    "category": "Gaseous fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Volume",
+    "unit": "kg/m3",
+    "factor": 2.025129,
+    "factor_calculation_origin": "calculated_from_table_5",
+    "scopes": [
+      "1"
+    ],
+    "constituent_gases": {
+      "co2e_total": 2.025129,
+      "energy_content_gj_per_m3": 0.0393,
+      "combined_gases_kg_per_gj": 51.53
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "compressed natural gas",
+      "cng",
+      "m3"
+    ],
+    "description": "Final factor calculated as 0.0393 GJ/m3 × 51.53 kg CO2e/GJ."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-unprocessed-natural-gas-m3-scope1",
+    "activity_id": "au-nga-unprocessed-natural-gas-m3",
+    "use_case": "fuel_combustion",
+    "name": "Unprocessed natural gas",
+    "sector": "Energy",
+    "category": "Gaseous fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Volume",
+    "unit": "kg/m3",
+    "factor": 2.025129,
+    "factor_calculation_origin": "calculated_from_table_5",
+    "scopes": [
+      "1"
+    ],
+    "constituent_gases": {
+      "co2e_total": 2.025129,
+      "energy_content_gj_per_m3": 0.0393,
+      "combined_gases_kg_per_gj": 51.53
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "unprocessed natural gas",
+      "natural gas",
+      "m3"
+    ],
+    "description": "Final factor calculated as 0.0393 GJ/m3 × 51.53 kg CO2e/GJ."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-liquefied-natural-gas-kl-scope1",
+    "activity_id": "au-nga-liquefied-natural-gas-kl",
+    "use_case": "fuel_combustion",
+    "name": "Liquefied natural gas",
+    "sector": "Energy",
+    "category": "Gaseous fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Volume",
+    "unit": "kg/kL",
+    "factor": 1303.709,
+    "factor_calculation_origin": "calculated_from_table_5",
+    "scopes": [
+      "1"
+    ],
+    "constituent_gases": {
+      "co2e_total": 1303.709,
+      "energy_content_gj_per_kl": 25.3,
+      "combined_gases_kg_per_gj": 51.53
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "lng",
+      "liquefied natural gas",
+      "kilolitre",
+      "kl"
+    ],
+    "description": "Final factor calculated as 25.3 GJ/kL × 51.53 kg CO2e/GJ."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-hydrogen-m3-scope1",
+    "activity_id": "au-nga-hydrogen-m3",
+    "use_case": "fuel_combustion",
+    "name": "Hydrogen",
+    "sector": "Energy",
+    "category": "Gaseous fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Volume",
+    "unit": "kg/m3",
+    "factor": 0.00061,
+    "factor_calculation_origin": "calculated_from_table_5",
+    "scopes": [
+      "1"
+    ],
+    "constituent_gases": {
+      "co2e_total": 0.00061,
+      "energy_content_gj_per_m3": 0.0122,
+      "combined_gases_kg_per_gj": 0.05
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "hydrogen",
+      "m3"
+    ],
+    "description": "Final factor calculated as 0.0122 GJ/m3 × 0.05 kg CO2e/GJ."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-diesel-oil-kl-scope1-scope3",
+    "activity_id": "au-nga-diesel-oil-kl",
+    "use_case": "fuel_combustion",
+    "name": "Diesel oil",
+    "sector": "Energy",
+    "category": "Liquid fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Volume",
+    "unit": "kg/kL",
+    "factor": 2902.72,
+    "factor_calculation_origin": "calculated_from_table_8",
+    "scopes": [
+      "1",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 2902.72,
+      "energy_content_gj_per_kl": 38.6,
+      "scope1_combined_kg_per_gj": 69.9,
+      "scope3_kg_per_gj": 5.3
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "diesel",
+      "diesel oil",
+      "automotive diesel oil",
+      "ado",
+      "kl",
+      "litre"
+    ],
+    "description": "Final factor calculated as 38.6 GJ/kL × (69.9 + 5.3) kg CO2e/GJ."
+  },
+  {
+    "source": "Australian Government DCCEEW",
+    "source_dataset": "Australian National Greenhouse Accounts Factors 2025",
+    "source_link": "Australian National Greenhouse Accounts Factors 2025 uploaded PDF",
+    "year": 2025,
+    "year_released": 2025,
+    "region": "AU",
+    "region_name": "Australia",
+    "factor_calculation_method": "ar5",
+    "supported_calculation_methods": [
+      "ar5"
+    ],
+    "id": "au-nga-2025-petrol-kl-scope1-scope3",
+    "activity_id": "au-nga-petrol-kl",
+    "use_case": "fuel_combustion",
+    "name": "Petrol",
+    "sector": "Energy",
+    "category": "Liquid fuels",
+    "source_lca_activity": "combustion",
+    "unit_type": "Volume",
+    "unit": "kg/kL",
+    "factor": 2489.76,
+    "factor_calculation_origin": "calculated_from_table_8",
+    "scopes": [
+      "1",
+      "3"
+    ],
+    "constituent_gases": {
+      "co2e_total": 2489.76,
+      "energy_content_gj_per_kl": 34.2,
+      "scope1_combined_kg_per_gj": 67.4,
+      "scope3_kg_per_gj": 5.4
+    },
+    "additional_indicators": {},
+    "keywords": [
+      "petrol",
+      "gasoline",
+      "motor spirit",
+      "ulp",
+      "kl",
+      "litre"
+    ],
+    "description": "Final factor calculated as 34.2 GJ/kL × (67.4 + 5.4) kg CO2e/GJ."
+  }
+]

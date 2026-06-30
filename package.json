@@ -23,6 +23,11 @@
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx ./src/db/migrate.ts",
+    "import:us": "tsx scripts/import-us-json.ts",
+    "import:uk": "tsx scripts/import-uk-json.ts",
+    "import:france": "tsx scripts/import-france-json.ts",
+    "normalize:au": "tsx scripts/normalize-australia-factors.ts",
+    "import:au": "tsx scripts/import-australia-json.ts",
     "test:pipeline": "tsx scripts/test-invoice-pipeline.ts"
   },
   "dependencies": {
@@ -46,7 +51,7 @@
     "pdf-poppler": "^0.2.3",
     "pdfjs-dist": "^6.0.227",
     "pdfkit": "^0.19.1",
-    "pg": "^8.21.0",
+    "pg": "^8.22.0",
     "puppeteer": "^25.1.0",
     "puppeteer-core": "^25.1.0",
     "sharp": "^0.35.1",
@@ -71,7 +76,7 @@
     "globals": "^17.6.0",
     "multer": "^2.2.0",
     "nodemon": "^3.1.14",
-    "tsx": "^4.21.0",
+    "tsx": "^4.22.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.61.1"
   }

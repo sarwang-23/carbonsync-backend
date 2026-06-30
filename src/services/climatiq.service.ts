@@ -314,3 +314,73 @@ export function buildActivityParameters(category: string, item: any, converted?:
 
     throw new Error(`Unsupported Climatiq activity parameter category: ${category}`);
 }
+
+type ClimatiqEstimateDirectInput = {
+  activityId: string;
+  parameterName: string;
+  value: number;
+  parameterUnit?: string;
+  dataVersion?: string;
+  region?: string;
+};
+
+type ClimatiqEstimateDirectResult = {
+  success: boolean;
+  co2e: number;
+  co2e_unit: string;
+  activity_id: string;
+  factor_name?: string;
+  factor_source?: string;
+  factor_region?: string;
+  raw?: any;
+};
+
+export async function estimateWithClimatiqDirect(
+  input: ClimatiqEstimateDirectInput
+): Promise<ClimatiqEstimateDirectResult> {
+  const apiKey = getClimatiqApiKey();
+  const CLIMATIQ_BASE_URL = "https://api.climatiq.io/data/v1";
+
+  if (!input.activityId) throw new Error("Climatiq activityId is required");
+  if (!input.parameterName) throw new Error("Climatiq parameterName is required");
+  if (!Number.isFinite(input.value) || input.value <= 0) {
+    throw new Error(`Invalid Climatiq value: ${input.value}`);
+  }
+
+  const body = {
+    emission_factor: {
+      activity_id: input.activityId,
+      data_version: input.dataVersion || "^6",
+      region: input.region,
+    },
+    parameters: {
+      [input.parameterName]: input.value,
+    },
+  };
+
+  const response = await fetch(`${CLIMATIQ_BASE_URL}/estimate`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data?.message || data?.error || `Climatiq API failed with status ${response.status}`);
+  }
+
+  return {
+    success: true,
+    co2e: Number(data.co2e || 0),
+    co2e_unit: data.co2e_unit || "kg",
+    activity_id: input.activityId,
+    factor_name: data.emission_factor?.name,
+    factor_source: data.emission_factor?.source,
+    factor_region: data.emission_factor?.region,
+    raw: data,
+  };
+}

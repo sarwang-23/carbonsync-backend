@@ -12,6 +12,9 @@ import {
     calculateIndiaFlightEmission,
 } from "./fixedIndiaEF.service.js";
 import {
+    calculateGermanyEmission,
+} from "./GermanyEmission.service.js";
+import {
     searchClimatiqEmissionFactors,
     estimateWithClimatiq,
     selectLatestEmberElectricityFactor,
@@ -847,6 +850,69 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
     }
 
     // India region fixed EF rules. These three document types must not go to Climatiq.
+    if (region === "DE") {
+        const value = Number(normalizedInputItem.quantity || item.quantity || 0);
+        const unit = String(normalizedInputItem.unit !== "unknown" ? normalizedInputItem.unit : item.unit || "");
+        
+        if (category === "fuel" && unit.toLowerCase().includes("lit")) {
+            return {
+                success: false,
+                needs_review: true,
+                error_type: "UNIT_CONVERSION_REQUIRED",
+                message: "Germany diesel mapping expects kWh. Invoice has litres.",
+                item_name: originalItemName,
+                country: region,
+                category,
+            };
+        }
+
+        const mappedCategory = category === "electricity_bill" ? "electricity" : category === "fuel" && originalItemName.toLowerCase().includes("gas") ? "natural_gas" : category === "fuel" ? "diesel" : category;
+
+        const germanyResult = await calculateGermanyEmission({
+            category: mappedCategory,
+            value,
+            unit,
+        });
+
+        if (!germanyResult.success) {
+             return {
+                success: false,
+                needs_review: true,
+                error_type: "GERMANY_EMISSION_FAILED",
+                message: germanyResult.message || "Germany calculation failed",
+                item_name: originalItemName,
+                country: region,
+                category,
+            };
+        }
+
+        return {
+            success: true,
+            source_engine: "climatiq",
+            preferred_source: "UBA",
+            region: "DE",
+            country_name: "Germany",
+            category,
+            value,
+            unit,
+            co2e: germanyResult.co2e,
+            co2e_unit: germanyResult.co2e_unit,
+            activity_id: germanyResult.activity_id,
+            factor_name: germanyResult.factor_name,
+            factor_source: germanyResult.factor_source,
+            result: {
+                co2e: germanyResult.co2e,
+                total_tco2e: germanyResult.co2e / 1000,
+                factor_name: germanyResult.factor_name,
+                activity_id: germanyResult.activity_id,
+                source: germanyResult.factor_source,
+                factor_year: 2024,
+                factor_region: "DE",
+                category: mappedCategory
+            }
+        };
+    }
+
     if (region === "IN" && category === "electricity_bill") {
         const quantity = getElectricityKwh(item, combinedText);
         
