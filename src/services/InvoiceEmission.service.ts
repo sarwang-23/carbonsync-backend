@@ -222,8 +222,8 @@ export async function processInvoiceEmissions(
           value,
           unit,
           status: "review",
-          reason: "FLIGHT_DISTANCE_NOT_FOUND",
-          message: "Flight ticket detected but airport pair/distance mapping could not be extracted",
+          reason: (item as any).metadata?.reason || "FLIGHT_DISTANCE_NOT_FOUND",
+          message: "Flight ticket detected but airport pair/coordinates could not be extracted",
           metadata: (item as any).metadata || null,
         });
         continue;
