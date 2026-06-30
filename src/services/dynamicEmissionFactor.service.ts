@@ -1,5 +1,6 @@
 import {
     classifyInvoiceDocument,
+    SupportedCountry,
 } from "./documentClassifier.service.js";
 import {
     validateElectricityBill,
@@ -39,7 +40,6 @@ import {
 import axios from "axios";
 import { convertQuantity } from "./unit.service.js";
 
-type SupportedCountry = "IN" | "MY";
 
 type DetectedCategory =
     | "electricity_bill"

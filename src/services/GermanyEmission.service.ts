@@ -1,4 +1,4 @@
-import { getEmissionMapping } from "./EmissionMapping.service.js";
+import { getEmissionMapping } from "./emissionMapping.service.js";
 import { estimateWithClimatiqDirect } from "./climatiq.service.js";
 
 type GermanyEmissionInput = {

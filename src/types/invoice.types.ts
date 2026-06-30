@@ -1,6 +1,7 @@
 export type NormalizedInvoice = {
   provider: string;
   vendorName?: string | null;
+  vendorAddress?: string | null;
   invoiceNumber?: string | null;
   invoiceDate?: string | null;
   currency?: string | null;
