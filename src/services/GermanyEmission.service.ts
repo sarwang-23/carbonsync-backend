@@ -1,5 +1,6 @@
 import { getEmissionMapping } from "./emissionMapping.service.js";
 import { estimateWithClimatiqDirect } from "./climatiq.service.js";
+import { convertToExpectedUnit } from "./UnitConversion.service.js";
 
 type GermanyEmissionInput = {
   category: string;
@@ -40,11 +41,18 @@ export async function calculateGermanyEmission(input: GermanyEmissionInput) {
     };
   }
 
+  const converted = convertToExpectedUnit({
+    region: "DE",
+    category: input.category,
+    value: input.value,
+    unit: input.unit || mapping.parameter_unit || "kWh",
+  });
+
   const climatiqResult = await estimateWithClimatiqDirect({
     activityId: mapping.activity_id,
     parameterName: mapping.parameter_name,
-    value: input.value,
-    parameterUnit: mapping.parameter_unit || input.unit,
+    value: converted.value,
+    parameterUnit: converted.unit,
     dataVersion: mapping.data_version || "^6",
     region: "DE",
   });
@@ -58,6 +66,7 @@ export async function calculateGermanyEmission(input: GermanyEmissionInput) {
     category: input.category,
     input_value: input.value,
     input_unit: input.unit || mapping.parameter_unit,
+    converted,
     activity_id: mapping.activity_id,
     parameter_name: mapping.parameter_name,
     parameter_unit: mapping.parameter_unit,
@@ -69,3 +78,4 @@ export async function calculateGermanyEmission(input: GermanyEmissionInput) {
     raw: climatiqResult.raw,
   };
 }
+

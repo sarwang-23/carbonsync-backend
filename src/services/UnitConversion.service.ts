@@ -117,3 +117,60 @@ export function convertToTargetUnit(
 
   throw new Error(`Unsupported unit conversion from ${fromUnit} to ${targetUnit}`);
 }
+
+export type ConversionInput = {
+  region: string;
+  category: string;
+  value: number;
+  unit: string;
+};
+
+export function convertToExpectedUnit(input: ConversionInput) {
+  const unit = (input.unit || "").toLowerCase().trim();
+
+  // Already kWh
+  if (unit === "kwh" || unit === "kwj") {
+    return {
+      value: input.value,
+      unit: "kWh",
+      converted: false,
+    };
+  }
+
+  // Germany natural gas: rough conversion m3 → kWh
+  // 1 m3 natural gas approx 10.55 kWh
+  if (
+    input.region === "DE" &&
+    input.category === "natural_gas" &&
+    (unit === "m3" || unit === "m³")
+  ) {
+    return {
+      value: Number((input.value * 10.55).toFixed(6)),
+      unit: "kWh",
+      converted: true,
+      conversion_note: "Converted natural gas from m3 to kWh using approx 10.55 kWh/m3",
+    };
+  }
+
+  // Germany diesel/heating oil: rough conversion litre → kWh
+  // 1 litre heating oil/diesel approx 10 kWh
+  if (
+    input.region === "DE" &&
+    input.category === "diesel" &&
+    (unit === "l" || unit === "litre" || unit === "liter")
+  ) {
+    return {
+      value: Number((input.value * 10).toFixed(6)),
+      unit: "kWh",
+      converted: true,
+      conversion_note: "Converted diesel/heating oil from litre to kWh using approx 10 kWh/litre",
+    };
+  }
+
+  return {
+    value: input.value,
+    unit: input.unit,
+    converted: false,
+  };
+}
+

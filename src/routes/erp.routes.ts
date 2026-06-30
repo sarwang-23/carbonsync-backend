@@ -100,6 +100,9 @@ router.post("/upload", upload.single("file"), async (req, res) => {
         invoiceYear,
       });
 
+      const sourceEngine = "climatiq";
+      const preferredSource = "Climatiq";
+
       const responseBody = {
         success: true,
         message: `${detectedCountry.country_name} invoice processed`,
@@ -119,7 +122,18 @@ router.post("/upload", upload.single("file"), async (req, res) => {
           item_count: invoice.lineItems.length,
           attempts: extraction.attempts,
         },
-        emission: emissionResult,
+        emission: {
+          success: emissionResult.success,
+          source_engine: sourceEngine,
+          preferred_source: preferredSource,
+          total_items: emissionResult.total_items,
+          calculated_count: emissionResult.calculated_count,
+          review_count: emissionResult.review_count,
+          failed_count: emissionResult.failed_count,
+          total_co2e: Number(Number(emissionResult.total_co2e || 0).toFixed(6)),
+          total_co2e_unit: emissionResult.total_co2e_unit || "kg",
+          results: emissionResult.results,
+        },
       };
 
       return res.status(200).json(fillNullValues(responseBody));
@@ -134,6 +148,14 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       invoice_year: invoiceYear,
       items: normalizedItems,
     });
+
+    let sourceEngine = "official_factor_db";
+    let preferredSource: string | undefined = undefined;
+
+    if (detectedCountry.region === "DE") {
+      sourceEngine = "climatiq";
+      preferredSource = "UBA";
+    }
 
     const responseBody = {
       success: true,
@@ -154,7 +176,18 @@ router.post("/upload", upload.single("file"), async (req, res) => {
         item_count: invoice.lineItems.length,
         attempts: extraction.attempts,
       },
-      emission: emissionResult,
+      emission: {
+        success: emissionResult.success,
+        source_engine: sourceEngine,
+        ...(preferredSource ? { preferred_source: preferredSource } : {}),
+        total_items: emissionResult.total_items,
+        calculated_count: emissionResult.calculated_count,
+        review_count: emissionResult.review_count,
+        failed_count: emissionResult.failed_count,
+        total_co2e: Number(Number(emissionResult.total_co2e || 0).toFixed(6)),
+        total_co2e_unit: emissionResult.total_co2e_unit || "kg",
+        results: emissionResult.results,
+      },
     };
 
     return res.status(200).json(fillNullValues(responseBody));

@@ -153,19 +153,73 @@ export async function processInvoiceEmissions(
           unit: item.unit,
           status: "review",
           reason: "INVALID_VALUE",
+          message: "This item needs manual review or mapping update",
+        });
+        continue;
+      }
+
+      if (!item.category || item.category === "unknown") {
+        reviewCount++;
+        results.push({
+          item_name: item.item_name,
+          category: item.category,
+          value: item.value,
+          unit: item.unit,
+          status: "review",
+          reason: "UNKNOWN_CATEGORY",
+          message: "This item needs manual review or mapping update",
         });
         continue;
       }
 
       // ── Germany ─── Climatiq UBA route ─────────────────────────────────────
       if (input.region === "DE") {
-        const germanyResult = await calculateGermanyEmission({
-          category: item.category,
-          value: Number(item.value),
-          unit: item.unit,
-        });
+        try {
+          const germanyResult = await calculateGermanyEmission({
+            category: item.category,
+            value: Number(item.value),
+            unit: item.unit,
+          });
 
-        if (!germanyResult.success) {
+          if (!germanyResult.success) {
+            reviewCount++;
+            results.push({
+              item_name: item.item_name,
+              category: item.category,
+              value: item.value,
+              unit: item.unit,
+              status: "review",
+              source_engine: "climatiq",
+              region: "DE",
+              reason: (germanyResult as any).reason || "NO_GERMANY_MAPPING_FOUND",
+              message: (germanyResult as any).message || "This item needs manual review or mapping update",
+            });
+            continue;
+          }
+
+          calculatedCount++;
+          totalCo2e += germanyResult.co2e;
+          results.push({
+            item_name: item.item_name,
+            category: item.category,
+            value: item.value,
+            unit: item.unit,
+            status: "calculated",
+            source_engine: "climatiq",
+            preferred_source: "UBA",
+            region: "DE",
+            country_name: "Germany",
+            activity_id: germanyResult.activity_id,
+            parameter_name: germanyResult.parameter_name,
+            parameter_unit: germanyResult.parameter_unit,
+            co2e: germanyResult.co2e,
+            co2e_unit: germanyResult.co2e_unit,
+            factor_name: germanyResult.factor_name,
+            factor_source: germanyResult.factor_source,
+            factor_region: germanyResult.factor_region,
+            converted: germanyResult.converted,
+          });
+        } catch (err: any) {
           reviewCount++;
           results.push({
             item_name: item.item_name,
@@ -175,33 +229,10 @@ export async function processInvoiceEmissions(
             status: "review",
             source_engine: "climatiq",
             region: "DE",
-            reason: (germanyResult as any).reason || "GERMANY_CALCULATION_FAILED",
-            message: (germanyResult as any).message,
+            reason: "CLIMATIQ_ERROR",
+            message: err.message || "Climatiq API call failed",
           });
-          continue;
         }
-
-        calculatedCount++;
-        totalCo2e += germanyResult.co2e;
-        results.push({
-          item_name: item.item_name,
-          category: item.category,
-          value: item.value,
-          unit: item.unit,
-          status: "calculated",
-          source_engine: "climatiq",
-          preferred_source: "UBA",
-          region: "DE",
-          country_name: "Germany",
-          activity_id: germanyResult.activity_id,
-          parameter_name: germanyResult.parameter_name,
-          parameter_unit: germanyResult.parameter_unit,
-          co2e: germanyResult.co2e,
-          co2e_unit: germanyResult.co2e_unit,
-          factor_name: germanyResult.factor_name,
-          factor_source: germanyResult.factor_source,
-          factor_region: germanyResult.factor_region,
-        });
         continue;
       }
 
@@ -224,6 +255,7 @@ export async function processInvoiceEmissions(
           source_engine: "official_factor_db",
           region: input.region,
           reason: "NO_LOCAL_FACTOR_FOUND",
+          message: "This item needs manual review or mapping update",
         });
         continue;
       }
@@ -248,6 +280,7 @@ export async function processInvoiceEmissions(
           reason: "UNIT_MISMATCH",
           factor_unit: factor.unit,
           factor_name: factor.name,
+          message: "This item needs manual review or mapping update",
         });
         continue;
       }

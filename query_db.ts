@@ -3,8 +3,14 @@ import { pool } from './src/db.js';
 
 async function run() {
   try {
-    const r = await pool.query("select * from emission_factor_mappings where region = 'DE'");
-    console.log(JSON.stringify(r.rows, null, 2));
+    console.log("=== Official Emission Factors Count by Region ===");
+    const resCount = await pool.query(`
+      select region, count(*) as total_count
+      from official_emission_factors
+      group by region
+      order by region
+    `);
+    console.log(resCount.rows);
   } catch (e) {
     console.error(e);
   } finally {
@@ -12,3 +18,5 @@ async function run() {
   }
 }
 run();
+
+
