@@ -119,73 +119,39 @@ export function detectCountryFromText(text: string, fileName = ""): DetectedCoun
     };
   }
 
-  // 2. Vendor/country keywords — Flight first (highest specificity)
+  // 2. Australian Vendors & Keywords
   if (
-    lower.includes("flight booking") ||
-    lower.includes("indigo") ||
-    lower.includes("air india") ||
-    lower.includes("vistara") ||
-    lower.includes("akasa") ||
-    lower.includes("spicejet") ||
-    (lower.includes("pnr") && lower.includes("airport"))
+    lower.includes("origin energy") ||
+    lower.includes("agl") ||
+    lower.includes("energyaustralia") ||
+    lower.includes("red energy") ||
+    lower.includes("alinta") ||
+    lower.includes("synergy") ||
+    lower.includes("aurora") ||
+    lower.includes("actewagl") ||
+    lower.includes("jemena") ||
+    lower.includes("ausgrid") ||
+    lower.includes("australia") ||
+    lower.includes("new south wales") ||
+    lower.includes("victoria") ||
+    lower.includes("queensland") ||
+    lower.includes("tasmania") ||
+    lower.includes("western australia") ||
+    lower.includes("south australia") ||
+    lower.includes("northern territory") ||
+    lower.includes("australian capital territory") ||
+    lower.includes("aud")
   ) {
     return {
-      region: "IN",
-      country_name: "India",
-      currency: "INR",
-      confidence: 98,
-      reason: "India flight ticket keyword found",
+      region: "AU",
+      country_name: "Australia",
+      currency: "AUD",
+      confidence: 95,
+      reason: "Australia keyword found",
     };
   }
 
-  // Railway — second priority
-  if (
-    lower.includes("indian railways") ||
-    lower.includes("irctc") ||
-    lower.includes("e-ticket") ||
-    lower.includes("eticket") ||
-    lower.includes("electronic reservation slip") ||
-    lower.includes("pnr") ||
-    lower.includes("train no") ||
-    lower.includes("train number") ||
-    lower.includes("boarding at") ||
-    lower.includes("passenger details") ||
-    lower.includes("current booking")
-  ) {
-    return {
-      region: "IN",
-      country_name: "India",
-      currency: "INR",
-      confidence: 98,
-      reason: "Indian Railways / IRCTC keyword found",
-    };
-  }
-
-  if (
-    lower.includes("uppcl") ||
-    lower.includes("dakshinanchal vidyut") ||
-    lower.includes("vidyut vitran") ||
-    lower.includes("account no.") ||
-    lower.includes("net billed unit") ||
-    (lower.includes("kwh") && lower.includes("ind")) ||
-    lower.includes("india") ||
-    lower.includes("inr") ||
-    lower.includes("gstin") ||
-    lower.includes("dhbvn") ||
-    lower.includes("bses") ||
-    lower.includes("tata power") ||
-    lower.includes("adani electricity") ||
-    lower.includes("₹")
-  ) {
-    return {
-      region: "IN",
-      country_name: "India",
-      currency: "INR",
-      confidence: 98,
-      reason: "India electricity utility keyword found",
-    };
-  }
-
+  // 3. Malaysia
   if (
     lower.includes("tenaga nasional") ||
     lower.includes("tnb") ||
@@ -201,6 +167,7 @@ export function detectCountryFromText(text: string, fileName = ""): DetectedCoun
     };
   }
 
+  // 4. Germany
   if (
     lower.includes("strom") ||
     lower.includes("stromrechnung") ||
@@ -218,6 +185,7 @@ export function detectCountryFromText(text: string, fileName = ""): DetectedCoun
     };
   }
 
+  // 5. United Kingdom
   if (
     lower.includes("united kingdom") ||
     lower.includes("great britain") ||
@@ -234,23 +202,7 @@ export function detectCountryFromText(text: string, fileName = ""): DetectedCoun
     };
   }
 
-  if (
-    lower.includes("australia") ||
-    lower.includes("aud") ||
-    lower.includes("energy australia") ||
-    lower.includes("victoria") ||
-    lower.includes("nsw") ||
-    lower.includes("queensland")
-  ) {
-    return {
-      region: "AU",
-      country_name: "Australia",
-      currency: "AUD",
-      confidence: 95,
-      reason: "Australia keyword found",
-    };
-  }
-
+  // 6. France
   if (
     lower.includes("france") ||
     lower.includes("edf") ||
@@ -267,6 +219,7 @@ export function detectCountryFromText(text: string, fileName = ""): DetectedCoun
     };
   }
 
+  // 7. United States
   if (
     lower.includes("united states") ||
     lower.includes("usa") ||
@@ -280,6 +233,40 @@ export function detectCountryFromText(text: string, fileName = ""): DetectedCoun
       currency: "USD",
       confidence: 90,
       reason: "US keyword found",
+    };
+  }
+
+  // 8. India (Lowest Priority)
+  if (
+    lower.includes("tata power") ||
+    lower.includes("bses") ||
+    lower.includes("adani electricity") ||
+    lower.includes("msedcl") ||
+    lower.includes("uppcl") ||
+    lower.includes("nbpdcl") ||
+    lower.includes("sbpdcl") ||
+    lower.includes("bescom") ||
+    lower.includes("tangedco") ||
+    lower.includes("torrent power") ||
+    lower.includes("tpddl") ||
+    lower.includes("kseb") ||
+    lower.includes("irctc") ||
+    lower.includes("indian railways") ||
+    lower.includes("indigo") ||
+    lower.includes("air india") ||
+    lower.includes("vistara") ||
+    lower.includes("akasa") ||
+    lower.includes("spicejet") ||
+    lower.includes("india") ||
+    lower.includes("inr") ||
+    lower.includes("₹")
+  ) {
+    return {
+      region: "IN",
+      country_name: "India",
+      currency: "INR",
+      confidence: 95,
+      reason: "India electricity utility keyword found",
     };
   }
 

@@ -1,6 +1,7 @@
 import { pool } from "../db.js";
 import { estimateWithClimatiq } from "./climatiq.service.js";
 import { searchClimatiqFactor } from "./ClimatiqSearch.service.js";
+import { normalizeUnit } from "./UnitConversion.service.js";
 
 type ClimatiqFallbackInput = {
   region: string;
@@ -10,23 +11,6 @@ type ClimatiqFallbackInput = {
   value: number;
   unit: string;
 };
-
-function normalizeUnit(unit: string) {
-  return unit
-    .toLowerCase()
-    .replace("kilowatt hour", "kwh")
-    .replace("kilowatt-hour", "kwh")
-    .replace("kwj", "kwh")
-    .replace("kilogram", "kg")
-    .replace("kgs", "kg")
-    .replace("tonnes", "tonne")
-    .replace("tons", "tonne")
-    .replace("litre", "l")
-    .replace("liter", "l")
-    .replace("kilometre", "km")
-    .replace("kilometer", "km")
-    .trim();
-}
 
 function convertForClimatiq(input: {
   category: string;
@@ -69,12 +53,42 @@ function convertForClimatiq(input: {
     }
   }
 
-  if (input.expectedParameterName === "distance") {
+  if (["distance", "passengers", "passenger_distance", "weight_distance"].includes(input.expectedParameterName || "")) {
     if (unit === "km") {
       return {
         value: input.value,
-        parameterName: "distance",
+        parameterName: input.expectedParameterName as string,
         parameterUnit: "km",
+        converted: false,
+      };
+    }
+
+    if (unit === "tonnekm" || unit === "tkm") {
+      if (input.expectedParameterName === "weight_distance") {
+        return {
+          value: input.value,
+          parameterName: "weight",
+          parameterUnit: "t", // Climatiq expects 't' for metric tonne
+          extraParameterName: "distance",
+          extraParameterValue: 1,
+          extraParameterUnit: "km",
+          converted: false,
+        };
+      }
+
+      return {
+        value: input.value,
+        parameterName: input.expectedParameterName as string,
+        parameterUnit: input.expectedParameterUnit || "tonne_km",
+        converted: false,
+      };
+    }
+
+    if (unit === "passengerkm" || unit === "pkm") {
+      return {
+        value: input.value,
+        parameterName: input.expectedParameterName as string,
+        parameterUnit: input.expectedParameterUnit || "passenger_km",
         converted: false,
       };
     }
@@ -91,17 +105,33 @@ function convertForClimatiq(input: {
     }
   }
 
-  if (input.expectedParameterName === "weight_distance") {
-    if (
-      unit === "tonne-km" ||
-      unit === "tonne km" ||
-      unit === "tkm"
-    ) {
+  if (input.expectedParameterName === "mass") {
+    if (unit === "kg") {
       return {
         value: input.value,
-        parameterName: "weight_distance",
-        parameterUnit: "tonne-km",
+        parameterName: "mass",
+        parameterUnit: "kg",
         converted: false,
+      };
+    }
+
+    if (unit === "tonne" || unit === "t") {
+      return {
+        value: input.value * 1000,
+        parameterName: "mass",
+        parameterUnit: "kg",
+        converted: true,
+        conversion_note: "Converted tonne to kg",
+      };
+    }
+
+    if (unit === "shortton" || unit === "short_ton") {
+      return {
+        value: input.value * 907.185,
+        parameterName: "mass",
+        parameterUnit: "kg",
+        converted: true,
+        conversion_note: "Converted short ton to kg",
       };
     }
   }
@@ -218,14 +248,23 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
     activityId = searchedFactor.activity_id;
   }
 
+  // Some categories don't have US-specific Climatiq factors — use global (omit region)
+  const GLOBAL_ONLY_CATEGORIES = new Set(['freight', 'railway', 'flight', 'coal']);
+  const climatiqRegion = GLOBAL_ONLY_CATEGORIES.has(input.category) ? undefined : input.region;
+
   const climatiqResult = await estimateWithClimatiq({
     selectedEF: {
       activity_id: activityId,
-      region: input.region,
+      ...(climatiqRegion ? { region: climatiqRegion } : {}),
       year: 2024,
     },
     parameters: {
       [converted.parameterName]: converted.value,
+      ...(converted.parameterUnit ? { [`${converted.parameterName}_unit`]: converted.parameterUnit } : {}),
+      ...((converted as any).extraParameterName ? {
+        [(converted as any).extraParameterName]: (converted as any).extraParameterValue,
+        [`${(converted as any).extraParameterName}_unit`]: (converted as any).extraParameterUnit,
+      } : {}),
     }
   });
 

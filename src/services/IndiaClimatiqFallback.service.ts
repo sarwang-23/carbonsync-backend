@@ -1,6 +1,7 @@
 import { pool } from "../db.js";
 import { estimateWithClimatiqDirect } from "./climatiq.service.js";
 import { searchClimatiqFactor } from "./ClimatiqSearch.service.js";
+import { normalizeUnit } from "./UnitConversion.service.js";
 
 type IndiaClimatiqFallbackInput = {
   category: string;
@@ -42,20 +43,6 @@ const MONEY_CATEGORIES = [
   "manufacturing",
   "services",
 ];
-
-function normalizeUnit(unit: string) {
-  return unit
-    .toLowerCase()
-    .replace("kilogram", "kg")
-    .replace("kgs", "kg")
-    .replace("tonnes", "tonne")
-    .replace("tons", "tonne")
-    .replace("litre", "l")
-    .replace("liter", "l")
-    .replace("kilowatt hour", "kwh")
-    .replace("kilowatt-hour", "kwh")
-    .trim();
-}
 
 function convertForClimatiq(input: {
   category: string;
@@ -184,12 +171,9 @@ function convertForClimatiq(input: {
     input.expectedParameterName === "weight_distance" ||
     input.category === "freight"
   ) {
-    const normalizedUnit = input.unit.toLowerCase();
-
     if (
-      normalizedUnit.includes("tonne-km") ||
-      normalizedUnit.includes("tonne km") ||
-      normalizedUnit.includes("tkm")
+      unit === "tonnekm" ||
+      unit === "tkm"
     ) {
       return {
         value: input.value,

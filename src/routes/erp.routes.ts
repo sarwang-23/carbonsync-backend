@@ -170,7 +170,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     }
 
     // ── DE / US / GB / FR / AU: generic emission pipeline ──────────────────
-    let normalizedItems = normalizeInvoiceItems(items);
+    let normalizedItems = normalizeInvoiceItems(items, invoice.vendorName);
 
     function extractElectricityKwhFromText(text: string): number | null {
       const normalized = text.replace(/\s+/g, " ");
@@ -242,6 +242,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       region: detectedCountry.region,
       country_name: detectedCountry.country_name,
       invoice_year: invoiceYear,
+      invoice_text: fullText,   // full raw text for AU state detection
       items: normalizedItems,
     });
 

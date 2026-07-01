@@ -1,6 +1,7 @@
 export function detectCategoryFromText(text: string): string {
   const lower = text.toLowerCase();
 
+  // ── Railway (highest priority — very specific signals) ─────────────────────
   if (
     lower.includes("indian railways") ||
     lower.includes("irctc") ||
@@ -22,23 +23,7 @@ export function detectCategoryFromText(text: string): string {
     return "railway";
   }
 
-  if (
-    lower.includes("electricity") ||
-    lower.includes("power bill") ||
-    lower.includes("electric bill") ||
-    lower.includes("kwh") ||
-    lower.includes("kwj") ||
-    lower.includes("unit consumed") ||
-    lower.includes("energy charges") ||
-    lower.includes("dhbvn") ||
-    lower.includes("uppcl") ||
-    lower.includes("bses") ||
-    lower.includes("tata power") ||
-    lower.includes("adani electricity")
-  ) {
-    return "electricity";
-  }
-
+  // ── Flight ─────────────────────────────────────────────────────────────────
   if (
     lower.includes("flight") ||
     lower.includes("air travel") ||
@@ -51,6 +36,105 @@ export function detectCategoryFromText(text: string): string {
     return "flight";
   }
 
+  // ── LPG — MUST be before natural_gas to avoid cross-match ─────────────────
+  if (
+    lower.includes("lpg") ||
+    lower.includes("liquefied petroleum gas") ||
+    lower.includes("gas cylinder") ||
+    lower.includes("autogas") ||
+    lower.includes("propane") ||
+    lower.includes("butane")
+  ) {
+    return "lpg";
+  }
+
+  // ── Natural Gas — MUST be before electricity (AU gas invoices have "energy") ─
+  if (
+    lower.includes("natural gas") ||
+    lower.includes("pipeline gas") ||
+    lower.includes("png") ||
+    lower.includes("cng") ||
+    // AU-specific gas utility keywords
+    lower.includes("gas supply") ||
+    lower.includes("gas usage") ||
+    lower.includes("gas charges") ||
+    lower.includes("gas tariff") ||
+    lower.includes("gas consumption") ||
+    lower.includes("mj of gas") ||
+    lower.includes("gigajoule") ||
+    lower.includes("gj of gas") ||
+    lower.includes("agn gas") ||       // Australian Gas Networks
+    lower.includes("jemena gas") ||    // Jemena (AU gas distributor)
+    lower.includes("evoenergy gas")    // Evoenergy gas (ACT)
+  ) {
+    return "natural_gas";
+  }
+
+  // ── Diesel ─────────────────────────────────────────────────────────────────
+  if (
+    lower.includes("diesel") ||
+    lower.includes("hsd") ||
+    lower.includes("diesel oil") ||
+    lower.includes("distillate") ||
+    lower.includes("fuel oil no. 2") ||
+    lower.includes("fuel oil no.2") ||
+    lower.includes("no. 2 fuel oil")
+  ) {
+    return "diesel";
+  }
+
+  // ── Petrol ─────────────────────────────────────────────────────────────────
+  if (
+    (lower.includes("petrol") && !lower.includes("petroleum")) ||
+    lower.includes("gasoline") ||
+    lower.includes("motor spirit") ||
+    lower.includes("unleaded") ||
+    lower.includes("e10") ||
+    lower.includes("e85")
+  ) {
+    return "petrol";
+  }
+
+  // ── Electricity — after gas/LPG to prevent AU gas bill misclassification ──
+  if (
+    lower.includes("electricity") ||
+    lower.includes("power bill") ||
+    lower.includes("electric bill") ||
+    lower.includes("kwh") ||
+    lower.includes("kwj") ||
+    lower.includes("unit consumed") ||
+    lower.includes("energy charges") ||
+    lower.includes("dhbvn") ||
+    lower.includes("uppcl") ||
+    lower.includes("bses") ||
+    lower.includes("tata power") ||
+    lower.includes("adani electricity") ||
+    // AU electricity utilities
+    lower.includes("agl") ||           // AGL Energy
+    lower.includes("origin energy") ||
+    lower.includes("energex") ||       // QLD
+    lower.includes("ergon energy") ||  // QLD rural
+    lower.includes("endeavour energy") || // NSW
+    lower.includes("ausgrid") ||       // NSW
+    lower.includes("western power") || // WA
+    lower.includes("synergy") ||       // WA
+    lower.includes("sa power networks") || // SA
+    lower.includes("powercor") ||      // VIC
+    lower.includes("citipower") ||     // VIC
+    lower.includes("united energy") || // VIC
+    lower.includes("jemena electricity") || // VIC/NSW
+    lower.includes("aurora energy") || // TAS
+    lower.includes("actew") ||         // ACT
+    lower.includes("evoenergy") ||     // ACT electricity
+    lower.includes("power and water") || // NT
+    lower.includes("grid usage") ||
+    lower.includes("network tariff") ||
+    lower.includes("supply charge")
+  ) {
+    return "electricity";
+  }
+
+  // ── Materials ──────────────────────────────────────────────────────────────
   if (
     lower.includes("steel") ||
     lower.includes("tmt") ||
@@ -108,34 +192,9 @@ export function detectCategoryFromText(text: string): string {
   }
 
   if (
-    lower.includes("diesel") ||
-    lower.includes("hsd") ||
-    lower.includes("diesel oil")
-  ) {
-    return "diesel";
-  }
-
-  if (
-    lower.includes("petrol") ||
-    lower.includes("gasoline") ||
-    lower.includes("motor spirit")
-  ) {
-    return "petrol";
-  }
-
-  if (
-    lower.includes("lpg") ||
-    lower.includes("liquefied petroleum gas") ||
-    lower.includes("gas cylinder")
-  ) {
-    return "lpg";
-  }
-
-  if (
-    lower.includes("natural gas") ||
+    lower.includes("natural_gas") ||   // fallback catch (already handled above)
     lower.includes("png") ||
-    lower.includes("cng") ||
-    lower.includes("pipeline gas")
+    lower.includes("cng")
   ) {
     return "natural_gas";
   }

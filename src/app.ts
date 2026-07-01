@@ -12,6 +12,7 @@ const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
 app.use("/api/erp", erpRoutes);
 app.use("/api/affinda", affindaTestRoutes);
@@ -100,6 +101,13 @@ app.post("/api/test/india-hybrid-emission", async (req, res) => {
 
 app.post("/api/test/country-emission", async (req, res) => {
   try {
+    if (!req.body) {
+      return res.status(400).json({
+        success: false,
+        message: "Request body missing. Please ensure Content-Type is application/json",
+      });
+    }
+
     const { region, country_name, items } = req.body;
 
     if (!region || !country_name || !Array.isArray(items)) {

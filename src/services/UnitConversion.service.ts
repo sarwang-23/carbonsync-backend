@@ -1,16 +1,20 @@
 export function normalizeUnit(unit?: string | null): string {
   if (!unit) return "";
 
-  const u = String(unit).toLowerCase().trim();
+  const u = String(unit)
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[-_.]/g, "");
 
   const unitMap: Record<string, string> = {
-    "kilowatt hour": "kwh",
-    "kilowatt-hour": "kwh",
+    // electricity
+    "kilowatthour": "kwh",
     "kwhr": "kwh",
     "kwj": "kwh",
     "kwh": "kwh",
     "mwh": "mwh",
 
+    // volume (L)
     "litre": "l",
     "liter": "l",
     "litres": "l",
@@ -18,30 +22,39 @@ export function normalizeUnit(unit?: string | null): string {
     "ltr": "l",
     "l": "l",
     "ml": "ml",
+    "kl": "kl",
 
+    // mass
     "kilogram": "kg",
     "kilograms": "kg",
     "kgs": "kg",
     "kg": "kg",
     "g": "g",
-
+    
     "ton": "t",
     "tons": "t",
     "tonne": "t",
     "tonnes": "t",
     "mt": "t",
 
-    "cubic meter": "m3",
-    "cubic metre": "m3",
+    // volume (m3, etc)
+    "cubicmeter": "m3",
+    "cubicmetre": "m3",
     "m³": "m3",
     "m3": "m3",
+    "scf": "scf",
 
+    // energy
+    "gj": "gj",
+    "mj": "mj",
+
+    // distance
     "meter": "m",
     "metre": "m",
     "meters": "m",
     "metres": "m",
     "m": "m",
-
+    
     "kilometer": "km",
     "kilometre": "km",
     "kilometers": "km",
@@ -49,6 +62,15 @@ export function normalizeUnit(unit?: string | null): string {
     "kms": "km",
     "km": "km",
 
+    // freight/transport
+    "tonnekm": "tonnekm",
+    "passengerkm": "passengerkm",
+
+    // emission factor
+    "kgco2e/kwh": "kgco2e/kwh",
+    "kg/kwh": "kgco2e/kwh",
+
+    // quantity
     "piece": "pcs",
     "pieces": "pcs",
     "pcs": "pcs",

@@ -94,14 +94,10 @@ export function buildClimatiqEstimatePayload(input: ClimatiqEstimateInput) {
         throw new Error("Selected emission factor activity_id is missing");
     }
 
-    if (!selectedEF?.region) {
-        throw new Error("Selected emission factor region is missing");
-    }
-
     return {
         emission_factor: {
             activity_id: selectedEF.activity_id,
-            region: selectedEF.region,
+            ...(selectedEF.region ? { region: selectedEF.region } : {}),
             year: selectedEF.year,
             data_version: dataVersion,
         },
