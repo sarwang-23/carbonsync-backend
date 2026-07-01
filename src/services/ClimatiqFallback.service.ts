@@ -30,6 +30,24 @@ function convertForClimatiq(input: {
         converted: false,
       };
     }
+    if (unit === "mj" || unit === "megajoule") {
+      return {
+        value: input.value * 0.277778, // 1 MJ = 0.277778 kWh
+        parameterName: "energy",
+        parameterUnit: "kWh",
+        converted: true,
+        conversion_note: "Converted MJ to kWh",
+      };
+    }
+    if (unit === "scf") {
+      return {
+        value: input.value * 0.303914, // 1 scf = ~1037 BTU = 0.303914 kWh
+        parameterName: "energy",
+        parameterUnit: "kWh",
+        converted: true,
+        conversion_note: "Converted scf to kWh",
+      };
+    }
   }
 
   if (input.expectedParameterName === "weight") {
@@ -51,14 +69,29 @@ function convertForClimatiq(input: {
         conversion_note: "Converted tonne to kg",
       };
     }
+    if (unit === "shortton" || unit === "short_ton") {
+      return {
+        value: input.value * 907.185,
+        parameterName: "weight",
+        parameterUnit: "kg",
+        converted: true,
+        conversion_note: "Converted short ton to kg",
+      };
+    }
   }
 
   if (["distance", "passengers", "passenger_distance", "weight_distance"].includes(input.expectedParameterName || "")) {
     if (unit === "km") {
+      const isPassengerActivity = input.category === "flight" || input.category === "railway";
       return {
         value: input.value,
-        parameterName: input.expectedParameterName as string,
+        parameterName: "distance",
         parameterUnit: "km",
+        ...(isPassengerActivity ? {
+          extraParameterName: "passengers",
+          extraParameterValue: 1,
+          extraParameterUnit: null // passengers don't need a unit
+        } : {}),
         converted: false,
       };
     }
@@ -100,6 +133,30 @@ function convertForClimatiq(input: {
         value: input.value,
         parameterName: "volume",
         parameterUnit: "m3",
+        converted: false,
+      };
+    }
+    if (unit === "l" || unit === "litre") {
+      return {
+        value: input.value,
+        parameterName: "volume",
+        parameterUnit: "l",
+        converted: false,
+      };
+    }
+    if (unit === "gallon" || unit === "gal") {
+      return {
+        value: input.value,
+        parameterName: "volume",
+        parameterUnit: "gallons_us",
+        converted: false,
+      };
+    }
+    if (unit === "scf") {
+      return {
+        value: input.value,
+        parameterName: "volume",
+        parameterUnit: "scf",
         converted: false,
       };
     }
@@ -248,45 +305,93 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
     activityId = searchedFactor.activity_id;
   }
 
+  console.log(`\nSearching Climatiq...`);
+  console.log(`Category:\n${input.category}`);
+  console.log(`Region:\n${input.region}`);
+  console.log(`Unit:\n${input.unit}`);
+  console.log(`Activity sent:\n${activityId}`);
+
   // Some categories don't have US-specific Climatiq factors — use global (omit region)
   const GLOBAL_ONLY_CATEGORIES = new Set(['freight', 'railway', 'flight', 'coal']);
   const climatiqRegion = GLOBAL_ONLY_CATEGORIES.has(input.category) ? undefined : input.region;
 
-  const climatiqResult = await estimateWithClimatiq({
-    selectedEF: {
-      activity_id: activityId,
-      ...(climatiqRegion ? { region: climatiqRegion } : {}),
-      year: 2024,
-    },
-    parameters: {
-      [converted.parameterName]: converted.value,
-      ...(converted.parameterUnit ? { [`${converted.parameterName}_unit`]: converted.parameterUnit } : {}),
-      ...((converted as any).extraParameterName ? {
-        [(converted as any).extraParameterName]: (converted as any).extraParameterValue,
-        [`${(converted as any).extraParameterName}_unit`]: (converted as any).extraParameterUnit,
-      } : {}),
+  try {
+    let climatiqResult: any;
+    
+    try {
+      climatiqResult = await estimateWithClimatiq({
+        selectedEF: {
+          activity_id: activityId,
+          ...(climatiqRegion ? { region: climatiqRegion } : {}),
+        },
+        parameters: {
+          [converted.parameterName]: converted.value,
+          ...(converted.parameterUnit ? { [`${converted.parameterName}_unit`]: converted.parameterUnit } : {}),
+          ...((converted as any).extraParameterName ? {
+            [(converted as any).extraParameterName]: (converted as any).extraParameterValue,
+            ...((converted as any).extraParameterUnit ? { [`${(converted as any).extraParameterName}_unit`]: (converted as any).extraParameterUnit } : {})
+          } : {}),
+        }
+      });
+    } catch (initialError: any) {
+      // If it failed and we provided a region, try again WITHOUT the region (global fallback)
+      if (climatiqRegion && initialError?.response?.data?.error_code === 'no_emission_factors_found') {
+        console.log(`\nRegion specific factor not found for ${climatiqRegion}. Retrying without region...`);
+        climatiqResult = await estimateWithClimatiq({
+          selectedEF: {
+            activity_id: activityId,
+          },
+          parameters: {
+            [converted.parameterName]: converted.value,
+            ...(converted.parameterUnit ? { [`${converted.parameterName}_unit`]: converted.parameterUnit } : {}),
+            ...((converted as any).extraParameterName ? {
+              [(converted as any).extraParameterName]: (converted as any).extraParameterValue,
+              ...((converted as any).extraParameterUnit ? { [`${(converted as any).extraParameterName}_unit`]: (converted as any).extraParameterUnit } : {})
+            } : {}),
+          }
+        });
+      } else {
+        throw initialError;
+      }
     }
-  });
 
-  return {
-    success: true,
-    status: "calculated",
-    source_engine: "climatiq",
-    preferred_source: "Climatiq",
-    region: input.region,
-    country_name: input.countryName,
-    category: input.category,
-    item_name: input.itemName,
-    input_value: input.value,
-    input_unit: input.unit,
-    converted,
-    activity_id: activityId,
-    parameter_name: converted.parameterName,
-    parameter_unit: converted.parameterUnit,
-    co2e: climatiqResult.data.co2e,
-    co2e_unit: climatiqResult.data.co2e_unit,
-    factor_name: climatiqResult.data.emission_factor?.name,
-    factor_source: climatiqResult.data.emission_factor?.source,
-    factor_region: climatiqResult.data.emission_factor?.region,
-  };
+    console.log(`Status:\n200`);
+    console.log(`Response:\n${JSON.stringify(climatiqResult.data)}`);
+
+    return {
+      success: true,
+      status: "calculated",
+      source_engine: "climatiq",
+      preferred_source: "Climatiq",
+      region: input.region,
+      country_name: input.countryName,
+      category: input.category,
+      item_name: input.itemName,
+      input_value: input.value,
+      input_unit: input.unit,
+      converted,
+      activity_id: activityId,
+      parameter_name: converted.parameterName,
+      parameter_unit: converted.parameterUnit,
+      co2e: climatiqResult.data.co2e,
+      co2e_unit: climatiqResult.data.co2e_unit,
+      factor_name: climatiqResult.data.emission_factor?.name,
+      factor_source: climatiqResult.data.emission_factor?.source,
+      factor_region: climatiqResult.data.emission_factor?.region,
+    };
+  } catch (error: any) {
+    console.log(`Status:\n${error?.response?.status || 'Error'}`);
+    console.log(`Response:\n${JSON.stringify(error?.response?.data || error?.message || error)}`);
+    
+    return {
+      success: false,
+      status: "review",
+      source_engine: "climatiq",
+      region: input.region,
+      country_name: input.countryName,
+      category: input.category,
+      reason: "CLIMATIQ_ESTIMATION_FAILED",
+      message: error?.response?.data?.message || error?.message || "Climatiq estimation failed",
+    };
+  }
 }

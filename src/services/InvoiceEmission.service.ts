@@ -211,6 +211,11 @@ async function findLocalOfficialFactor(params: {
           and (
             lower(name) like '%distillate fuel oil%'
             or lower(name) like '%diesel%'
+            -- French ADEME names for diesel
+            or lower(name) like '%gazole%'
+            or lower(name) like '%gasoil%'
+            or lower(name) like '%gazole routier%'
+            or lower(name) like '%diesel oil%'
           )
         )
         or (
@@ -272,6 +277,20 @@ async function findLocalOfficialFactor(params: {
         
         + (case when lower($2) = 'diesel' and (lower(name) like '%no. 2%' or lower(name) like '%no 2%') then 100 else 0 end)
         + (case when lower($2) = 'diesel' and (lower($3) like '%no. 1%' or lower($3) like '%no.1%') and (lower(name) like '%no. 1%' or lower(name) like '%no 1%') then 200 else 0 end)
+        -- Penalise biodiesel/biofuel unless invoice explicitly mentions it
+        + (case when lower($2) = 'diesel'
+                 and (lower(name) like '%biodiesel%' or lower(name) like '%biofuel%' or lower(name) like '%b100%')
+                 and lower($3) not like '%biodiesel%' and lower($3) not like '%b100%' and lower($3) not like '%biofuel%'
+                 then -200 else 0 end)
+        -- Prefer plain diesel / distillate / gasoil names
+        + (case when lower($2) = 'diesel' and (lower(name) like '%gasoil%' or lower(name) like '%gazole%' or lower(name) like '%diesel oil%' or lower(name) like '%diesel fuel%') then 80 else 0 end)
+        -- Penalise marine/MDO diesel unless invoice explicitly mentions marine/ship
+        + (case when lower($2) = 'diesel'
+                 and (lower(name) like '%marine%' or lower(name) like '%mdo%' or lower(name) like '%maritime%' or lower(name) like '%fluvial%')
+                 and lower($3) not like '%marine%' and lower($3) not like '%ship%' and lower($3) not like '%maritime%' and lower($3) not like '%bateau%'
+                 then -250 else 0 end)
+        -- Prefer routier (road) diesel over non-routier when invoice is plain diesel
+        + (case when lower($2) = 'diesel' and lower(name) like '%routier%' then 60 else 0 end)
         
         + (case when (lower($2) like '%petrol%' or lower($3) like '%petrol%') and lower(name) = 'motor gasoline' then 200 else 0 end)
         + (case when (lower($2) like '%petrol%' or lower($3) like '%petrol%') and (lower(name) like '%motor spirit%' or lower(name) = 'petrol' or lower(name) like '%gasoline%') then 90 else 0 end)
@@ -390,6 +409,30 @@ function convertValueToFactorUnit(value: number, inputUnit: string, factorUnit: 
       success: true,
       value: value * 1000,
       unit: "kg",
+      converted: true,
+    };
+  }
+
+  // Liquid fuels: litre → tonne using standard density (for ADEME kgCO2e/tonne factors)
+  // Diesel/Gazole density ~0.845 kg/L, Petrol/Essence ~0.740 kg/L, LPG ~0.540 kg/L
+  if (input === "l" && (activityUnit === "t" || activityUnit === "tonne")) {
+    const density = 0.000845; // diesel/gazole default (kg/L → tonne/L)
+    return {
+      success: true,
+      value: value * density,
+      unit: "t",
+      converted: true,
+    };
+  }
+
+  // ADEME TEP PCI (Tonne Equivalent Petrol, Lower Heating Value)
+  // Diesel/Gazole: 1 litre ≈ 0.000854 tep PCI
+  if (input === "l" && (factorUnit.toLowerCase().includes("tep"))) {
+    const tepPerLitre = 0.000854;
+    return {
+      success: true,
+      value: value * tepPerLitre,
+      unit: "tep",
       converted: true,
     };
   }
@@ -660,6 +703,70 @@ export async function processInvoiceEmissions(
         continue;
       }
 
+      // ── FR liquid fuels bypass ────────────────────────────────────────────────
+      // ADEME Base Carbone stores Gazole/Essence/GPL in kgCO2e/litre ONLY as
+      // "Amont" (upstream/WTT) partial factors (~0.3–1.2 kgCO2e/L).
+      // Full combustion factors are only available in kgCO2e/tonne or kgCO2e/tep.
+      // To avoid unit-conversion errors and wrong scope selection, FR liquid fuel
+      // invoices go directly to Climatiq which has correct full-combustion factors.
+      const FR_CLIMATIQ_DIRECT_CATEGORIES = ["diesel", "petrol", "lpg"];
+      const normalizedItemUnit = normalizeUnit(item.unit);
+      const isLiquidLitreInvoice = normalizedItemUnit === "l" || normalizedItemUnit === "litre";
+      if (
+        input.region === "FR" &&
+        FR_CLIMATIQ_DIRECT_CATEGORIES.includes(item.category) &&
+        isLiquidLitreInvoice
+      ) {
+        const fallbackResult = await calculateWithClimatiqFallback({
+          region: input.region,
+          countryName: input.country_name,
+          category: item.category,
+          itemName: item.item_name,
+          value: Number(item.value),
+          unit: item.unit,
+        });
+
+        if (!fallbackResult.success) {
+          reviewCount++;
+          results.push({
+            item_name: item.item_name,
+            category: item.category,
+            value: item.value,
+            unit: item.unit,
+            status: "review",
+            source_engine: "climatiq",
+            region: input.region,
+            reason: fallbackResult.reason || "CLIMATIQ_ESTIMATION_FAILED",
+            message: fallbackResult.message || "No Climatiq factor found for this fuel.",
+          });
+          continue;
+        }
+
+        calculatedCount++;
+        totalCo2e += fallbackResult.co2e;
+        results.push({
+          item_name: item.item_name,
+          category: item.category,
+          value: item.value,
+          unit: item.unit,
+          status: "calculated",
+          source_engine: "climatiq",
+          preferred_source: "Climatiq",
+          region: input.region,
+          country_name: input.country_name,
+          activity_id: fallbackResult.activity_id,
+          parameter_name: fallbackResult.parameter_name,
+          parameter_unit: fallbackResult.parameter_unit,
+          converted: fallbackResult.converted,
+          co2e: fallbackResult.co2e,
+          co2e_unit: fallbackResult.co2e_unit,
+          factor_name: fallbackResult.factor_name,
+          factor_source: fallbackResult.factor_source,
+          factor_region: fallbackResult.factor_region,
+        });
+        continue;
+      }
+
       // ── US / GB / FR / AU ─── local official_emission_factors DB route ─────
       const factor = await findLocalOfficialFactor({
         region: input.region,
@@ -691,8 +798,8 @@ export async function processInvoiceEmissions(
             status: "review",
             source_engine: "official_factor_db_then_climatiq",
             region: input.region,
-            reason: "NO_FACTOR_FOUND",
-            message: "No official or Climatiq emission factor available.",
+            reason: fallbackResult.reason || "NO_FACTOR_FOUND",
+            message: fallbackResult.message || "No official or Climatiq emission factor available.",
           });
 
           continue;

@@ -1,43 +1,48 @@
 import 'dotenv/config';
-import { pool } from './src/db.js';
+import axios from 'axios';
+import { estimateWithClimatiq } from './src/services/climatiq.service.js';
 
-async function run() {
-  // Simulate what findLocalOfficialFactor does for diesel
-  const result = await pool.query(`
-    SELECT factor_id, name, category, unit, factor
-    FROM official_emission_factors
-    WHERE region = 'US'
-      AND is_active = true
-      AND factor IS NOT NULL
-      AND (
-        lower(category) = lower('diesel')
-        OR (
-          lower('diesel') = 'diesel'
-          AND (
-            lower(name) LIKE '%distillate fuel oil%'
-            OR lower(name) LIKE '%diesel%'
-          )
-        )
-        OR lower(name) LIKE '%' || lower('diesel') || '%'
-        OR lower('diesel') = ANY(SELECT lower(unnest(keywords)))
-      )
-    ORDER BY name
-    LIMIT 10
-  `);
-  
-  console.log("=== Diesel factor search result ===");
-  console.table(result.rows);
-  
-  // Also check what happens with unit normalizeUnit('kg/gallon')
-  // factorUnit = 'kg/gallon' -> activityUnit = 'gallon'
-  // inputUnit = 'litre' -> normalizeUnit = 'litre'
-  // litre vs gallon -> should trigger litre→gallon conversion
-  console.log("\nUnit check:");
-  console.log("factorUnit 'kg/gallon' -> activityUnit = 'gallon'");
-  console.log("inputUnit 'litre' -> normalizedUnit = 'litre'");
-  console.log("litre !== gallon -> should trigger conversion of 100 litre * 0.264172 = ", 100 * 0.264172, "gallon");
-  
-  await pool.end();
+async function search() {
+  // 1. Search for correct diesel combustion activities
+  console.log("=== Searching for diesel stationary combustion ===");
+  const res = await axios.get('https://api.climatiq.io/data/v1/search', {
+    headers: { Authorization: `Bearer ${process.env.CLIMATIQ_API_KEY}` },
+    params: {
+      query: 'diesel distillate fuel stationary combustion',
+      data_version: '^6',
+      results_per_page: 10
+    }
+  });
+
+  for (const r of res.data.results) {
+    console.log(`ID: ${r.activity_id}`);
+    console.log(`  Name: ${r.name} | Source: ${r.source} (${r.region}) | Unit: ${r.unit_type}`);
+  }
+
+  // 2. Test the candidates directly
+  const candidates = [
+    'fuel-type_diesel-fuel_use_stationary',
+    'fuel-type_gas_diesel_oil-fuel_use_stationary', 
+    'fuel-type_diesel-fuel_use_mobile',
+    'fuel-type_distillate_fuel_oil_number_2-fuel_use_stationary'
+  ];
+
+  console.log("\n=== Testing candidates with 100L diesel ===");
+  for (const id of candidates) {
+    try {
+      const r = await estimateWithClimatiq({
+        selectedEF: { activity_id: id },
+        parameters: { volume: 100, volume_unit: 'l' }
+      });
+      const ef = r.data.emission_factor;
+      console.log(`\n✅ ${id}`);
+      console.log(`   CO2e: ${r.data.co2e} ${r.data.co2e_unit}`);
+      console.log(`   Factor name: ${ef.name}`);
+      console.log(`   Source: ${ef.source} (${ef.region})`);
+    } catch (e: any) {
+      console.log(`❌ ${id}: ${e.response?.data?.error_code || e.message}`);
+    }
+  }
 }
 
-run().catch(console.error);
+search().then(() => process.exit(0)).catch(console.error);
