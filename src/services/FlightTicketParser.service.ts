@@ -172,7 +172,7 @@ function haversineDistanceKm(
   return Math.round(earthRadiusKm * c);
 }
 
-async function calculateRouteDistance(pair: AirportPair) {
+export async function calculateRouteDistance(pair: AirportPair) {
   const from = await getAirportCoordinates(pair.fromAirport);
   const to = await getAirportCoordinates(pair.toAirport);
 

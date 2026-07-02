@@ -11,13 +11,13 @@ type GermanyEmissionInput = {
 export async function calculateGermanyEmission(input: GermanyEmissionInput) {
   const mapping = await getEmissionMapping("DE", input.category);
 
-  if (!mapping) {
+  if (!mapping || mapping.preferred_source !== "UBA") {
     return {
       success: false,
       region: "DE",
       category: input.category,
       reason: "NO_GERMANY_MAPPING_FOUND",
-      message: `No Germany mapping found for category: ${input.category}`,
+      message: `No UBA mapping found for category: ${input.category}`,
     };
   }
 

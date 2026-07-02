@@ -10,7 +10,8 @@ import { normalizeInvoiceItems } from "../services/InvoiceItemNormalize.service.
 import { processInvoiceEmissions } from "../services/InvoiceEmission.service.js";
 import { parseFallbackLineItems } from "../services/FallbackLineItemParser.service.js";
 import { parseRailwayTicketItem } from "../services/RailwayTicketParser.service.js";
-import { parseFlightTicketItem } from "../services/FlightTicketParser.service.js";
+import { parseFlightTicketItem, calculateRouteDistance } from "../services/FlightTicketParser.service.js";
+import { smartRailLookup } from "../services/IndiaRailwayRouteDB.js";
 
 const router = express.Router();
 
@@ -217,12 +218,56 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       (lowerText.includes("e-ticket") && lowerText.includes("airport"));
 
     if (isFlightTicket) {
-      const flightItem = await parseFlightTicketItem(fullText, file.originalname);
-      if (flightItem) {
-        normalizedItems = [flightItem as any];
+      // ── Priority 1: Mistral extracted flight fields ─────────────────────
+      const mistralOriginAirport = (invoice as any).origin_airport as string | null;
+      const mistralDestAirport = (invoice as any).destination_airport as string | null;
+      const mistralPassengers = typeof (invoice as any).passenger_count === "number"
+        ? (invoice as any).passenger_count
+        : 1;
+
+      if (mistralOriginAirport && mistralDestAirport) {
+        const routeResult = await calculateRouteDistance({
+          fromAirport: mistralOriginAirport,
+          toAirport: mistralDestAirport
+        });
+
+        if (routeResult.success && routeResult.distanceKm > 0) {
+          const totalDistanceKm = routeResult.distanceKm;
+          const totalPassengerKm = totalDistanceKm * mistralPassengers;
+
+          normalizedItems = [{
+            item_name: `Flight travel ${mistralOriginAirport}-${mistralDestAirport} ${totalDistanceKm} km`,
+            description: `Flight passenger travel ${totalDistanceKm} km × ${mistralPassengers} passenger(s)`,
+            category: "flight",
+            value: totalPassengerKm,
+            unit: "passenger-km",
+            metadata: {
+              routes: [{
+                fromAirport: mistralOriginAirport,
+                toAirport: mistralDestAirport,
+                distanceKm: routeResult.distanceKm,
+                fromCity: routeResult.from.city,
+                toCity: routeResult.to.city,
+              }],
+              passengerCount: mistralPassengers,
+              totalDistanceKm,
+              calculation_method: "mistral_extracted_airports_haversine",
+            },
+          } as any];
+        } else {
+          // Fallback to text parser if coordinate lookup fails
+          const flightItem = await parseFlightTicketItem(fullText, file.originalname);
+          if (flightItem) normalizedItems = [flightItem as any];
+        }
+      } else {
+        // Priority 2: Text-based parser
+        const flightItem = await parseFlightTicketItem(fullText, file.originalname);
+        if (flightItem) {
+          normalizedItems = [flightItem as any];
+        }
       }
     } else {
-      // ── Railway parser runs if NOT a flight ticket ────────────────────────
+      // ── Railway parser: priority-based distance resolution ────────────────
       const isRailwayTicket =
         lowerText.includes("indian railways") ||
         lowerText.includes("irctc") ||
@@ -231,9 +276,71 @@ router.post("/upload", upload.single("file"), async (req, res) => {
         lowerText.includes("passenger details");
 
       if (isRailwayTicket) {
-        const railwayItem = parseRailwayTicketItem(fullText);
-        if (railwayItem) {
-          normalizedItems = [railwayItem as any];
+        const RAILWAY_EF = 0.007976;
+
+        // ── Priority 1: Mistral extracted distance directly ─────────────────
+        const mistralDistanceKm = typeof (invoice as any).distance_km === "number"
+          ? (invoice as any).distance_km
+          : null;
+        const mistralOrigin = (invoice as any).origin_station as string | null;
+        const mistralDest = (invoice as any).destination_station as string | null;
+        const mistralPassengers = typeof (invoice as any).passenger_count === "number"
+          ? (invoice as any).passenger_count
+          : 1;
+
+        if (mistralDistanceKm && mistralDistanceKm > 0) {
+          const passengerKm = mistralDistanceKm * mistralPassengers;
+          normalizedItems = [{
+            item_name: `Indian Railways travel ${mistralOrigin || ""} → ${mistralDest || ""} ${mistralDistanceKm} km`,
+            category: "railway",
+            value: passengerKm,
+            unit: "passenger-km",
+            metadata: { distance_km: mistralDistanceKm, passenger_count: mistralPassengers, distance_source: "mistral_extracted", origin: mistralOrigin, destination: mistralDest },
+          } as any];
+
+        // ── Priority 2: Mistral extracted station codes → DB lookup ─────────
+        } else if (mistralOrigin && mistralDest) {
+          const dbResult = smartRailLookup(mistralOrigin, mistralDest);
+          if (dbResult) {
+            const passengerKm = dbResult.distanceKm * mistralPassengers;
+            normalizedItems = [{
+              item_name: `Indian Railways travel ${mistralOrigin} → ${mistralDest} ${dbResult.distanceKm} km`,
+              category: "railway",
+              value: passengerKm,
+              unit: "passenger-km",
+              metadata: { distance_km: dbResult.distanceKm, passenger_count: mistralPassengers, distance_source: dbResult.source, origin: mistralOrigin, destination: mistralDest },
+            } as any];
+          } else {
+            // Station found but not in DB → send to railway parser for text scan
+            const railwayItem = parseRailwayTicketItem(fullText);
+            if (railwayItem) normalizedItems = [railwayItem as any];
+          }
+
+        // ── Priority 3: Text-based parser + filename route fallback ─────────
+        } else {
+          // Try filename route: "dli to mfp.pdf" or "NDLS-HWH.pdf"
+          const fnMatch = file.originalname?.match(/([A-Za-z]{2,5})\s*(?:to|[-_])\s*([A-Za-z]{2,5})/i);
+          let railwayItem = parseRailwayTicketItem(fullText);
+
+          if (!railwayItem || railwayItem.category === "railway_review") {
+            if (fnMatch) {
+              const fnFrom = fnMatch[1].toUpperCase();
+              const fnTo = fnMatch[2].toUpperCase();
+              const fnResult = smartRailLookup(fnFrom, fnTo);
+              if (fnResult) {
+                railwayItem = {
+                  name: `Indian Railways travel ${fnFrom} → ${fnTo} ${fnResult.distanceKm} km`,
+                  description: `Indian Railways passenger travel ${fnResult.distanceKm} km (from filename)`,
+                  quantity: fnResult.distanceKm,
+                  unit: "passenger-km",
+                  category: "railway",
+                  metadata: { distance_km: fnResult.distanceKm, passenger_count: 1, distance_source: "filename_route", origin: fnFrom, destination: fnTo },
+                };
+              }
+            }
+          }
+
+          if (railwayItem) normalizedItems = [railwayItem as any];
         }
       }
     }

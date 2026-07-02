@@ -69,7 +69,18 @@ function normalizeMistralInvoice(parsed: any, rawResponse: any): NormalizedInvoi
     tax: safeNumber(parsed.tax),
     total: safeNumber(parsed.total),
     lineItems: normalizedItems,
-    rawResponse
+    rawResponse,
+    origin_station: parsed.origin_station || null,
+    destination_station: parsed.destination_station || null,
+    distance_km: safeNumber(parsed.distance_km),
+    passenger_count: safeNumber(parsed.passenger_count),
+    train_number: parsed.train_number || null,
+    train_name: parsed.train_name || null,
+    origin_airport: parsed.origin_airport || null,
+    destination_airport: parsed.destination_airport || null,
+    airline: parsed.airline || null,
+    flight_number: parsed.flight_number || null,
+    travel_class: parsed.travel_class || null,
   };
 }
 
@@ -97,6 +108,17 @@ Return ONLY valid JSON with this structure:
   "subtotal": number | null,
   "tax": number | null,
   "total": number | null,
+  "origin_station": string | null,
+  "destination_station": string | null,
+  "train_number": string | null,
+  "train_name": string | null,
+  "distance_km": number | null,
+  "passenger_count": number | null,
+  "origin_airport": string | null,
+  "destination_airport": string | null,
+  "airline": string | null,
+  "flight_number": string | null,
+  "travel_class": string | null,
   "lineItems": [
     {
       "name": string,
@@ -112,13 +134,28 @@ Return ONLY valid JSON with this structure:
 
 Rules:
 - Return JSON only.
-- Do not guess emission factors.
-- Do not calculate CO2.
+- Do not guess emission factors or calculate CO2.
 - Keep original invoice item names.
 - Extract quantity and unit separately.
 - If quantity and unit appear together like "18500 kWh", split them.
 - If invoice is from Malaysia and currency is missing, use MYR.
 - If data is not visible, return null.
+- FOR RAILWAY TICKETS (IRCTC, Indian Railways, PNR):
+  * "origin_station": departure city or station code (e.g. "DLI", "Delhi", "NDLS")
+  * "destination_station": arrival city or station code (e.g. "MFP", "Mumbai")
+  * "train_number": train number if visible (e.g. "12554")
+  * "train_name": train name if visible (e.g. "Vaishali Express")
+  * "distance_km": numeric distance in km if explicitly printed on ticket
+  * "passenger_count": number of passengers, default 1
+  Even if distance_km is not on ticket, ALWAYS try to extract origin_station and destination_station.
+- FOR FLIGHT TICKETS (e.g. IndiGo, Air India, PNR, MakeMyTrip):
+  * "origin_airport": 3-letter IATA code (e.g. "PAT", "DEL", "BOM")
+  * "destination_airport": 3-letter IATA code (e.g. "BOM", "BLR")
+  * "airline": airline name (e.g. "IndiGo")
+  * "flight_number": (e.g. "6E2167")
+  * "passengers": number of passengers (default 1)
+  * "travel_class": (e.g. "Economy")
+  IGNORE line items like taxes, convenience fee, discount, baggage, seat, meal, insurance. ONLY extract the actual flight travel item.
 `;
 
   const response = await client.chat.complete({

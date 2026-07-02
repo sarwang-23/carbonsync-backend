@@ -180,6 +180,12 @@ function convertForClimatiq(input: {
         parameterName: "weight_distance",
         parameterUnit: "tonne-km",
         converted: false,
+        parameters: {
+          weight: 1,
+          weight_unit: "t",
+          distance: input.value,
+          distance_unit: "km"
+        }
       };
     }
   }
@@ -265,16 +271,41 @@ export async function calculateIndiaClimatiqFallback(
   }
 
   let activityId = mapping.activity_id;
+  let targetRegion: string | undefined = "IN";
 
   if (!activityId) {
     const searchQuery = `${input.category} ${input.itemName} India`;
 
-    const searchedFactor = await searchClimatiqFactor({
+    let searchedFactor = await searchClimatiqFactor({
       query: searchQuery,
       region: "IN",
       dataVersion: mapping.data_version || "^6",
       resultsPerPage: 10,
     });
+
+    if (!searchedFactor?.activity_id) {
+      // Fallback 1: GLOBAL region
+      const globalSearchQuery = `${input.category} ${input.itemName}`;
+      searchedFactor = await searchClimatiqFactor({
+        query: globalSearchQuery,
+        region: "GLO",
+        dataVersion: mapping.data_version || "^6",
+        resultsPerPage: 10,
+      });
+      if (searchedFactor?.activity_id) targetRegion = "GLO";
+    }
+
+    if (!searchedFactor?.activity_id) {
+      // Fallback 2: RoW region (Rest of World)
+      const rowSearchQuery = `${input.category} ${input.itemName}`;
+      searchedFactor = await searchClimatiqFactor({
+        query: rowSearchQuery,
+        region: "RoW",
+        dataVersion: mapping.data_version || "^6",
+        resultsPerPage: 10,
+      });
+      if (searchedFactor?.activity_id) targetRegion = "RoW";
+    }
 
     if (!searchedFactor?.activity_id) {
       return {
@@ -285,21 +316,45 @@ export async function calculateIndiaClimatiqFallback(
         country_name: "India",
         category: input.category,
         reason: "CLIMATIQ_FACTOR_NOT_FOUND",
-        message: `No Climatiq factor found for India category: ${input.category}`,
+        message: `No Climatiq factor found for India, GLO, or RoW for category: ${input.category}`,
       };
     }
 
     activityId = searchedFactor.activity_id;
   }
 
-  const climatiqResult = await estimateWithClimatiqDirect({
-    activityId,
-    parameterName: converted.parameterName,
-    value: converted.value,
-    parameterUnit: converted.parameterUnit,
-    dataVersion: mapping.data_version || "^6",
-    region: "IN",
-  });
+  let climatiqResult: any = null;
+
+  try {
+    climatiqResult = await estimateWithClimatiqDirect({
+      activityId,
+      parameterName: converted.parameterName,
+      value: converted.value,
+      parameterUnit: converted.parameterUnit,
+      dataVersion: mapping.data_version || "^6",
+      region: targetRegion,
+      parameters: (converted as any).parameters
+    });
+  } catch (error: any) {
+    // If specific region factor fails (e.g. mapping had IN but factor is global), try without region constraint
+    if (error.message && error.message.includes("No emission factors could be found")) {
+      try {
+        climatiqResult = await estimateWithClimatiqDirect({
+          activityId,
+          parameterName: converted.parameterName,
+          value: converted.value,
+          parameterUnit: converted.parameterUnit,
+          dataVersion: mapping.data_version || "^6",
+          region: undefined, // GLOBAL fallback
+          parameters: (converted as any).parameters
+        });
+      } catch (fallbackError: any) {
+        throw fallbackError;
+      }
+    } else {
+      throw error;
+    }
+  }
 
   return {
     success: true,

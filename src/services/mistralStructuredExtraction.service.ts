@@ -90,6 +90,15 @@ Rules:
 - Currency should be INR for Indian invoices, MYR for Malaysia invoices.
 - Country should be IN or MY where possible.
 - Category should be one of: electricity_bill, purchased_goods, fuel, water, waste, transport_logistics, hotel, unknown.
+- FOR RAILWAY TICKETS (IRCTC, Indian Railways, PNR, train number): At the TOP LEVEL also extract:
+  * "origin_station": departure city or station code (e.g. "DLI", "Delhi", "New Delhi")
+  * "destination_station": arrival city or station code (e.g. "MFP", "NDLS", "Mumbai")
+  * "train_number": train number if visible (e.g. "12554"), else null
+  * "train_name": train name if visible (e.g. "Vaishali Express"), else null
+  * "distance_km": numeric distance in km if printed on ticket, else null
+  * "passenger_count": number of passengers (default 1)
+  ALWAYS extract origin_station and destination_station even if distance_km is null.
+  For the line item: category = "transport_logistics", unit = "passenger-km" if distance_km known, else unit = "ticket", quantity = distance_km * passenger_count (or 1 if unknown).
 
 JSON schema:
 {
@@ -97,6 +106,12 @@ JSON schema:
   "country": "IN | MY | UNKNOWN",
   "vendor": "string | null",
   "currency": "INR | MYR | USD | null",
+  "origin_station": "string | null",
+  "destination_station": "string | null",
+  "train_number": "string | null",
+  "train_name": "string | null",
+  "distance_km": "number | null",
+  "passenger_count": "number | null",
   "line_items": [
     {
       "item_name": "string",
@@ -157,6 +172,13 @@ ${String(rawText || "").slice(0, 12000)}
         country: parsed?.country || "UNKNOWN",
         vendor: parsed?.vendor || null,
         currency: parsed?.currency || null,
+        // Railway fields
+        origin_station: parsed?.origin_station || null,
+        destination_station: parsed?.destination_station || null,
+        train_number: parsed?.train_number || null,
+        train_name: parsed?.train_name || null,
+        distance_km: parsed?.distance_km != null ? Number(parsed.distance_km) : null,
+        passenger_count: parsed?.passenger_count != null ? Number(parsed.passenger_count) : null,
         line_items: lineItems,
         confidence: lineItems.length > 0 ? 0.78 : 0.35,
         warnings: lineItems.length > 0 ? [] : ["Mistral LLM returned no line items."],

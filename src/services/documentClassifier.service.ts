@@ -63,7 +63,15 @@ function safeLower(value: any): string {
 }
 
 function findSignals(text: string, keywords: string[]) {
-    return keywords.filter((keyword) => text.includes(keyword.toLowerCase()));
+    return keywords.filter((keyword) => {
+        const lowerKeyword = keyword.toLowerCase();
+        // Use non-word boundary matching for all alphanumeric-like keywords to avoid substring false positives
+        if (/^[a-z0-9\säöüß]+$/i.test(lowerKeyword)) {
+            return new RegExp(`(^|\\W)${lowerKeyword}(?=\\W|$)`, 'i').test(text);
+        } else {
+            return text.toLowerCase().includes(lowerKeyword);
+        }
+    });
 }
 
 function scoreFromSignals(signals: string[], weight = 1) {
@@ -142,6 +150,8 @@ const ELECTRICITY_SIGNALS = [
     "strom",
     "stromrechnung",
     "netzstrom",
+    "elektrizität",
+    "electricity consumption",
 ];
 
 const TRAIN_SIGNALS = [
@@ -180,7 +190,11 @@ const FLIGHT_SIGNALS = [
 
 const FUEL_SIGNALS = [
     "diesel",
+    "dieselkraftstoff",
     "petrol",
+    "benzin",
+    "super",
+    "super e10",
     "gasoline",
     "fuel",
     "cng",
@@ -192,9 +206,14 @@ const FUEL_SIGNALS = [
     "gas bill",
     "erdgas",
     "gasrechnung",
+    "gasverbrauch",
+    "gas consumption",
+    "heating gas",
+    "netzgas",
     "heating oil",
     "heizöl",
     "fuel oil",
+    "gazole",
 ];
 
 const DISTRICT_HEATING_SIGNALS = [
@@ -202,7 +221,12 @@ const DISTRICT_HEATING_SIGNALS = [
     "heat",
     "heating",
     "fernwärme",
+    "fernwaerme",
     "wärme",
+    "heat supply",
+    "wärmenetz",
+    "heat network",
+    "heating energy"
 ];
 
 const LOGISTICS_SIGNALS = [
@@ -274,8 +298,23 @@ const HOTEL_SIGNALS = [
 const GERMANY_SIGNALS = [
     "deutschland",
     "germany",
+    "bundesrepublik",
+    "berlin",
+    "münchen",
+    "munich",
+    "hamburg",
+    "frankfurt",
+    "leipzig",
+    "stuttgart",
+    "köln",
+    "bonn",
+    "de",
+    "gmbh",
+    "stadtwerke",
+    "energie",
     "strom",
     "stromrechnung",
+    "netzstrom",
     "erdgas",
     "gasrechnung",
     "fernwärme",
@@ -331,6 +370,17 @@ const AU_SIGNALS = [
  * Region-specific fixed EF logic depends on this being stable.
  */
 export function detectCountry(text: string, fileName = "") {
+    const fnLower = String(fileName).trim().toLowerCase();
+
+    // 1. Explicit Filename Prefix Check (Highest Priority)
+    if (fnLower.startsWith("de_")) return { country: "DE" as SupportedCountry, confidence: 1.0, malaysiaScore: 0, indiaScore: 0, malaysiaSignals: [], indiaSignals: [], defaultRegion: "IN" };
+    if (fnLower.startsWith("fr_")) return { country: "FR" as SupportedCountry, confidence: 1.0, malaysiaScore: 0, indiaScore: 0, malaysiaSignals: [], indiaSignals: [], defaultRegion: "IN" };
+    if (fnLower.startsWith("my_")) return { country: "MY" as SupportedCountry, confidence: 1.0, malaysiaScore: 0, indiaScore: 0, malaysiaSignals: [], indiaSignals: [], defaultRegion: "IN" };
+    if (fnLower.startsWith("in_")) return { country: "IN" as SupportedCountry, confidence: 1.0, malaysiaScore: 0, indiaScore: 0, malaysiaSignals: [], indiaSignals: [], defaultRegion: "IN" };
+    if (fnLower.startsWith("us_")) return { country: "US" as SupportedCountry, confidence: 1.0, malaysiaScore: 0, indiaScore: 0, malaysiaSignals: [], indiaSignals: [], defaultRegion: "IN" };
+    if (fnLower.startsWith("gb_") || fnLower.startsWith("uk_")) return { country: "GB" as SupportedCountry, confidence: 1.0, malaysiaScore: 0, indiaScore: 0, malaysiaSignals: [], indiaSignals: [], defaultRegion: "IN" };
+    if (fnLower.startsWith("au_")) return { country: "AU" as SupportedCountry, confidence: 1.0, malaysiaScore: 0, indiaScore: 0, malaysiaSignals: [], indiaSignals: [], defaultRegion: "IN" };
+
     const combined = safeLower(`${text || ""} ${fileName || ""}`);
 
     const malaysiaSignals = findSignals(combined, MALAYSIA_SIGNALS);
@@ -356,13 +406,13 @@ export function detectCountry(text: string, fileName = "") {
     if (/\binr\s?\d/i.test(combined)) indiaScore += 3;
     if (/\brs\.?\s?\d/i.test(combined)) indiaScore += 2;
 
-    if (combined.includes("eur") || combined.includes("€")) {
+    if (/(^|\W)(eur|€)(?=\W|$)/i.test(combined)) {
         germanyScore += 1;
         frScore += 1;
     }
-    if (combined.includes("aud") || /\babn\b/.test(combined)) auScore += 3;
-    if (combined.includes("gbp") || combined.includes("£")) gbScore += 3;
-    if (combined.includes("usd") || (combined.includes("$") && !combined.includes("aud"))) usScore += 2;
+    if (/(^|\W)aud(?=\W|$)/i.test(combined) || /\babn\b/.test(combined)) auScore += 3;
+    if (/(^|\W)(gbp|£)(?=\W|$)/i.test(combined)) gbScore += 3;
+    if (/(^|\W)usd(?=\W|$)/i.test(combined) || (combined.includes("$") && !/(^|\W)aud(?=\W|$)/i.test(combined))) usScore += 2;
 
     const scores = {
         MY: malaysiaScore,

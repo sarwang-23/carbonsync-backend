@@ -131,12 +131,24 @@ IMPORTANT RULES:
 - Do NOT invent or guess values not visible in the text.
 - If quantity is not visible, return null for quantity.
 - If unit is not visible, return null for unit.
-- For electricity bills: item_name = "Electricity", unit = "kWh", quantity = total kWh usage.
-- For fuel invoices: item_name = "Diesel" or "Petrol", unit = "l" or "litre".
-- For water bills: item_name = "Water", unit = "m3".
+- Preserve the exact item name from the invoice (e.g., "Erdgas", "Natural Gas", "Benzin"). Do NOT blindly rename everything.
+- For electricity bills: category = "electricity_bill", unit = "kWh".
+- For natural gas or heating gas: category = "fuel", unit = "kWh" or "m3".
+- For liquid fuels (diesel, petrol, lpg): category = "fuel", unit = "l" or "litre".
+- For water bills: category = "water", unit = "m3".
 - For materials (timber, steel, cement, etc): use item_name = the material name.
 - category must be one of: electricity_bill, fuel, water, purchased_goods, transport_logistics, flight, rail, hotel, waste, unknown.
-- country: 2-letter ISO code (IN, MY, GB, US, etc.) or null.
+- country: Extract the strict 2-letter ISO code (e.g., DE, FR, GB, AU, IN, MY, US) based on vendor address, VAT ID, or explicit region codes. DO NOT default to US.
+- currency: Extract the exact currency (e.g., EUR, GBP, AUD, MYR, INR, USD). DO NOT default to USD.
+- RAILWAY TICKETS: If you detect a train/railway ticket (IRCTC, Indian Railways, PNR, train number), extract these additional fields at the TOP LEVEL of the JSON:
+  * origin_station: departure station name or code (e.g. "NDLS", "New Delhi", "Delhi")
+  * destination_station: arrival station name or code (e.g. "MMCT", "Mumbai Central", "Mumbai")
+  * train_number: train number if visible (e.g. "12951"), else null
+  * train_name: train name if visible (e.g. "Rajdhani Express"), else null
+  * distance_km: distance in km if explicitly printed on the ticket, else null
+  * passenger_count: number of passengers if visible, else 1
+  Even if distance_km is null, ALWAYS extract origin_station and destination_station.
+  For the matching line_item, set category = "rail", unit = "passenger-km" if distance known, else unit = "ticket".
 - Return ONLY a valid JSON object. No markdown, no explanation.
 
 JSON schema:
@@ -145,6 +157,12 @@ JSON schema:
   "country": string | null,
   "currency": string | null,
   "invoice_type": string | null,
+  "origin_station": string | null,
+  "destination_station": string | null,
+  "train_number": string | null,
+  "train_name": string | null,
+  "distance_km": number | null,
+  "passenger_count": number | null,
   "line_items": [
     {
       "item_name": string,

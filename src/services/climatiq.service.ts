@@ -318,6 +318,7 @@ type ClimatiqEstimateDirectInput = {
   parameterUnit?: string;
   dataVersion?: string;
   region?: string;
+  parameters?: any;
 };
 
 type ClimatiqEstimateDirectResult = {
@@ -343,16 +344,20 @@ export async function estimateWithClimatiqDirect(
     throw new Error(`Invalid Climatiq value: ${input.value}`);
   }
 
-  const body = {
+  const body: any = {
     emission_factor: {
       activity_id: input.activityId,
       data_version: input.dataVersion || "^6",
       region: input.region,
     },
-    parameters: {
+    parameters: input.parameters ? input.parameters : {
       [input.parameterName]: input.value,
     },
   };
+
+  if (!input.parameters && input.parameterUnit) {
+    body.parameters[`${input.parameterName}_unit`] = input.parameterUnit;
+  }
 
   const response = await fetch(`${CLIMATIQ_BASE_URL}/estimate`, {
     method: "POST",

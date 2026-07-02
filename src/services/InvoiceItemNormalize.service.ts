@@ -89,8 +89,8 @@ function resolveCategory(
     return "natural_gas";
   }
 
-  // Rule 3: electricity-only unit → lock in electricity
-  if (ELECTRICITY_ONLY_UNITS.has(u)) {
+  // Rule 3: electricity-only unit → lock in electricity, UNLESS it is heating/gas which also uses kWh
+  if (ELECTRICITY_ONLY_UNITS.has(u) && detected !== "district_heating" && detected !== "natural_gas") {
     return "electricity";
   }
 

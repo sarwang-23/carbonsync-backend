@@ -3,6 +3,7 @@ import { calculateIndiaEmission } from "./IndiaEmission.service.js";
 import { calculateWithClimatiqFallback } from "./ClimatiqFallback.service.js";
 import { normalizeUnit } from "./UnitConversion.service.js";
 import { pool } from "../db.js";
+import { smartRailLookup } from "./IndiaRailwayRouteDB.js";
 
 type InvoiceEmissionItem = {
   item_name: string;
@@ -514,7 +515,78 @@ export async function processInvoiceEmissions(
         unit,
       });
 
-      if (category === "railway_review") {
+      // ── Railway: try deep rescue before giving up ────────────────────────
+      if (category === "railway_review" || (category === "railway" && (unit === "ticket" || !value || value === 1))) {
+        // Attempt 1: scan item_name / invoice_text for cities or km
+        const searchText = `${itemName} ${item.description || ""} ${input.invoice_text || ""}`;
+
+        // Inline distance extractor from item text
+        const kmMatch = searchText.match(/(\d{3,4})\s*(?:km|kms|passenger[- ]?km|pkm)/i);
+        if (kmMatch) {
+          const distKm = Number(kmMatch[1]);
+          const RAILWAY_EF = 0.007976;
+          const co2e = Number((distKm * RAILWAY_EF).toFixed(6));
+          calculatedCount++;
+          totalCo2e += co2e;
+          results.push({
+            line_index: i,
+            item_name: itemName,
+            category: "railway",
+            value: distKm,
+            unit: "passenger-km",
+            status: "calculated",
+            source_engine: "india_fixed_ef",
+            preferred_source: "India Fixed EF",
+            region: "IN",
+            country_name: "India",
+            factor_name: "India fixed railway emission factor",
+            factor_value: RAILWAY_EF,
+            factor_unit: "kg/passenger-km",
+            co2e,
+            co2e_unit: "kg",
+            distance_source: "text_extraction",
+          });
+          continue;
+        }
+
+        // Attempt 2: city-pair or station-code route DB lookup from item_name
+        // Look for station codes (e.g. NDLS-MMCT) or cities
+        const cityPattern = /\b([a-zA-Z]{2,15})\b\s*(?:to|[-_→])\s*\b([a-zA-Z]{2,15})\b/i;
+        const match = searchText.match(cityPattern);
+        if (match) {
+          const origin = match[1];
+          const destination = match[2];
+          const dbResult = smartRailLookup(origin, destination);
+          if (dbResult) {
+            const RAILWAY_EF = 0.007976;
+            const co2e = Number((dbResult.distanceKm * RAILWAY_EF).toFixed(6));
+            calculatedCount++;
+            totalCo2e += co2e;
+            results.push({
+              line_index: i,
+              item_name: itemName,
+              category: "railway",
+              value: dbResult.distanceKm,
+              unit: "passenger-km",
+              status: "calculated",
+              source_engine: "india_fixed_ef",
+              preferred_source: "India Fixed EF",
+              region: "IN",
+              country_name: "India",
+              factor_name: "India fixed railway emission factor",
+              factor_value: RAILWAY_EF,
+              factor_unit: "kg/passenger-km",
+              co2e,
+              co2e_unit: "kg",
+              distance_source: dbResult.source,
+              origin: origin.toUpperCase(),
+              destination: destination.toUpperCase(),
+            });
+            continue;
+          }
+        }
+
+        // No rescue possible
         reviewCount++;
         results.push({
           line_index: i,
@@ -524,7 +596,7 @@ export async function processInvoiceEmissions(
           unit,
           status: "review",
           reason: "RAILWAY_DISTANCE_NOT_FOUND",
-          message: "Railway ticket detected but distance could not be extracted",
+          message: "Railway ticket detected but distance could not be extracted. Please provide distance in km or passenger-km.",
         });
         continue;
       }
@@ -639,7 +711,7 @@ export async function processInvoiceEmissions(
         continue;
       }
 
-      // ── Germany ─── Climatiq UBA route ─────────────────────────────────────
+      // ── Germany ─── UBA first, then Climatiq fallback ──────────────────────
       if (input.region === "DE") {
         try {
           const germanyResult = await calculateGermanyEmission({
@@ -648,7 +720,47 @@ export async function processInvoiceEmissions(
             unit: item.unit,
           });
 
-          if (!germanyResult.success) {
+          if (germanyResult.success) {
+            // ✅ UBA mapping found → use it
+            calculatedCount++;
+            totalCo2e += germanyResult.co2e;
+            results.push({
+              item_name: item.item_name,
+              category: item.category,
+              value: item.value,
+              unit: item.unit,
+              status: "calculated",
+              source_engine: "climatiq",
+              preferred_source: "UBA",
+              region: "DE",
+              country_name: "Germany",
+              activity_id: germanyResult.activity_id,
+              parameter_name: germanyResult.parameter_name,
+              parameter_unit: germanyResult.parameter_unit,
+              co2e: germanyResult.co2e,
+              co2e_unit: germanyResult.co2e_unit,
+              factor_name: germanyResult.factor_name,
+              factor_source: germanyResult.factor_source,
+              factor_region: germanyResult.factor_region,
+              converted: germanyResult.converted,
+            });
+            continue;
+          }
+
+          // ⚠️ No UBA mapping → try Climatiq fallback
+          console.log(`[DE] No UBA mapping for category "${item.category}". Trying Climatiq fallback...`);
+
+          const fallbackResult = await calculateWithClimatiqFallback({
+            region: "DE",
+            countryName: "Germany",
+            category: item.category,
+            itemName: item.item_name,
+            value: Number(item.value),
+            unit: item.unit,
+          });
+
+          if (!fallbackResult.success) {
+            // Both UBA and Climatiq failed → review
             reviewCount++;
             results.push({
               item_name: item.item_name,
@@ -656,16 +768,17 @@ export async function processInvoiceEmissions(
               value: item.value,
               unit: item.unit,
               status: "review",
-              source_engine: "climatiq",
+              source_engine: "climatiq_fallback",
               region: "DE",
-              reason: (germanyResult as any).reason || "NO_GERMANY_MAPPING_FOUND",
-              message: (germanyResult as any).message || "This item needs manual review or mapping update",
+              reason: (fallbackResult as any).reason || "NO_CLIMATIQ_FALLBACK_MAPPING",
+              message: (fallbackResult as any).message || "No UBA or Climatiq factor found for this item.",
             });
             continue;
           }
 
+          // ✅ Climatiq fallback succeeded
           calculatedCount++;
-          totalCo2e += germanyResult.co2e;
+          totalCo2e += fallbackResult.co2e;
           results.push({
             item_name: item.item_name,
             category: item.category,
@@ -673,18 +786,18 @@ export async function processInvoiceEmissions(
             unit: item.unit,
             status: "calculated",
             source_engine: "climatiq",
-            preferred_source: "UBA",
+            preferred_source: "Climatiq",
             region: "DE",
             country_name: "Germany",
-            activity_id: germanyResult.activity_id,
-            parameter_name: germanyResult.parameter_name,
-            parameter_unit: germanyResult.parameter_unit,
-            co2e: germanyResult.co2e,
-            co2e_unit: germanyResult.co2e_unit,
-            factor_name: germanyResult.factor_name,
-            factor_source: germanyResult.factor_source,
-            factor_region: germanyResult.factor_region,
-            converted: germanyResult.converted,
+            activity_id: fallbackResult.activity_id,
+            parameter_name: fallbackResult.parameter_name,
+            parameter_unit: fallbackResult.parameter_unit,
+            converted: fallbackResult.converted,
+            co2e: fallbackResult.co2e,
+            co2e_unit: fallbackResult.co2e_unit,
+            factor_name: fallbackResult.factor_name,
+            factor_source: fallbackResult.factor_source,
+            factor_region: fallbackResult.factor_region,
           });
         } catch (err: any) {
           reviewCount++;

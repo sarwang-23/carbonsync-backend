@@ -1,6 +1,20 @@
 export function detectCategoryFromText(text: string): string {
   const lower = text.toLowerCase();
 
+  // ── District Heating ────────────────────────────────────────────────────────
+  if (
+    lower.includes("fernwärme") ||
+    lower.includes("fernwaerme") ||
+    lower.includes("district heating") ||
+    lower.includes("heat supply") ||
+    lower.includes("wärmenetz") ||
+    lower.includes("heating network") ||
+    lower.includes("heating energy") ||
+    lower.includes("district cooling")
+  ) {
+    return "district_heating";
+  }
+
   // ── Railway (highest priority — very specific signals) ─────────────────────
   if (
     lower.includes("indian railways") ||

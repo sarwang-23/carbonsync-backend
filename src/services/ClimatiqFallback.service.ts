@@ -60,13 +60,13 @@ function convertForClimatiq(input: {
       };
     }
 
-    if (unit === "tonne" || unit === "t") {
+    if (unit === "t") {
+      // Keep as tonnes — Climatiq accepts 't' natively for fuel weight factors
       return {
-        value: input.value * 1000,
+        value: input.value,
         parameterName: "weight",
-        parameterUnit: "kg",
-        converted: true,
-        conversion_note: "Converted tonne to kg",
+        parameterUnit: "t",
+        converted: false,
       };
     }
     if (unit === "shortton" || unit === "short_ton") {
@@ -81,6 +81,7 @@ function convertForClimatiq(input: {
   }
 
   if (["distance", "passengers", "passenger_distance", "weight_distance"].includes(input.expectedParameterName || "")) {
+    // Plain km — used directly as distance
     if (unit === "km") {
       const isPassengerActivity = input.category === "flight" || input.category === "railway";
       return {
@@ -90,39 +91,38 @@ function convertForClimatiq(input: {
         ...(isPassengerActivity ? {
           extraParameterName: "passengers",
           extraParameterValue: 1,
-          extraParameterUnit: null // passengers don't need a unit
+          extraParameterUnit: null,
         } : {}),
         converted: false,
       };
     }
 
-    if (unit === "tonnekm" || unit === "tkm") {
-      if (input.expectedParameterName === "weight_distance") {
-        return {
-          value: input.value,
-          parameterName: "weight",
-          parameterUnit: "t", // Climatiq expects 't' for metric tonne
-          extraParameterName: "distance",
-          extraParameterValue: 1,
-          extraParameterUnit: "km",
-          converted: false,
-        };
-      }
-
-      return {
-        value: input.value,
-        parameterName: input.expectedParameterName as string,
-        parameterUnit: input.expectedParameterUnit || "tonne_km",
-        converted: false,
-      };
-    }
-
+    // passenger-km (e.g. "passenger-km", "pkm") → extract as distance + passengers=1
     if (unit === "passengerkm" || unit === "pkm") {
       return {
         value: input.value,
-        parameterName: input.expectedParameterName as string,
-        parameterUnit: input.expectedParameterUnit || "passenger_km",
-        converted: false,
+        parameterName: "distance",
+        parameterUnit: "km",
+        extraParameterName: "passengers",
+        extraParameterValue: 1,
+        extraParameterUnit: null,
+        converted: true,
+        conversion_note: "Treated passenger-km as distance km with 1 passenger",
+      };
+    }
+
+    // tonne-km for freight → send weight=1t + distance=value km
+    // Climatiq freight_vehicle expects WeightOverDistance: weight(t) × distance(km)
+    if (unit === "tonnekm" || unit === "tkm") {
+      return {
+        value: 1,                       // weight = 1 tonne
+        parameterName: "weight",
+        parameterUnit: "t",
+        extraParameterName: "distance",
+        extraParameterValue: input.value, // distance = tonne-km value (because weight=1t)
+        extraParameterUnit: "km",
+        converted: true,
+        conversion_note: `Converted ${input.value} tonne-km to weight=1t + distance=${input.value}km`,
       };
     }
   }
@@ -311,8 +311,10 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
   console.log(`Unit:\n${input.unit}`);
   console.log(`Activity sent:\n${activityId}`);
 
-  // Some categories don't have US-specific Climatiq factors — use global (omit region)
-  const GLOBAL_ONLY_CATEGORIES = new Set(['freight', 'railway', 'flight', 'coal']);
+  // These categories have no region-specific Climatiq factors — use global (omit region)
+  // petrol, lpg: Climatiq only has global factors for these fuels
+  // freight, railway, flight, coal: transport/solid fuel factors are global
+  const GLOBAL_ONLY_CATEGORIES = new Set(['freight', 'railway', 'flight', 'coal', 'petrol', 'lpg']);
   const climatiqRegion = GLOBAL_ONLY_CATEGORIES.has(input.category) ? undefined : input.region;
 
   try {

@@ -39,7 +39,7 @@ export async function calculateIndiaFixedEmission(input: IndiaFixedInput) {
     const factor = 0.18;
     const u = input.unit.toLowerCase();
 
-    if (u !== "km" && u !== "kms") {
+    if (u !== "km" && u !== "kms" && u !== "passenger-km" && u !== "passenger km" && u !== "pkm") {
       return {
         success: false,
         status: "review",
@@ -48,8 +48,8 @@ export async function calculateIndiaFixedEmission(input: IndiaFixedInput) {
         category: "flight",
         source_engine: "india_fixed_ef",
         reason: "UNIT_MISMATCH",
-        message: `Flight fixed EF expects km, received ${input.unit}`,
-        expected_factor_unit: "kg/km",
+        message: `Flight fixed EF expects km or passenger-km, received ${input.unit}`,
+        expected_factor_unit: "kg/passenger-km",
       };
     }
 
@@ -63,12 +63,12 @@ export async function calculateIndiaFixedEmission(input: IndiaFixedInput) {
       category: "flight",
       factor_name: "India fixed flight emission factor",
       factor_value: factor,
-      factor_unit: "kg/km",
+      factor_unit: "kg/passenger-km",
       source_dataset: "CarbonSync India fixed factors",
       year: 2025,
       converted: {
         value: Number(input.value),
-        unit: "km",
+        unit: "passenger-km",
         converted: false,
       },
       co2e: Number((Number(input.value) * factor).toFixed(6)),

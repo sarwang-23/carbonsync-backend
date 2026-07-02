@@ -16,6 +16,9 @@ import {
     calculateGermanyEmission,
 } from "./GermanyEmission.service.js";
 import {
+    calculateWithClimatiqFallback,
+} from "./ClimatiqFallback.service.js";
+import {
     searchClimatiqEmissionFactors,
     estimateWithClimatiq,
     selectLatestEmberElectricityFactor,
@@ -43,6 +46,7 @@ import { convertQuantity } from "./unit.service.js";
 
 type DetectedCategory =
     | "electricity_bill"
+    | "district_heating"
     | "fuel"
     | "transport_logistics"
     | "purchased_goods"
@@ -853,63 +857,115 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
     if (region === "DE") {
         const value = Number(normalizedInputItem.quantity || item.quantity || 0);
         const unit = String(normalizedInputItem.unit !== "unknown" ? normalizedInputItem.unit : item.unit || "");
+
+        const nameLower = originalItemName.toLowerCase();
+        let mappedCategory: string = category;
         
-        if (category === "fuel" && unit.toLowerCase().includes("lit")) {
-            return {
-                success: false,
-                needs_review: true,
-                error_type: "UNIT_CONVERSION_REQUIRED",
-                message: "Germany diesel mapping expects kWh. Invoice has litres.",
-                item_name: originalItemName,
-                country: region,
-                category,
-            };
+        if (nameLower.includes("fernwärme") || nameLower.includes("fernwaerme") || nameLower.includes("district heating") || nameLower.includes("heat supply") || nameLower.includes("wärmenetz") || nameLower.includes("heating energy") || category === "district_heating") {
+            mappedCategory = "district_heating";
+        } else if (category === "electricity_bill" || nameLower.includes("strom") || nameLower.includes("netzstrom") || nameLower.includes("elektrizität") || nameLower.includes("electricity")) {
+            mappedCategory = "electricity";
+        } else if (category === "fuel" && (nameLower.includes("erdgas") || nameLower.includes("natural gas") || nameLower.includes("gasrechnung") || nameLower.includes("netzgas") || nameLower.includes("gasverbrauch") || nameLower.includes("gas consumption") || nameLower.includes("heating gas") || nameLower.includes("gas"))) {
+            mappedCategory = "natural_gas";
+        } else if (category === "fuel" && (nameLower.includes("petrol") || nameLower.includes("benzin") || nameLower.includes("super") || nameLower.includes("gasoline"))) {
+            mappedCategory = "petrol";
+        } else if (category === "fuel" && (nameLower.includes("lpg") || nameLower.includes("autogas"))) {
+            mappedCategory = "lpg";
+        } else if (category === "fuel" && (nameLower.includes("coal") || nameLower.includes("kohle"))) {
+            mappedCategory = "coal";
+        } else if (category === "fuel" && (nameLower.includes("diesel") || nameLower.includes("dieselkraftstoff") || nameLower.includes("heizöl") || nameLower.includes("gazole"))) {
+            mappedCategory = "diesel";
+        } else if (category === "transport_logistics" && (nameLower.includes("flight") || nameLower.includes("flug"))) {
+            mappedCategory = "flight";
+        } else if (category === "transport_logistics" && (nameLower.includes("rail") || nameLower.includes("bahn") || nameLower.includes("train"))) {
+            mappedCategory = "railway";
+        } else if (category === "transport_logistics") {
+            mappedCategory = "freight";
         }
 
-        const mappedCategory = category === "electricity_bill" ? "electricity" : category === "fuel" && originalItemName.toLowerCase().includes("gas") ? "natural_gas" : category === "fuel" ? "diesel" : category;
-
+        // Step 1: Try UBA mapping via GermanyEmission service
         const germanyResult = await calculateGermanyEmission({
             category: mappedCategory,
             value,
             unit,
         });
 
-        if (!germanyResult.success) {
-             return {
-                success: false,
-                needs_review: true,
-                error_type: "GERMANY_EMISSION_FAILED",
-                message: germanyResult.message || "Germany calculation failed",
-                item_name: originalItemName,
-                country: region,
+        if (germanyResult.success) {
+            return {
+                success: true,
+                source_engine: "climatiq",
+                preferred_source: "UBA",
+                region: "DE",
+                country_name: "Germany",
                 category,
+                value,
+                unit,
+                co2e: germanyResult.co2e,
+                co2e_unit: germanyResult.co2e_unit,
+                activity_id: germanyResult.activity_id,
+                factor_name: germanyResult.factor_name,
+                factor_source: germanyResult.factor_source,
+                result: {
+                    co2e: germanyResult.co2e,
+                    total_tco2e: germanyResult.co2e / 1000,
+                    factor_name: germanyResult.factor_name,
+                    activity_id: germanyResult.activity_id,
+                    source: germanyResult.factor_source,
+                    factor_year: 2024,
+                    factor_region: "DE",
+                    category: mappedCategory
+                }
             };
         }
 
-        return {
-            success: true,
-            source_engine: "climatiq",
-            preferred_source: "UBA",
+        // Step 2: UBA not found → try Climatiq fallback (petrol, lpg, coal, freight, railway, flight)
+        console.log(`[DE dynamic] No UBA mapping for "${mappedCategory}". Trying Climatiq fallback...`);
+        const fallbackResult = await calculateWithClimatiqFallback({
             region: "DE",
-            country_name: "Germany",
-            category,
+            countryName: "Germany",
+            category: mappedCategory,
+            itemName: originalItemName,
             value,
             unit,
-            co2e: germanyResult.co2e,
-            co2e_unit: germanyResult.co2e_unit,
-            activity_id: germanyResult.activity_id,
-            factor_name: germanyResult.factor_name,
-            factor_source: germanyResult.factor_source,
-            result: {
-                co2e: germanyResult.co2e,
-                total_tco2e: germanyResult.co2e / 1000,
-                factor_name: germanyResult.factor_name,
-                activity_id: germanyResult.activity_id,
-                source: germanyResult.factor_source,
-                factor_year: 2024,
-                factor_region: "DE",
-                category: mappedCategory
-            }
+        });
+
+        if (fallbackResult.success) {
+            return {
+                success: true,
+                source_engine: "climatiq",
+                preferred_source: "Climatiq",
+                region: "DE",
+                country_name: "Germany",
+                category,
+                value,
+                unit,
+                co2e: fallbackResult.co2e,
+                co2e_unit: fallbackResult.co2e_unit,
+                activity_id: fallbackResult.activity_id,
+                factor_name: fallbackResult.factor_name,
+                factor_source: fallbackResult.factor_source,
+                result: {
+                    co2e: fallbackResult.co2e,
+                    total_tco2e: fallbackResult.co2e / 1000,
+                    factor_name: fallbackResult.factor_name,
+                    activity_id: fallbackResult.activity_id,
+                    source: fallbackResult.factor_source,
+                    factor_year: 2024,
+                    factor_region: "DE",
+                    category: mappedCategory
+                }
+            };
+        }
+
+        // Step 3: Both failed → review
+        return {
+            success: false,
+            needs_review: true,
+            error_type: "GERMANY_EMISSION_FAILED",
+            message: (fallbackResult as any).message || germanyResult.message || "No UBA or Climatiq factor found for this Germany item.",
+            item_name: originalItemName,
+            country: region,
+            category,
         };
     }
 

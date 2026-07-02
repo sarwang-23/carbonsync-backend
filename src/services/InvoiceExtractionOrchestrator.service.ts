@@ -113,7 +113,18 @@ export async function extractInvoiceBestEffort(filePath: string) {
       rawResponse: {
         affinda: affindaResult.rawResponse,
         mistral: mistralResult.rawResponse
-      }
+      },
+      origin_station: affindaResult.origin_station || mistralResult.origin_station,
+      destination_station: affindaResult.destination_station || mistralResult.destination_station,
+      distance_km: affindaResult.distance_km ?? mistralResult.distance_km,
+      passenger_count: affindaResult.passenger_count ?? mistralResult.passenger_count,
+      train_number: affindaResult.train_number || mistralResult.train_number,
+      train_name: affindaResult.train_name || mistralResult.train_name,
+      origin_airport: affindaResult.origin_airport || mistralResult.origin_airport,
+      destination_airport: affindaResult.destination_airport || mistralResult.destination_airport,
+      airline: affindaResult.airline || mistralResult.airline,
+      flight_number: affindaResult.flight_number || mistralResult.flight_number,
+      travel_class: affindaResult.travel_class || mistralResult.travel_class,
     };
 
     const mergedScore = scoreExtractionQuality(merged);

@@ -12,8 +12,18 @@ function normalizeText(input: string) {
 
 export function detectCountryFromText(text: string, fileName = ""): DetectedCountry | null {
   const lower = normalizeText(`${fileName} ${text}`);
+  const fnLower = String(fileName).trim().toLowerCase();
 
-  // 1. Explicit region code - strongest signal
+  // 1. Explicit Filename Prefix Check (Highest Priority)
+  if (fnLower.startsWith("de_")) return { region: "DE", country_name: "Germany", currency: "EUR", confidence: 100, reason: "Filename prefix DE_ found" };
+  if (fnLower.startsWith("fr_")) return { region: "FR", country_name: "France", currency: "EUR", confidence: 100, reason: "Filename prefix FR_ found" };
+  if (fnLower.startsWith("my_")) return { region: "MY", country_name: "Malaysia", currency: "MYR", confidence: 100, reason: "Filename prefix MY_ found" };
+  if (fnLower.startsWith("in_")) return { region: "IN", country_name: "India", currency: "INR", confidence: 100, reason: "Filename prefix IN_ found" };
+  if (fnLower.startsWith("us_")) return { region: "US", country_name: "United States", currency: "USD", confidence: 100, reason: "Filename prefix US_ found" };
+  if (fnLower.startsWith("gb_") || fnLower.startsWith("uk_")) return { region: "GB", country_name: "United Kingdom", currency: "GBP", confidence: 100, reason: "Filename prefix GB_ found" };
+  if (fnLower.startsWith("au_")) return { region: "AU", country_name: "Australia", currency: "AUD", confidence: 100, reason: "Filename prefix AU_ found" };
+
+  // 2. Explicit region code - strongest signal
   if (
     lower.includes("region code: in") ||
     lower.includes("region: in") ||
@@ -140,7 +150,8 @@ export function detectCountryFromText(text: string, fileName = ""): DetectedCoun
     lower.includes("south australia") ||
     lower.includes("northern territory") ||
     lower.includes("australian capital territory") ||
-    lower.includes("aud")
+    lower.includes("australian capital territory") ||
+    /(^|\W)aud(?=\W|$)/.test(lower)
   ) {
     return {
       region: "AU",
@@ -170,11 +181,20 @@ export function detectCountryFromText(text: string, fileName = ""): DetectedCoun
   // 4. Germany
   if (
     lower.includes("strom") ||
+    lower.includes("netzstrom") ||
     lower.includes("stromrechnung") ||
     lower.includes("deutschland") ||
     lower.includes("germany") ||
     lower.includes("ust-idnr") ||
-    lower.includes("steuer-nr")
+    lower.includes("steuer-nr") ||
+    lower.includes("erdgas") ||
+    lower.includes("gasrechnung") ||
+    lower.includes("fernwärme") ||
+    lower.includes("fernwaerme") ||
+    /(^|\W)gmbh(?=\W|$)/.test(lower) ||
+    lower.includes("stadtwerke") ||
+    lower.includes("energie") ||
+    /(^|\W)(eur|€)(?=\W|$)/.test(lower)
   ) {
     return {
       region: "DE",
@@ -190,7 +210,7 @@ export function detectCountryFromText(text: string, fileName = ""): DetectedCoun
     lower.includes("united kingdom") ||
     lower.includes("great britain") ||
     lower.includes("british gas") ||
-    lower.includes("gbp") ||
+    /(^|\W)(gbp|£)(?=\W|$)/.test(lower) ||
     lower.includes("uk energy")
   ) {
     return {
@@ -222,8 +242,8 @@ export function detectCountryFromText(text: string, fileName = ""): DetectedCoun
   // 7. United States
   if (
     lower.includes("united states") ||
-    lower.includes("usa") ||
-    lower.includes("usd") ||
+    /(^|\W)usa(?=\W|$)/.test(lower) ||
+    /(^|\W)usd(?=\W|$)/.test(lower) ||
     lower.includes("us electric") ||
     lower.includes("utility bill")
   ) {
