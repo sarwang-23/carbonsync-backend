@@ -60,7 +60,7 @@ function convertForClimatiq(input: {
       };
     }
 
-    if (unit === "t") {
+    if (unit === "t" || unit === "tonne") {
       // Keep as tonnes — Climatiq accepts 't' natively for fuel weight factors
       return {
         value: input.value,
@@ -280,14 +280,27 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
   let activityId = mapping.activity_id;
 
   if (!activityId) {
-    const searchQuery = `${input.category} ${input.itemName}`;
+    const cleanItemName = input.itemName
+      .replace(/[^a-zA-Z\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(" ")
+      .slice(0, 3)
+      .join(" ");
 
-    const searchedFactor = await searchClimatiqFactor({
+    const searchQuery = `${input.category} ${cleanItemName}`;
+    const genericQuery = `${input.category}`;
+
+    let searchedFactor = await searchClimatiqFactor({
       query: searchQuery,
       region: input.region,
       dataVersion: mapping.data_version || "^6",
       resultsPerPage: 10,
     });
+
+    if (!searchedFactor?.activity_id) {
+        searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: input.region, dataVersion: mapping.data_version || "^6", resultsPerPage: 1 });
+    }
 
     if (!searchedFactor?.activity_id) {
       return {

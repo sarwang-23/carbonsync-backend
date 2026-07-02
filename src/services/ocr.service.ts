@@ -1,4 +1,5 @@
 import fs from "fs";
+import { preprocessPdfForOcr } from "./ocrPreprocessor.service.js";
 
 export interface MistralOcrExtractionResult {
     success: boolean;
@@ -585,14 +586,29 @@ export async function extractInvoiceWithMistralOcr(input: {
     }
 
     try {
-        const fileBase64 = fs.readFileSync(input.filePath).toString("base64");
         const timeoutMs = getEnvNumber("MISTRAL_OCR_TIMEOUT_MS", 30000);
+        
+        let fileBase64 = "";
+        let mimetype = input.mimetype || "application/pdf";
+        
+        try {
+            if (input.filePath.toLowerCase().endsWith('.pdf')) {
+                console.log(`[OCR] Preprocessing PDF for enhanced extraction: ${input.fileName}`);
+                fileBase64 = await preprocessPdfForOcr(input.filePath);
+                mimetype = "image/jpeg";
+            } else {
+                fileBase64 = fs.readFileSync(input.filePath).toString("base64");
+            }
+        } catch (prepErr) {
+            console.log(`[OCR] Preprocessing failed, falling back to raw file:`, prepErr);
+            fileBase64 = fs.readFileSync(input.filePath).toString("base64");
+        }
 
         const data = await withTimeout(
             mistralOcrRequest({
                 fileBase64,
                 fileName: input.fileName,
-                mimetype: input.mimetype || "application/pdf",
+                mimetype: mimetype,
             }),
             timeoutMs,
             `Mistral OCR timed out after ${timeoutMs}ms`

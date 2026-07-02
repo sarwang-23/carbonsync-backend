@@ -1,4 +1,5 @@
 import axios from "axios";
+import { classifyInvoiceDocument } from "./documentClassifier.service.js";
 
 const MISTRAL_CHAT_URL = "https://api.mistral.ai/v1/chat/completions";
 
@@ -54,7 +55,7 @@ function normalizeLineItems(items: any[] = []) {
                 },
             };
         })
-        .filter((item) => item.item_name && item.quantity > 0);
+        .filter((item) => item.item_name && (item.quantity > 0 || item.category === 'steel' || item.category === 'purchased_goods'));
 }
 
 /**
@@ -73,6 +74,40 @@ export async function extractStructuredInvoiceWithMistral(rawText: string, fileN
     const apiKey = getMistralApiKey();
     const model = getMistralExtractionModel();
 
+    // Stage 1: Document type detection
+    const classification = classifyInvoiceDocument({ text: rawText, fileName });
+    const detectedCategory = classification.category;
+
+    // Stage 2: Industry-specific extraction prompt
+    let industryInstructions = "";
+    
+    // Check if it's steel/manufacturing using both classifier and explicit keywords
+    const lowerText = String(rawText || "").toLowerCase();
+    const isSteel = detectedCategory === "purchased_goods" || 
+        ["steel", "ms billet", "billet", "tmt", "tmt bar", "round bar", "rebar", "structural steel", "coil", "wire rod", "beam", "angle", "channel"].some(kw => lowerText.includes(kw));
+
+    if (isSteel) {
+        industryInstructions = `
+- THIS INVOICE BELONGS TO THE STEEL/MANUFACTURING INDUSTRY.
+- Scan ALL table columns for quantity/weight data. Look for columns named: Qty, Quantity, Weight, Net Weight, Gross Weight, MT, Ton, KG, Net Wt, Gr Wt.
+- If quantity is written as MT, M/T, M.T., Metric Ton, Ton, Tonne → set unit to "tonne".
+- If quantity is written in KG, KGS → set unit to "kg".
+- ALWAYS populate parameters.weight, parameters.net_weight, and parameters.gross_weight with numeric values if they appear ANYWHERE on the invoice.
+- DO NOT leave quantity null if any numeric quantity or weight exists on the invoice.
+- If the main quantity column is missing or unclear, use net_weight or gross_weight AS the quantity.
+- Example: "19.850 M/T" → quantity: 19.85, unit: "tonne"
+- Example: "1280 KG" → quantity: 1280, unit: "kg"
+- If a row has MULTIPLE numeric weight columns, prefer: Net Weight > Gross Weight > Total Weight.`;
+    } else if (detectedCategory === "fuel") {
+        industryInstructions = `
+- THIS INVOICE BELONGS TO THE FUEL INDUSTRY.
+- Extract fuel type and volume accurately, prefer litres or gallons for unit.`;
+    } else if (detectedCategory === "flight_ticket") {
+        industryInstructions = `
+- THIS INVOICE BELONGS TO THE AIR TRAVEL INDUSTRY.
+- Extract origin airport, destination airport, flight class, and number of passengers.`;
+    }
+
     const prompt = `
 You are an invoice line-item extraction engine.
 
@@ -89,7 +124,7 @@ Rules:
 - For amount, use line item amount only.
 - Currency should be INR for Indian invoices, MYR for Malaysia invoices.
 - Country should be IN or MY where possible.
-- Category should be one of: electricity_bill, purchased_goods, fuel, water, waste, transport_logistics, hotel, unknown.
+- Category should be one of: electricity_bill, purchased_goods, fuel, water, waste, transport_logistics, hotel, unknown.${industryInstructions ? "\n" + industryInstructions : ""}
 - FOR RAILWAY TICKETS (IRCTC, Indian Railways, PNR, train number): At the TOP LEVEL also extract:
   * "origin_station": departure city or station code (e.g. "DLI", "Delhi", "New Delhi")
   * "destination_station": arrival city or station code (e.g. "MFP", "NDLS", "Mumbai")
@@ -99,6 +134,7 @@ Rules:
   * "passenger_count": number of passengers (default 1)
   ALWAYS extract origin_station and destination_station even if distance_km is null.
   For the line item: category = "transport_logistics", unit = "passenger-km" if distance_km known, else unit = "ticket", quantity = distance_km * passenger_count (or 1 if unknown).
+
 
 JSON schema:
 {
@@ -127,7 +163,13 @@ JSON schema:
       "parameters": {
         "size": "string | null",
         "rate": number | null,
-        "thickness_mm": number | null
+        "thickness_mm": number | null,
+        "weight": "number | null",
+        "net_weight": "number | null",
+        "gross_weight": "number | null",
+        "hsn": "string | null",
+        "grade": "string | null",
+        "material": "string | null"
       }
     }
   ]

@@ -18,6 +18,9 @@ function cleanText(value: any) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+const IGNORED_KEYWORDS = ["gst", "cgst", "sgst", "igst", "vat", "excise duty", "discount", "round off", "tcs", "tds", "insurance", "cess"];
+const CONDITIONAL_IGNORE = ["transportation", "packing", "freight"];
+
 function normalizeItems(items: any[], source: string): UniversalInvoiceItem[] {
   return Array.isArray(items)
     ? items
@@ -29,6 +32,7 @@ function normalizeItems(items: any[], source: string): UniversalInvoiceItem[] {
           unit: item.unit || item.parameters?.energy_unit || "unknown",
           amount: item.amount ?? null,
           currency: item.currency || null,
+          category: item.category || "unknown",
           confidence: Number(item.confidence || 0.75),
           source: item.source || source,
           parameters: {
@@ -36,7 +40,8 @@ function normalizeItems(items: any[], source: string): UniversalInvoiceItem[] {
             extraction_method: item.parameters?.extraction_method || source,
           },
         }))
-        .filter((item) => Number.isFinite(Number(item.quantity)) && Number(item.quantity) > 0)
+        // We let ALL items pass through so that the emission engine can explicitly mark them as "ignored"
+        // rather than silently dropping them.
     : [];
 }
 

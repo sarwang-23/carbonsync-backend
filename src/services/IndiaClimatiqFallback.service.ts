@@ -274,7 +274,42 @@ export async function calculateIndiaClimatiqFallback(
   let targetRegion: string | undefined = "IN";
 
   if (!activityId) {
-    const searchQuery = `${input.category} ${input.itemName} India`;
+    const cleanItemName = input.itemName
+      .replace(/[^a-zA-Z\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(" ")
+      .slice(0, 3)
+      .join(" ");
+
+    // ── Smart steel activity mapping ──────────────────────────────────────
+    // MS / TMT / billet / round bar → generic "steel bars rods" to avoid
+    // picking up "alloy steel forged" factors for ordinary mild steel.
+    let searchQuery: string;
+    let genericQuery: string = input.category;
+
+    if (input.category === "steel") {
+      const nameLower = input.itemName.toLowerCase();
+      if (
+        nameLower.includes("ms billet") ||
+        nameLower.includes("ms bar") ||
+        nameLower.includes("tmt") ||
+        nameLower.includes("billet") ||
+        nameLower.includes("round bar") ||
+        nameLower.includes("mild steel")
+      ) {
+        searchQuery = "steel bars rods";
+      } else if (nameLower.includes("sheet") || nameLower.includes("coil") || nameLower.includes("plate")) {
+        searchQuery = "steel sheet plate coil";
+      } else if (nameLower.includes("pipe") || nameLower.includes("tube")) {
+        searchQuery = "steel pipe tube";
+      } else {
+        searchQuery = `steel ${cleanItemName}`;
+      }
+    } else {
+      searchQuery = `${input.category} ${cleanItemName} India`;
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     let searchedFactor = await searchClimatiqFactor({
       query: searchQuery,
@@ -282,28 +317,37 @@ export async function calculateIndiaClimatiqFallback(
       dataVersion: mapping.data_version || "^6",
       resultsPerPage: 10,
     });
+    if (!searchedFactor?.activity_id) {
+        searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "IN", dataVersion: mapping.data_version || "^6", resultsPerPage: 1 });
+    }
 
     if (!searchedFactor?.activity_id) {
       // Fallback 1: GLOBAL region
-      const globalSearchQuery = `${input.category} ${input.itemName}`;
+      const globalSearchQuery = `${input.category} ${cleanItemName}`;
       searchedFactor = await searchClimatiqFactor({
         query: globalSearchQuery,
         region: "GLO",
         dataVersion: mapping.data_version || "^6",
         resultsPerPage: 10,
       });
+      if (!searchedFactor?.activity_id) {
+          searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "GLO", dataVersion: mapping.data_version || "^6", resultsPerPage: 1 });
+      }
       if (searchedFactor?.activity_id) targetRegion = "GLO";
     }
 
     if (!searchedFactor?.activity_id) {
       // Fallback 2: RoW region (Rest of World)
-      const rowSearchQuery = `${input.category} ${input.itemName}`;
+      const rowSearchQuery = `${input.category} ${cleanItemName}`;
       searchedFactor = await searchClimatiqFactor({
         query: rowSearchQuery,
         region: "RoW",
         dataVersion: mapping.data_version || "^6",
         resultsPerPage: 10,
       });
+      if (!searchedFactor?.activity_id) {
+          searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "RoW", dataVersion: mapping.data_version || "^6", resultsPerPage: 1 });
+      }
       if (searchedFactor?.activity_id) targetRegion = "RoW";
     }
 

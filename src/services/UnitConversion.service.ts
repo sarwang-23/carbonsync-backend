@@ -31,11 +31,15 @@ export function normalizeUnit(unit?: string | null): string {
     "kg": "kg",
     "g": "g",
     
-    "ton": "t",
-    "tons": "t",
-    "tonne": "t",
-    "tonnes": "t",
-    "mt": "t",
+    "ton": "tonne",
+    "tons": "tonne",
+    "tonne": "tonne",
+    "tonnes": "tonne",
+    "mt": "tonne",
+    "m/t": "tonne",
+    "metricton": "tonne",
+    "metrictonne": "tonne",
+    "t": "tonne",
 
     // volume (m3, etc)
     "cubicmeter": "m3",
@@ -109,12 +113,12 @@ export function convertToTargetUnit(
     };
   }
 
-  if (from === "t" && target === "kg") {
+  if (from === "tonne" && target === "kg") {
     return { value: value * 1000, unit: "kg" };
   }
 
-  if (from === "kg" && target === "t") {
-    return { value: value / 1000, unit: "t" };
+  if (from === "kg" && target === "tonne") {
+    return { value: value / 1000, unit: "tonne" };
   }
 
   if (from === "g" && target === "kg") {

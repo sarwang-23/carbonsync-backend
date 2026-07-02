@@ -116,6 +116,65 @@ function resolveWaterVolume(item: any, rawText: string) {
     };
 }
 
+function resolveSteelWeight(item: any, rawText: string) {
+    if (validPositive(item?.quantity)) return null;
+
+    // ── Tier 1: Mistral parameters (net_weight, gross_weight, weight) ────────
+    // Mistral prompt asks for these fields; use them if quantity is missing.
+    const params = item?.parameters || {};
+    for (const field of ["net_weight", "gross_weight", "weight"]) {
+        const v = toNumber(params[field]);
+        if (v > 0) {
+            const rawUnit = String(params[`${field}_unit`] || params["unit"] || item?.unit || "tonne").toLowerCase();
+            const unit = rawUnit.includes("kg") ? "kg" : "tonne";
+            return {
+                quantity: v,
+                unit,
+                reason: `resolved_steel_weight_from_parameters_${field}`,
+            };
+        }
+    }
+
+    // ── Tier 2: scan the item name / description ────────────────────────────
+    // Sometimes the LLM puts weight in the description: "MS Billets 19.85 MT"
+    const itemText = `${item?.item_name || ""} ${item?.description || ""}`;
+    const descMatch = itemText.match(/([\d,]+(?:\.\d+)?)\s*(?:m\/t|m\.t\.|mt|metric\s*ton|tonnes?|tons?|kgs?)\b/i);
+    if (descMatch?.[1]) {
+        const val = toNumber(descMatch[1]);
+        const low = descMatch[0].toLowerCase();
+        if (val > 0) {
+            const unit = low.includes("kg") ? "kg" : "tonne";
+            return { quantity: val, unit, reason: "resolved_steel_weight_from_item_description" };
+        }
+    }
+
+    // ── Tier 3: aggressive rawText scan ─────────────────────────────────────
+    // Match patterns like: "19.85 M/T", "19.850 MT", "1280 KG", "2,540 Ton"
+    const text = String(rawText || "");
+    // Try explicit weight unit patterns first (more specific)
+    const patterns = [
+        /([\d,]+(?:\.\d+)?)\s*(?:m\/t|m\.t\.)\b/i,          // M/T or M.T.
+        /([\d,]+(?:\.\d+)?)\s*(?:metric\s*tonn?e?s?)\b/i,   // Metric Ton(ne)
+        /([\d,]+(?:\.\d+)?)\s*m\.?t\.?\b/i,                  // MT or M.T
+        /([\d,]+(?:\.\d+)?)\s*tonn?e?s?\b/i,                 // Tonne/Ton
+        /([\d,]+(?:\.\d+)?)\s*kgs?\b/i,                      // KG/KGS
+    ];
+
+    for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match?.[1]) {
+            const val = toNumber(match[1]);
+            if (val > 0 && val < 100000) { // sanity check — no invoice has 100k tonnes
+                const low = match[0].toLowerCase();
+                const unit = low.includes("kg") ? "kg" : "tonne";
+                return { quantity: val, unit, reason: "resolved_steel_weight_from_invoice_text" };
+            }
+        }
+    }
+
+    return null;
+}
+
 function shouldOverrideElectricity(item: any, resolvedKwh: number) {
     if (!resolvedKwh || resolvedKwh <= 0) return false;
 
@@ -194,6 +253,28 @@ export function resolveLineItemQuantities(input: {
 
         if (category === "water") {
             const resolved = resolveWaterVolume(item, rawText);
+            if (resolved) {
+                return {
+                    ...item,
+                    quantity: resolved.quantity,
+                    unit: resolved.unit,
+                    parameters: {
+                        ...(item.parameters || {}),
+                        quantity_resolved: true,
+                        quantity_resolution_method: resolved.reason,
+                    },
+                };
+            }
+        }
+
+        const isSteelItem = 
+            category === "steel" || 
+            category === "purchased_goods" ||
+            ["steel", "billet", "tmt", "ms bar", "round bar", "rebar", "angle", "channel", "beam", "coil", "wire rod", "structural"]
+                .some(kw => (item?.item_name || "").toLowerCase().includes(kw));
+
+        if (isSteelItem) {
+            const resolved = resolveSteelWeight(item, rawText);
             if (resolved) {
                 return {
                     ...item,

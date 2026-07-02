@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import erpRoutes from "./routes/erp.routes.js";
 import affindaTestRoutes from "./routes/affinda-test.routes.js";
+import { multerErrorHandler } from "./middleware/upload.middleware.js";
 import { calculateGermanyEmission } from "./services/GermanyEmission.service.js";
 import { calculateIndiaFixedEmission } from "./services/IndiaFixedEmission.service.js";
 import { calculateIndiaEmission } from "./services/IndiaEmission.service.js";
@@ -140,6 +141,19 @@ app.get("/", (_req, res) => {
     message: "ERP Malaysia Invoice Emission API running",
   });
 });
+
+// ── Global error handlers (must be AFTER all routes) ─────────────────────
+app.use(multerErrorHandler);
+
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error("[UNHANDLED ERROR]", err);
+  return res.status(500).json({
+    success: false,
+    error: "INTERNAL_SERVER_ERROR",
+    message: err?.message || "An unexpected error occurred.",
+  });
+});
+// ─────────────────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 5000;
 

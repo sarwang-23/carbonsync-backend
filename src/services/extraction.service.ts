@@ -13,6 +13,8 @@ import { extractStructuredInvoiceWithMistral } from "./mistralStructuredExtracti
 import { extractGenericInvoiceLineItems } from "./genericInvoiceLineItemExtractor.service.js";
 import { extractElectricityBillLineItems } from "./electricityBillFallbackExtractor.service.js";
 import { resolveFinalInvoiceLineItems } from "./finalInvoiceLineItemResolver.service.js";
+import { parseSteelInvoice, isSteelInvoice } from "./steelInvoiceParser.service.js";
+import { detectVendorTemplate } from "./vendorTemplate.service.js";
 
 export type ExtractionMethod =
     | "pdf_text"
@@ -582,6 +584,41 @@ export async function extractInvoiceData(input: {
     } catch (error: any) {
         warnings.push(`PDF text extraction failed: ${error?.message || String(error)}`);
         extractionSteps.push("pdf_text_extraction_failed");
+    }
+
+    // ── Vendor template + Steel parser (BEFORE OCR) ─────────────────────────
+    // If pdfText has content, check vendor template and run steel parser.
+    // This is the fastest, most reliable route for manufacturing invoices.
+    if (pdfText.length >= 100) {
+        const vendorTemplate = detectVendorTemplate("", pdfText);
+        const steelDetected = vendorTemplate.type === "steel" || isSteelInvoice(pdfText);
+
+        if (steelDetected) {
+            extractionSteps.push("steel_parser_started");
+            const steelItems = parseSteelInvoice(pdfText);
+
+            if (steelItems.length > 0) {
+                extractionSteps.push(`steel_parser_found_${steelItems.length}_items`);
+                return {
+                    success: true,
+                    method: "pdf_text",
+                    rawText: pdfText,
+                    textLength: pdfText.length,
+                    line_items: steelItems,
+                    warnings: [...warnings, `Steel parser extracted ${steelItems.length} item(s) from PDF text.`],
+                    needs_review: false,
+                    confidence: steelItems[0]?.confidence || 0.90,
+                    audit: {
+                        fileName: input.fileName,
+                        filePath: input.filePath,
+                        mimetype: input.mimetype,
+                        pdfTextLength: pdfText.length,
+                        extraction_steps: [...extractionSteps],
+                    },
+                };
+            }
+            extractionSteps.push("steel_parser_no_items_continue_to_ocr");
+        }
     }
 
     if (pdfText.length < 300) {

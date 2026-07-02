@@ -157,7 +157,19 @@ export function detectCategoryFromText(text: string): string {
     lower.includes("mild steel") ||
     lower.includes("steel rod") ||
     lower.includes("steel bar") ||
-    lower.includes("steel pipe")
+    lower.includes("steel pipe") ||
+    lower.includes("ms billet") ||
+    lower.includes("billet") ||
+    lower.includes("tmt bar") ||
+    lower.includes("round bar") ||
+    lower.includes("rebar") ||
+    lower.includes("structural steel") ||
+    lower.includes("steel section") ||
+    lower.includes("coil") ||
+    lower.includes("wire rod") ||
+    lower.includes("beam") ||
+    lower.includes("angle") ||
+    lower.includes("channel")
   ) {
     return "steel";
   }

@@ -1,5 +1,8 @@
 import express from "express";
-import multer from "multer";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import { uploadSingle } from "../middleware/upload.middleware.js";
 import { extractInvoiceBestEffort } from "../services/InvoiceExtractionOrchestrator.service.js";
 import { processMalaysiaInvoiceItems } from "../services/MalaysiaInvoiceEmission.service.js";
 import { supabase } from "../lib/supabase.js";
@@ -15,25 +18,23 @@ import { smartRailLookup } from "../services/IndiaRailwayRouteDB.js";
 
 const router = express.Router();
 
-const upload = multer({
-  dest: "uploads/",
-  limits: {
-    fileSize: 15 * 1024 * 1024
-  }
-});
-
-router.post("/upload", upload.single("file"), async (req, res) => {
+router.post("/upload", uploadSingle, async (req, res) => {
+  let tempFilePath: string | null = null;
   try {
     const file = req.file;
 
     if (!file) {
       return res.status(400).json({
         success: false,
-        message: "No file uploaded"
+        message: "No file uploaded. Use form-data with field name: file"
       });
     }
 
-    const extraction = await extractInvoiceBestEffort(file.path);
+    // Write memory buffer to a temp file so downstream services can use file.path
+    tempFilePath = path.join(os.tmpdir(), `carbonsync_${Date.now()}_${file.originalname}`);
+    fs.writeFileSync(tempFilePath, file.buffer);
+
+    const extraction = await extractInvoiceBestEffort(tempFilePath);
     const invoice = extraction.result;
 
     const { data: extractionRow, error: extractionSaveError } = await supabase
@@ -402,12 +403,16 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     return res.status(200).json(fillNullValues(responseBody));
   } catch (error: any) {
     console.error("ERP upload failed:", error);
-
     return res.status(500).json({
       success: false,
       message: "Invoice processing failed",
       error: error.message
     });
+  } finally {
+    // Always clean up temp file regardless of success or failure
+    if (tempFilePath) {
+      try { fs.unlinkSync(tempFilePath); } catch (_) {}
+    }
   }
 });
 

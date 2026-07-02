@@ -367,8 +367,8 @@ function convertValueToFactorUnit(value: number, inputUnit: string, factorUnit: 
     };
   }
 
-  // normalizeUnit("tonne") = "t", normalizeUnit("short ton") = "shorton"
-  if (input === "t" && (activityUnit === "shorton" || activityUnit === "shortton" || activityUnit === "shortton")) {
+  // normalizeUnit("tonne") = "tonne", normalizeUnit("short ton") = "shorton"
+  if (input === "tonne" && (activityUnit === "shorton" || activityUnit === "shortton")) {
     // 1 metric tonne = 1.10231 short ton
     return {
       success: true,
@@ -396,16 +396,16 @@ function convertValueToFactorUnit(value: number, inputUnit: string, factorUnit: 
     };
   }
 
-  if (input === "kg" && activityUnit === "t") {
+  if (input === "kg" && activityUnit === "tonne") {
     return {
       success: true,
       value: value / 1000,
-      unit: "t",
+      unit: "tonne",
       converted: true,
     };
   }
 
-  if (input === "t" && activityUnit === "kg") {
+  if (input === "tonne" && activityUnit === "kg") {
     return {
       success: true,
       value: value * 1000,
@@ -421,7 +421,7 @@ function convertValueToFactorUnit(value: number, inputUnit: string, factorUnit: 
     return {
       success: true,
       value: value * density,
-      unit: "t",
+      unit: "tonne",
       converted: true,
     };
   }
@@ -494,6 +494,21 @@ export async function processInvoiceEmissions(
   let calculatedCount = 0;
   let reviewCount = 0;
   let failedCount = 0;
+  let ignoredCount = 0;
+
+  // Keywords that are definitively non-emission financial line items
+  const NON_EMISSION_KEYWORDS = [
+    "gst", "cgst", "sgst", "igst", "vat", "output vat", "input vat",
+    "excise duty", "cess", "tcs", "tds",
+    "discount", "round off", "rounding",
+    "insurance",
+    "packing charges", "packing",
+  ];
+  // Keywords where we ignore only if there is no usable quantity/value
+  const CONDITIONAL_IGNORE_KEYWORDS = [
+    "transportation", "transportation charges", "transport charges",
+    "freight charges",
+  ];
 
   for (let i = 0; i < input.items.length; i++) {
     const item = input.items[i] as any;
@@ -507,6 +522,39 @@ export async function processInvoiceEmissions(
       const category = item.category || "unknown";
       const value = Number(item.value || item.quantity);
       const unit = item.unit;
+      const nameLower = itemName.toLowerCase();
+
+      // ── Non-emission item check (tax, duty, discount, etc.) ───────────────
+      if (NON_EMISSION_KEYWORDS.some(kw => nameLower.includes(kw))) {
+        ignoredCount++;
+        results.push({
+          line_index: i,
+          item_name: itemName,
+          category,
+          value,
+          unit,
+          status: "ignored",
+          reason: "NON_EMISSION_ITEM",
+          message: "This is a tax, duty, discount, or fee line — not an emission-producing activity.",
+        });
+        continue;
+      }
+
+      // ── Conditional ignore: transport/freight with no usable quantity ─────
+      if (CONDITIONAL_IGNORE_KEYWORDS.some(kw => nameLower.includes(kw)) && (!value || !Number.isFinite(value) || value <= 0)) {
+        ignoredCount++;
+        results.push({
+          line_index: i,
+          item_name: itemName,
+          category,
+          value: null,
+          unit,
+          status: "ignored",
+          reason: "TRANSPORT_INSUFFICIENT_DATA",
+          message: "Transportation charge with no distance/weight/truck data — cannot calculate emission.",
+        });
+        continue;
+      }
 
       console.log("ITEM ROUTING CHECK:", {
         region: input.region,
@@ -603,6 +651,7 @@ export async function processInvoiceEmissions(
 
       if (!value || !Number.isFinite(value)) {
         reviewCount++;
+        const isSteelOrGoods = category === "steel" || category === "purchased_goods" || itemName.toLowerCase().includes("steel");
         results.push({
           line_index: i,
           item_name: itemName,
@@ -610,8 +659,10 @@ export async function processInvoiceEmissions(
           value,
           unit,
           status: "review",
-          reason: "INVALID_VALUE",
-          message: "This item needs manual review or mapping update",
+          reason: isSteelOrGoods ? "QUANTITY_NOT_EXTRACTED" : "INVALID_VALUE",
+          message: isSteelOrGoods 
+            ? "Steel invoice detected but quantity/weight could not be extracted from the document."
+            : "This item needs manual review or mapping update",
         });
         continue;
       }
@@ -1061,6 +1112,7 @@ export async function processInvoiceEmissions(
     total_items: input.items.length,
     calculated_count: calculatedCount,
     review_count: reviewCount,
+    ignored_count: ignoredCount,
     failed_count: failedCount,
     total_co2e: Number(totalCo2e.toFixed(6)),
     total_co2e_unit: "kg",

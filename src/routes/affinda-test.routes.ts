@@ -1,28 +1,28 @@
 import express from "express";
-import multer from "multer";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import { uploadSingle } from "../middleware/upload.middleware.js";
 import { extractInvoiceWithAffinda } from "../services/AffindaInvoice.service.js";
 
 const router = express.Router();
 
-const upload = multer({
-  dest: "uploads/",
-  limits: {
-    fileSize: 15 * 1024 * 1024,
-  },
-});
-
-router.post("/test-affinda", upload.single("file"), async (req, res) => {
+router.post("/test-affinda", uploadSingle, async (req, res) => {
+  let tempFilePath: string | null = null;
   try {
     const file = req.file;
 
     if (!file) {
       return res.status(400).json({
         success: false,
-        message: "No file uploaded. Use form-data key: file",
+        message: "No file uploaded. Use form-data with field name: file",
       });
     }
 
-    const result = await extractInvoiceWithAffinda(file.path);
+    tempFilePath = path.join(os.tmpdir(), `affinda_${Date.now()}_${file.originalname}`);
+    fs.writeFileSync(tempFilePath, file.buffer);
+
+    const result = await extractInvoiceWithAffinda(tempFilePath);
 
     return res.json({
       success: true,
@@ -41,6 +41,10 @@ router.post("/test-affinda", upload.single("file"), async (req, res) => {
       message: "Affinda extraction failed",
       error: error.message,
     });
+  } finally {
+    if (tempFilePath) {
+      try { fs.unlinkSync(tempFilePath); } catch (_) {}
+    }
   }
 });
 
