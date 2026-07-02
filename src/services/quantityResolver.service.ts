@@ -116,6 +116,31 @@ function resolveWaterVolume(item: any, rawText: string) {
     };
 }
 
+function resolveGasVolume(item: any, rawText: string) {
+    if (validPositive(item?.quantity)) return null;
+
+    // First try the item name & description itself
+    const itemText = `${item?.item_name || ""} ${item?.description || ""}`;
+    let match = itemText.match(/([\d,]+(?:\.\d+)?)\s*(?:m3|m³|gj|mj)\b/i);
+
+    if (!match?.[1]) {
+        // Fallback to raw text
+        const text = String(rawText || "");
+        match = text.match(/([\d,]+(?:\.\d+)?)\s*(?:m3|m³|gj|mj)\b/i);
+    }
+
+    if (!match?.[1]) return null;
+
+    const matchedStr = match[0].toLowerCase();
+    const unit = matchedStr.includes("gj") ? "gj" : matchedStr.includes("mj") ? "mj" : "m3";
+
+    return {
+        quantity: toNumber(match[1]),
+        unit,
+        reason: "resolved_gas_volume_from_text",
+    };
+}
+
 function resolveSteelWeight(item: any, rawText: string) {
     if (validPositive(item?.quantity)) return null;
 
@@ -253,6 +278,22 @@ export function resolveLineItemQuantities(input: {
 
         if (category === "water") {
             const resolved = resolveWaterVolume(item, rawText);
+            if (resolved) {
+                return {
+                    ...item,
+                    quantity: resolved.quantity,
+                    unit: resolved.unit,
+                    parameters: {
+                        ...(item.parameters || {}),
+                        quantity_resolved: true,
+                        quantity_resolution_method: resolved.reason,
+                    },
+                };
+            }
+        }
+
+        if (category === "natural_gas") {
+            const resolved = resolveGasVolume(item, rawText);
             if (resolved) {
                 return {
                     ...item,

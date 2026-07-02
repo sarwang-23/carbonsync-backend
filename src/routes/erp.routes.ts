@@ -367,9 +367,16 @@ router.post("/upload", uploadSingle, async (req, res) => {
       preferredSource = "UBA";
     }
 
+    const total_co2e_val = Number(Number(emissionResult.total_co2e || 0).toFixed(6));
+    const uniqueCategories = Array.from(new Set(emissionResult.results.map((r: any) => r.category).filter(Boolean)));
+
     const responseBody = {
       success: true,
       message: `${detectedCountry.country_name} invoice processed`,
+      total_co2e: total_co2e_val,
+      total_tco2e: Number((total_co2e_val / 1000).toFixed(6)),
+      extracted_items: items.length,
+      categories: uniqueCategories.length > 0 ? uniqueCategories.join(", ") : "—",
       file_name: file.originalname,
       country: detectedCountry,
       extraction: {

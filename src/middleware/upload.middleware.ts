@@ -25,12 +25,7 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: FileFilterCallb
     if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
         cb(null, true);
     } else {
-        cb(
-            new multer.MulterError(
-                "LIMIT_UNEXPECTED_FILE" as any,
-                `Invalid file type: ${file.mimetype}. Only PDF, PNG, and JPG are allowed.`
-            )
-        );
+        cb(new Error(`Invalid file type: ${file.mimetype}. Only PDF, PNG, and JPG are allowed.`));
     }
 };
 
@@ -42,11 +37,14 @@ const upload = multer({
     fileFilter,
 });
 
-/** Single file upload. Field name: "file" */
+/** 
+ * Strict single file upload middleware.
+ * Accepts "file" field name from frontend.
+ */
 export const uploadSingle = upload.single("file");
 
-/** Legacy alias — kept so /estimate route (which uses field "document") still works */
-export const uploadHandler = upload.single("document");
+/** Legacy alias */
+export const uploadHandler = uploadSingle;
 
 /**
  * Global Multer error handler.
@@ -70,8 +68,9 @@ export function multerErrorHandler(
         if (err.code === "LIMIT_UNEXPECTED_FILE") {
             return res.status(400).json({
                 success: false,
-                error: "INVALID_FILE_TYPE",
-                message: err.field || "Only PDF, PNG, and JPG files are allowed.",
+                error: "INVALID_FIELD_NAME",
+                message: `Unexpected field name: '${err.field}'. Allowed fields are 'file', 'invoice', or 'document'.`,
+                receivedField: err.field
             });
         }
         return res.status(400).json({
@@ -86,6 +85,8 @@ export function multerErrorHandler(
             success: false,
             error: "INVALID_FILE_TYPE",
             message: err.message,
+            // Cannot easily access req.file here because it was rejected by the filter, 
+            // but the error message itself contains the received mimetype.
         });
     }
 

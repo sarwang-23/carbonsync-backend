@@ -192,7 +192,14 @@ export function isLikelyCompatibleFactor(selectedEF: any, parameters: Record<str
     }
 
     if (parameters.energy !== undefined) {
-        return unit.includes("kwh") || activity.includes("electricity");
+        return (
+            unit.includes("kwh") || 
+            unit.includes("gj") || 
+            unit.includes("mj") || 
+            activity.includes("electricity") || 
+            activity.includes("gas") || 
+            activity.includes("fuel")
+        );
     }
 
     if (parameters.weight !== undefined) {
@@ -236,10 +243,37 @@ export function buildActivityParameters(category: string, item: any, converted?:
         };
     }
 
-    if (category === "fuel") {
+    if (category === "fuel" || category === "diesel" || category === "petrol") {
         return {
             volume: Number(converted?.value || item?.quantity || 0),
             volume_unit: unit.includes("lit") || unit === "l" || unit === "ltr" ? "l" : item?.unit || "l",
+        };
+    }
+
+    if (category === "natural_gas" || category === "lpg") {
+        let gasUnit = unit;
+        if (unit.includes("gj")) gasUnit = "gj";
+        else if (unit.includes("mj")) gasUnit = "mj";
+        else if (unit.includes("kg")) gasUnit = "kg";
+        else if (unit.includes("m3") || unit.includes("cubic")) gasUnit = "m3";
+        else gasUnit = "m3"; // fallback
+
+        // Climatiq sometimes uses energy parameters for gas (GJ, MJ), or volume (m3), or weight (kg for LPG)
+        if (gasUnit === "gj" || gasUnit === "mj") {
+            return {
+                energy: Number(converted?.value || item?.quantity || 0),
+                energy_unit: gasUnit,
+            };
+        }
+        if (gasUnit === "kg") {
+            return {
+                weight: Number(converted?.value || item?.quantity || 0),
+                weight_unit: gasUnit,
+            };
+        }
+        return {
+            volume: Number(converted?.value || item?.quantity || 0),
+            volume_unit: gasUnit,
         };
     }
 
