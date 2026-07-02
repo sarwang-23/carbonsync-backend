@@ -406,7 +406,8 @@ router.post("/upload", uploadSingle, async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Invoice processing failed",
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
   } finally {
     // Always clean up temp file regardless of success or failure
