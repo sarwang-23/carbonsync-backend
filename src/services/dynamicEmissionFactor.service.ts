@@ -53,6 +53,8 @@ type DetectedCategory =
     | "water"
     | "waste"
     | "hotel"
+    | "steel"
+    | "cement"
     | "unknown";
 
 

@@ -55,7 +55,7 @@ function normalizeLineItems(items: any[] = []) {
                 },
             };
         })
-        .filter((item) => item.item_name && (item.quantity > 0 || item.category === 'steel' || item.category === 'purchased_goods'));
+        .filter((item) => item.item_name && (item.quantity > 0 || item.parameters?.category === 'steel' || item.parameters?.category === 'purchased_goods'));
 }
 
 /**

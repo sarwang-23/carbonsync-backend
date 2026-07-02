@@ -25,6 +25,8 @@ export type DetectedCategory =
     | "waste"
     | "hotel"
     | "district_heating"
+    | "steel"
+    | "cement"
     | "unknown";
 
 export interface ClassificationResult {
