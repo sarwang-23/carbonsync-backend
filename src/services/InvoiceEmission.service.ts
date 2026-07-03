@@ -150,6 +150,21 @@ async function findLocalOfficialFactor(params: {
   description?: string;
   invoiceText?: string;    // full raw invoice text for AU state detection
 }) {
+  const count = await pool.query(`
+SELECT COUNT(*)
+FROM official_emission_factors;
+`);
+
+  console.log("TOTAL FACTORS =", count.rows[0].count);
+
+  const auCount = await pool.query(`
+SELECT COUNT(*)
+FROM official_emission_factors
+WHERE region='AU';
+`);
+
+  console.log("AU FACTORS =", auCount.rows[0].count);
+
   const normalizedInputUnit = normalizeUnit(params.unit);
 
   // AU electricity: combine all available text for best state detection
