@@ -248,7 +248,7 @@ async function findLocalOfficialFactor(params: {
         + (case when lower($4) = 'gj' and lower(unit) like '%/gj%' then 50 else 0 end)
         + (case when lower($4) = 'm3' and lower(unit) like '%/m3%' then 50 else 0 end)
         
-        itr+ (case when lower($3) like '%black coal%' and lower(name) like '%black coal%' then 100
+        + (case when lower($3) like '%black coal%' and lower(name) like '%black coal%' then 100
                 when lower($3) like '%brown coal%' and lower(name) like '%brown coal%' then 100
                 when lower($3) like '%sub-bituminous%' and lower(name) like '%sub-bituminous%' then 100
                 when lower($3) like '%bituminous%' and lower($3) not like '%sub-bituminous%' and lower(name) = 'bituminous' then 100
