@@ -243,43 +243,10 @@ async function getFallbackMapping(region: string, category: string) {
 export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput) {
   const mapping = await getFallbackMapping(input.region, input.category);
 
+  // ── No DB mapping: infer defaults and still try Climatiq search ──────────
   if (!mapping) {
-    return {
-      success: false,
-      status: "review",
-      source_engine: "climatiq",
-      region: input.region,
-      country_name: input.countryName,
-      category: input.category,
-      reason: "NO_CLIMATIQ_FALLBACK_MAPPING",
-      message: `No Climatiq fallback mapping found for ${input.region}/${input.category}`,
-    };
-  }
+    console.log(`[${input.region}] No DB mapping for "${input.category}" — attempting direct Climatiq search`);
 
-  const converted = convertForClimatiq({
-    category: input.category,
-    value: input.value,
-    unit: input.unit,
-    expectedParameterName: mapping.parameter_name,
-    expectedParameterUnit: mapping.parameter_unit,
-  });
-
-  if ((converted as any).review_required) {
-    return {
-      success: false,
-      status: "review",
-      source_engine: "climatiq",
-      region: input.region,
-      country_name: input.countryName,
-      category: input.category,
-      reason: (converted as any).reason,
-      message: `Unit conversion not supported for ${input.category}: ${input.unit}`,
-    };
-  }
-
-  let activityId = mapping.activity_id;
-
-  if (!activityId) {
     const cleanItemName = input.itemName
       .replace(/[^a-zA-Z\s]/g, " ")
       .replace(/\s+/g, " ")
@@ -288,18 +255,59 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
       .slice(0, 3)
       .join(" ");
 
-    const searchQuery = `${input.category} ${cleanItemName}`;
-    const genericQuery = `${input.category}`;
+    // Infer parameter based on common category groups
+    const WEIGHT_CATS = ["steel", "aluminium", "textile", "electrical", "lpg", "coal", "cement", "concrete", "glass", "plastic", "paper", "wood", "food", "chemicals", "refrigerant", "waste", "purchased_goods"];
+    const ENERGY_CATS = ["electricity", "diesel", "petrol", "natural_gas"];
+    const VOLUME_CATS = ["water", "natural_gas"];
+    const DISTANCE_CATS = ["transport", "freight", "flight", "railway"];
 
-    let searchedFactor = await searchClimatiqFactor({
-      query: searchQuery,
-      region: input.region,
-      dataVersion: mapping.data_version || "^6",
-      resultsPerPage: 10,
+    let inferredParameterName = "weight";
+    let inferredParameterUnit = "kg";
+    if (ENERGY_CATS.includes(input.category)) {
+      inferredParameterName = "energy";
+      inferredParameterUnit = "kWh";
+    } else if (VOLUME_CATS.includes(input.category)) {
+      inferredParameterName = "volume";
+      inferredParameterUnit = "m3";
+    } else if (DISTANCE_CATS.includes(input.category)) {
+      inferredParameterName = "distance";
+      inferredParameterUnit = "km";
+    }
+
+    const converted = convertForClimatiq({
+      category: input.category,
+      value: input.value,
+      unit: input.unit,
+      expectedParameterName: inferredParameterName,
+      expectedParameterUnit: inferredParameterUnit,
     });
 
+    // Search: region → GLO → RoW
+    let searchedFactor: any = null;
+    let targetRegion: string | undefined = input.region;
+
+    const searchQuery = `${input.category} ${cleanItemName}`;
+    const genericQuery = input.category;
+
+    searchedFactor = await searchClimatiqFactor({ query: searchQuery, region: input.region, dataVersion: "^6", resultsPerPage: 10 });
     if (!searchedFactor?.activity_id) {
-        searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: input.region, dataVersion: mapping.data_version || "^6", resultsPerPage: 1 });
+      searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: input.region, dataVersion: "^6", resultsPerPage: 1 });
+    }
+
+    if (!searchedFactor?.activity_id) {
+      searchedFactor = await searchClimatiqFactor({ query: searchQuery, region: "GLO", dataVersion: "^6", resultsPerPage: 10 });
+      if (!searchedFactor?.activity_id) {
+        searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "GLO", dataVersion: "^6", resultsPerPage: 1 });
+      }
+      if (searchedFactor?.activity_id) targetRegion = "GLO";
+    }
+
+    if (!searchedFactor?.activity_id) {
+      searchedFactor = await searchClimatiqFactor({ query: searchQuery, region: "RoW", dataVersion: "^6", resultsPerPage: 10 });
+      if (!searchedFactor?.activity_id) {
+        searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "RoW", dataVersion: "^6", resultsPerPage: 1 });
+      }
+      if (searchedFactor?.activity_id) targetRegion = "RoW";
     }
 
     if (!searchedFactor?.activity_id) {
@@ -310,13 +318,60 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
         region: input.region,
         country_name: input.countryName,
         category: input.category,
-        reason: "CLIMATIQ_FACTOR_NOT_FOUND",
-        message: `No Climatiq factor found for ${input.region}/${input.category}`,
+        reason: "NO_CLIMATIQ_FALLBACK_MAPPING",
+        message: `No Climatiq factor found for ${input.region}/${input.category} (tried GLO/RoW too)`,
       };
     }
 
-    activityId = searchedFactor.activity_id;
+    console.log(`[${input.region}] No-mapping Climatiq search found: ${searchedFactor.activity_id} (region: ${targetRegion})`);
+
+    try {
+      const climatiqResult = await estimateWithClimatiq({
+        selectedEF: {
+          activity_id: searchedFactor.activity_id,
+          ...(targetRegion && targetRegion !== "GLO" && targetRegion !== "RoW" ? { region: targetRegion } : {}),
+        },
+        parameters: {
+          [converted.parameterName]: converted.value,
+          ...(converted.parameterUnit ? { [`${converted.parameterName}_unit`]: converted.parameterUnit } : {}),
+        },
+      });
+
+      return {
+        success: true,
+        status: "calculated",
+        source_engine: "climatiq",
+        preferred_source: "Climatiq",
+        region: input.region,
+        country_name: input.countryName,
+        category: input.category,
+        item_name: input.itemName,
+        input_value: input.value,
+        input_unit: input.unit,
+        converted,
+        activity_id: searchedFactor.activity_id,
+        parameter_name: converted.parameterName,
+        parameter_unit: converted.parameterUnit,
+        co2e: climatiqResult.data.co2e,
+        co2e_unit: climatiqResult.data.co2e_unit,
+        factor_name: climatiqResult.data.emission_factor?.name,
+        factor_source: climatiqResult.data.emission_factor?.source,
+        factor_region: climatiqResult.data.emission_factor?.region,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        status: "review",
+        source_engine: "climatiq",
+        region: input.region,
+        country_name: input.countryName,
+        category: input.category,
+        reason: "CLIMATIQ_API_ERROR",
+        message: err?.response?.data?.message || err?.message || "Climatiq API call failed",
+      };
+    }
   }
+  // ─────────────────────────────────────────────────────────────────────────
 
   console.log(`\nSearching Climatiq...`);
   console.log(`Category:\n${input.category}`);
