@@ -2034,7 +2034,6 @@ export async function generateInvoiceEmissionReports(payload: any) {
       "--disable-dev-shm-usage",
       "--disable-gpu",
       "--no-zygote",
-      "--single-process",
     ],
   });
 
@@ -2045,30 +2044,24 @@ export async function generateInvoiceEmissionReports(payload: any) {
     // IMPORTANT SPEED FIX:
     // Earlier code launched Puppeteer twice: once for BRSR and once for CBAM.
     // That is very slow on Render. Now both PDFs share one browser instance.
-    const [brsrReport, cbamReport] = await Promise.all([
-      (async () => {
-        const start = Date.now();
-        try {
-          const res = await generatePdfFromHtml(brsrHtml, "CS-BRSR", browser);
-          console.log(`[Timing] BRSR report generation time: ${Date.now() - start}ms`);
-          return res;
-        } catch (err) {
-          console.error("BRSR report generation failed:", err);
-          return { reportUrl: "" };
-        }
-      })(),
-      (async () => {
-        const start = Date.now();
-        try {
-          const res = await generatePdfFromHtml(cbamHtml, "CS-CBAM", browser);
-          console.log(`[Timing] CBAM report generation time: ${Date.now() - start}ms`);
-          return res;
-        } catch (err) {
-          console.error("CBAM report generation failed:", err);
-          return { reportUrl: "" };
-        }
-      })(),
-    ]);
+    // Execute sequentially to avoid Puppeteer Target closed errors
+    const startBrsr = Date.now();
+    let brsrReport = { reportUrl: "" };
+    try {
+      brsrReport = await generatePdfFromHtml(brsrHtml, "CS-BRSR", browser);
+      console.log(`[Timing] BRSR report generation time: ${Date.now() - startBrsr}ms`);
+    } catch (err) {
+      console.error("BRSR report generation failed:", err);
+    }
+
+    const startCbam = Date.now();
+    let cbamReport = { reportUrl: "" };
+    try {
+      cbamReport = await generatePdfFromHtml(cbamHtml, "CS-CBAM", browser);
+      console.log(`[Timing] CBAM report generation time: ${Date.now() - startCbam}ms`);
+    } catch (err) {
+      console.error("CBAM report generation failed:", err);
+    }
 
     console.log(`[Timing] total report generation time: ${Date.now() - reportsStart}ms`);
 

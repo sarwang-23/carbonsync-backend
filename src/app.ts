@@ -21,6 +21,32 @@ app.use("/api/erp", erpRoutes);
 app.use("/api/affinda", affindaTestRoutes);
 import path from "path";
 app.use("/reports", express.static(path.join(process.cwd(), "reports")));
+import { generateInvoiceEmissionReports } from "./services/Report.service.js";
+
+app.post("/api/generate-invoice-report", async (req, res) => {
+  try {
+    const payload = req.body;
+    if (!payload) {
+      return res.status(400).json({ success: false, message: "Payload is required" });
+    }
+    
+    const reports = await generateInvoiceEmissionReports(payload);
+    return res.json({
+      success: true,
+      reportUrls: {
+        brsr: reports.brsr?.reportUrl || null,
+        cbam: reports.cbam?.reportUrl || null,
+      }
+    });
+  } catch (error: any) {
+    console.error("Report generation failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Report generation failed",
+      error: error.message
+    });
+  }
+});
 
 app.post("/api/test/germany-emission", async (req, res) => {
   try {
