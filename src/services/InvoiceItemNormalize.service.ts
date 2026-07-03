@@ -125,10 +125,10 @@ export function normalizeInvoiceItems(
 
     const detectedCategory = detectCategoryFromText(itemName);
 
-    // Try structured quantity first, then extract from text
+    // Prioritize regex-extracted quantity/unit since Mistral often defaults to "1 each"
     const extracted = extractQuantityFromText(itemName);
-    const value = item.quantity || extracted.value || null;
-    const unit = item.unit || extracted.unit || null;
+    const value = extracted.value ?? item.quantity ?? null;
+    const unit = extracted.unit ?? item.unit ?? null;
 
     // Apply override rules to catch extraction-induced misclassification
     const category = resolveCategory(detectedCategory, itemName, unit, vendorName);

@@ -33,8 +33,8 @@ function pickBestKwhCandidate(candidates: number[]) {
  * while the final total is 2169. This resolver prioritizes totals and
  * meter-difference rows over the first tariff block.
  */
-export function resolveElectricityKwhFromText(rawText: string): number {
-    const original = String(rawText || "");
+export function resolveElectricityKwhFromText(rawText: string, itemText?: string): number {
+    const original = String(`${rawText || ""} ${itemText || ""}`);
     const clean = original.replace(/,/g, "").replace(/\s+/g, " ");
     const candidates: number[] = [];
 
@@ -239,7 +239,8 @@ export function resolveLineItemQuantities(input: {
         const category = classification.category;
 
         if (category === "electricity_bill") {
-            const kwh = resolveElectricityKwhFromText(rawText);
+            const itemText = `${item?.item_name || ""} ${item?.description || ""}`;
+            const kwh = resolveElectricityKwhFromText(rawText, itemText);
 
             if (shouldOverrideElectricity(item, kwh)) {
                 return {
@@ -252,11 +253,24 @@ export function resolveLineItemQuantities(input: {
                         energy_kwh: kwh,
                         energy_unit: "kWh",
                         quantity_resolved: true,
-                        quantity_resolution_method: "electricity_total_or_meter_difference",
-                        original_extracted_quantity: item?.quantity ?? null,
-                        original_extracted_unit: item?.unit ?? null,
+                        quantity_resolution_method: "resolved_electricity_from_text",
                     },
                 };
+            } else if (!item.quantity || item.quantity <= 0) {
+                // If it couldn't be resolved from text, but there's a quantity in the item name, try grabbing it simply.
+                const fallbackMatch = itemText.match(/([\d,]+(?:\.\d+)?)\s*kwh/i);
+                if (fallbackMatch?.[1]) {
+                     return {
+                        ...item,
+                        quantity: toNumber(fallbackMatch[1]),
+                        unit: "kWh",
+                        parameters: {
+                            ...(item.parameters || {}),
+                            quantity_resolved: true,
+                            quantity_resolution_method: "fallback_electricity_from_item_name",
+                        },
+                    };
+                }
             }
         }
 
