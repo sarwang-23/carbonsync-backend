@@ -314,6 +314,9 @@ async function findLocalOfficialFactor(params: {
     [params.region, params.category, params.itemName, normalizedInputUnit, auState, ukFlightType]
   );
 
+  console.log("TOTAL ROWS =", result.rows.length);
+  console.log(result.rows);
+
   const rows = result.rows || [];
 
   const exactUnit = rows.find((row) =>
@@ -940,6 +943,17 @@ export async function processInvoiceEmissions(
         description: item.description,
         invoiceText: input.invoice_text,   // full PDF text for AU state fallback
       });
+
+      console.log("=================================");
+      console.log("FACTOR LOOKUP START");
+      console.log({
+          region: input.region,
+          category: item.category,
+          unit: item.unit,
+          item_name: item.item_name
+      });
+      console.log("FOUND FACTOR =", factor);
+      console.log("=================================");
 
       if (!factor) {
         const fallbackResult = await calculateWithClimatiqFallback({
