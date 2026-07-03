@@ -234,18 +234,130 @@ export async function calculateIndiaClimatiqFallback(
 ) {
   const mapping = await getIndiaFallbackMapping(input.category);
 
+  // ── No DB mapping: infer defaults and still try Climatiq search ──────────
   if (!mapping) {
-    return {
-      success: false,
-      status: "review",
-      source_engine: "climatiq",
-      region: "IN",
-      country_name: "India",
+    console.log(`[IN] No DB mapping for "${input.category}" — attempting direct Climatiq search`);
+
+    const cleanItemName = input.itemName
+      .replace(/[^a-zA-Z\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(" ")
+      .slice(0, 3)
+      .join(" ");
+
+    // Infer parameter based on category lists
+    let inferredParameterName = "weight";
+    let inferredParameterUnit = "kg";
+    if (ENERGY_CATEGORIES.includes(input.category)) {
+      inferredParameterName = "energy";
+      inferredParameterUnit = "kWh";
+    } else if (VOLUME_CATEGORIES.includes(input.category)) {
+      inferredParameterName = "volume";
+      inferredParameterUnit = "m3";
+    } else if (DISTANCE_CATEGORIES.includes(input.category)) {
+      inferredParameterName = "distance";
+      inferredParameterUnit = "km";
+    }
+
+    // Convert value using inferred parameter
+    const converted = convertForClimatiq({
       category: input.category,
-      reason: "NO_INDIA_CLIMATIQ_MAPPING",
-      message: `No India Climatiq fallback mapping found for category: ${input.category}`,
-    };
+      value: input.value,
+      unit: input.unit,
+      expectedParameterName: inferredParameterName,
+      expectedParameterUnit: inferredParameterUnit,
+    });
+
+    // Search IN → GLO → RoW
+    let searchedFactor: any = null;
+    let targetRegion: string | undefined = "IN";
+
+    const searchQuery = `${input.category} ${cleanItemName}`;
+    const genericQuery = input.category;
+
+    searchedFactor = await searchClimatiqFactor({ query: searchQuery, region: "IN", dataVersion: "^6", resultsPerPage: 10 });
+    if (!searchedFactor?.activity_id) {
+      searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "IN", dataVersion: "^6", resultsPerPage: 1 });
+    }
+
+    if (!searchedFactor?.activity_id) {
+      searchedFactor = await searchClimatiqFactor({ query: searchQuery, region: "GLO", dataVersion: "^6", resultsPerPage: 10 });
+      if (!searchedFactor?.activity_id) {
+        searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "GLO", dataVersion: "^6", resultsPerPage: 1 });
+      }
+      if (searchedFactor?.activity_id) targetRegion = "GLO";
+    }
+
+    if (!searchedFactor?.activity_id) {
+      searchedFactor = await searchClimatiqFactor({ query: searchQuery, region: "RoW", dataVersion: "^6", resultsPerPage: 10 });
+      if (!searchedFactor?.activity_id) {
+        searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "RoW", dataVersion: "^6", resultsPerPage: 1 });
+      }
+      if (searchedFactor?.activity_id) targetRegion = "RoW";
+    }
+
+    if (!searchedFactor?.activity_id) {
+      return {
+        success: false,
+        status: "review",
+        source_engine: "climatiq",
+        region: "IN",
+        country_name: "India",
+        category: input.category,
+        reason: "NO_INDIA_CLIMATIQ_MAPPING",
+        message: `No Climatiq factor found for category: ${input.category} (IN/GLO/RoW)`,
+      };
+    }
+
+    console.log(`[IN] No-mapping Climatiq search found: ${searchedFactor.activity_id} (region: ${targetRegion})`);
+
+    try {
+      const climatiqResult = await estimateWithClimatiqDirect({
+        activityId: searchedFactor.activity_id,
+        parameterName: converted.parameterName,
+        value: converted.value,
+        parameterUnit: converted.parameterUnit,
+        dataVersion: "^6",
+        region: targetRegion,
+      });
+
+      return {
+        success: true,
+        status: "calculated",
+        source_engine: "climatiq",
+        preferred_source: "Climatiq",
+        region: "IN",
+        country_name: "India",
+        category: input.category,
+        item_name: input.itemName,
+        input_value: input.value,
+        input_unit: input.unit,
+        converted,
+        activity_id: searchedFactor.activity_id,
+        parameter_name: converted.parameterName,
+        parameter_unit: converted.parameterUnit,
+        co2e: climatiqResult.co2e,
+        co2e_unit: climatiqResult.co2e_unit,
+        factor_name: climatiqResult.factor_name,
+        factor_source: climatiqResult.factor_source,
+        factor_region: climatiqResult.factor_region,
+        raw: climatiqResult.raw,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        status: "review",
+        source_engine: "climatiq",
+        region: "IN",
+        country_name: "India",
+        category: input.category,
+        reason: "CLIMATIQ_API_ERROR",
+        message: err.message || "Climatiq API call failed",
+      };
+    }
   }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const converted = convertForClimatiq({
     category: input.category,
