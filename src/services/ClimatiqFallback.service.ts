@@ -373,11 +373,75 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
   }
   // ─────────────────────────────────────────────────────────────────────────
 
+  // mapping found path — convert units and get activityId
+  const converted = convertForClimatiq({
+    category: input.category,
+    value: input.value,
+    unit: input.unit,
+    expectedParameterName: mapping.parameter_name,
+    expectedParameterUnit: mapping.parameter_unit,
+  });
+
+  if ((converted as any).review_required) {
+    return {
+      success: false,
+      status: "review",
+      source_engine: "climatiq",
+      region: input.region,
+      country_name: input.countryName,
+      category: input.category,
+      reason: (converted as any).reason,
+      message: `Unit conversion not supported for ${input.category}: ${input.unit}`,
+    };
+  }
+
+  let activityId = mapping.activity_id;
+
+  if (!activityId) {
+    const cleanItemName = input.itemName
+      .replace(/[^a-zA-Z\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(" ")
+      .slice(0, 3)
+      .join(" ");
+
+    const searchQuery = `${input.category} ${cleanItemName}`;
+    const genericQuery = `${input.category}`;
+
+    let searchedFactor = await searchClimatiqFactor({
+      query: searchQuery,
+      region: input.region,
+      dataVersion: mapping.data_version || "^6",
+      resultsPerPage: 10,
+    });
+
+    if (!searchedFactor?.activity_id) {
+      searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: input.region, dataVersion: mapping.data_version || "^6", resultsPerPage: 1 });
+    }
+
+    if (!searchedFactor?.activity_id) {
+      return {
+        success: false,
+        status: "review",
+        source_engine: "climatiq",
+        region: input.region,
+        country_name: input.countryName,
+        category: input.category,
+        reason: "CLIMATIQ_FACTOR_NOT_FOUND",
+        message: `No Climatiq factor found for ${input.region}/${input.category}`,
+      };
+    }
+
+    activityId = searchedFactor.activity_id;
+  }
+
   console.log(`\nSearching Climatiq...`);
   console.log(`Category:\n${input.category}`);
   console.log(`Region:\n${input.region}`);
   console.log(`Unit:\n${input.unit}`);
   console.log(`Activity sent:\n${activityId}`);
+
 
   // These categories have no region-specific Climatiq factors — use global (omit region)
   // petrol, lpg: Climatiq only has global factors for these fuels
