@@ -27,6 +27,10 @@ export type DetectedCategory =
     | "district_heating"
     | "steel"
     | "cement"
+    | "natural_gas"
+    | "lpg"
+    | "diesel"
+    | "petrol"
     | "unknown";
 
 export interface ClassificationResult {

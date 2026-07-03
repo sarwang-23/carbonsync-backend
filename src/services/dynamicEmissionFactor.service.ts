@@ -55,6 +55,10 @@ type DetectedCategory =
     | "hotel"
     | "steel"
     | "cement"
+    | "natural_gas"
+    | "lpg"
+    | "diesel"
+    | "petrol"
     | "unknown";
 
 
