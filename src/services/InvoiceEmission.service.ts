@@ -950,14 +950,21 @@ export async function processInvoiceEmissions(
       }
 
       // ── US / GB / FR / AU ─── local official_emission_factors DB route ─────
-      const factor = await findLocalOfficialFactor({
-        region: input.region,
-        category: item.category,
-        unit: item.unit,
-        itemName: item.item_name,
-        description: item.description,
-        invoiceText: input.invoice_text,   // full PDF text for AU state fallback
-      });
+      console.log(">>> CALLING findLocalOfficialFactor for region:", input.region, "category:", item.category);
+      let factor: any = null;
+      try {
+        factor = await findLocalOfficialFactor({
+          region: input.region,
+          category: item.category,
+          unit: item.unit,
+          itemName: item.item_name,
+          description: item.description,
+          invoiceText: input.invoice_text,   // full PDF text for AU state fallback
+        });
+      } catch (dbErr: any) {
+        console.error(">>> findLocalOfficialFactor DB ERROR:", dbErr.message);
+        console.error(">>> DB ERROR STACK:", dbErr.stack);
+      }
 
       console.log("=================================");
       console.log("FACTOR LOOKUP START");

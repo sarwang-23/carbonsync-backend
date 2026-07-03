@@ -1,4 +1,11 @@
 import "dotenv/config";
+
+console.log("DB CONFIG =", {
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+  port: process.env.DB_PORT,
+});
 import express from "express";
 import cors from "cors";
 import erpRoutes from "./routes/erp.routes.js";
