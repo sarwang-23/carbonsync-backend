@@ -4,6 +4,7 @@ import { calculateWithClimatiqFallback } from "./ClimatiqFallback.service.js";
 import { normalizeUnit } from "./UnitConversion.service.js";
 import { pool } from "../db.js";
 import { smartRailLookup } from "./IndiaRailwayRouteDB.js";
+import { fallbackLookup } from "./fallback/fallback.service.js";
 
 type InvoiceEmissionItem = {
   item_name: string;
@@ -988,6 +989,20 @@ export async function processInvoiceEmissions(
         });
 
         if (!fallbackResult.success) {
+          const fallback = await fallbackLookup({
+            region: input.region,
+            countryName: input.country_name,
+            category: item.category,
+            itemName: item.item_name,
+            value: Number(item.value),
+            unit: item.unit,
+          });
+          
+          if (fallback) {
+            // Future logic for successful fallback
+            // For now, it returns null, so it falls through to review.
+          }
+
           reviewCount++;
 
           results.push({
