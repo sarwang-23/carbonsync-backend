@@ -264,8 +264,23 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
       .slice(0, 3)
       .join(" ");
 
+    const CLIMATIQ_CATEGORY_MAPPING: Record<string, string> = {
+      "finished_steel": "steel",
+      "semi_finished_steel": "steel",
+      "raw_material_steel": "steel",
+      "stainless_steel": "stainless steel",
+      "alloy_steel": "alloy steel",
+      "pig_iron": "pig iron",
+      "dri": "direct reduced iron",
+      "billet": "steel billet",
+      "bloom": "steel bloom",
+      "slab": "steel slab",
+      "steel_scrap": "steel scrap",
+      "ferro_alloy": "ferro alloy"
+    };
+
     // Infer parameter based on common category groups
-    const WEIGHT_CATS = ["steel", "aluminium", "textile", "electrical", "lpg", "coal", "cement", "concrete", "glass", "plastic", "paper", "wood", "food", "chemicals", "refrigerant", "waste", "purchased_goods"];
+    const WEIGHT_CATS = ["steel", "finished_steel", "semi_finished_steel", "raw_material_steel", "stainless_steel", "alloy_steel", "aluminium", "textile", "electrical", "lpg", "coal", "cement", "concrete", "glass", "plastic", "paper", "wood", "food", "chemicals", "refrigerant", "waste", "purchased_goods"];
     const ENERGY_CATS = ["electricity", "diesel", "petrol", "natural_gas", "district_heating"];
     const VOLUME_CATS = ["water", "natural_gas"];
     const DISTANCE_CATS = ["transport", "freight", "flight", "railway"];
@@ -299,8 +314,9 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
     let searchedFactor: any = null;
     let targetRegion: string | undefined = input.region;
 
-    const searchQuery = `${input.category} ${cleanItemName}`;
-    const genericQuery = input.category;
+    const searchCategory = CLIMATIQ_CATEGORY_MAPPING[input.category] || input.category;
+    const searchQuery = `${searchCategory} ${cleanItemName}`;
+    const genericQuery = searchCategory;
 
     searchedFactor = await searchClimatiqFactor({ query: searchQuery, region: input.region, dataVersion: "^6", resultsPerPage: 10 });
     if (!searchedFactor?.activity_id) {
@@ -447,8 +463,23 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
       .slice(0, 3)
       .join(" ");
 
-    const searchQuery = `${input.category} ${cleanItemName}`;
-    const genericQuery = `${input.category}`;
+    const CLIMATIQ_CATEGORY_MAPPING: Record<string, string> = {
+      "finished_steel": "steel",
+      "semi_finished_steel": "steel",
+      "raw_material_steel": "steel",
+      "stainless_steel": "stainless steel",
+      "alloy_steel": "alloy steel",
+      "pig_iron": "pig iron",
+      "dri": "direct reduced iron",
+      "billet": "steel billet",
+      "bloom": "steel bloom",
+      "slab": "steel slab",
+      "steel_scrap": "steel scrap",
+      "ferro_alloy": "ferro alloy"
+    };
+    const searchCategory = CLIMATIQ_CATEGORY_MAPPING[input.category] || input.category;
+    const searchQuery = `${searchCategory} ${cleanItemName}`;
+    const genericQuery = `${searchCategory}`;
 
     let searchedFactor = await searchClimatiqFactor({
       query: searchQuery,

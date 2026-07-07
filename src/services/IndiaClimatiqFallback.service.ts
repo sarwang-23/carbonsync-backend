@@ -10,8 +10,28 @@ type IndiaClimatiqFallbackInput = {
   unit: string;
 };
 
+const CLIMATIQ_CATEGORY_MAPPING: Record<string, string> = {
+  "finished_steel": "steel",
+  "semi_finished_steel": "steel",
+  "raw_material_steel": "steel",
+  "stainless_steel": "stainless steel",
+  "alloy_steel": "alloy steel",
+  "pig_iron": "pig iron",
+  "dri": "direct reduced iron",
+  "billet": "steel billet",
+  "bloom": "steel bloom",
+  "slab": "steel slab",
+  "steel_scrap": "steel scrap",
+  "ferro_alloy": "ferro alloy"
+};
+
 const WEIGHT_CATEGORIES = [
   "steel",
+  "finished_steel",
+  "semi_finished_steel",
+  "raw_material_steel",
+  "stainless_steel",
+  "alloy_steel",
   "aluminium",
   "textile",
   "electrical",
@@ -273,8 +293,9 @@ export async function calculateIndiaClimatiqFallback(
     let searchedFactor: any = null;
     let targetRegion: string | undefined = "IN";
 
-    const searchQuery = `${input.category} ${cleanItemName}`;
-    const genericQuery = input.category;
+    const searchCategory = CLIMATIQ_CATEGORY_MAPPING[input.category] || input.category;
+    const searchQuery = `${searchCategory} ${cleanItemName}`;
+    const genericQuery = searchCategory;
 
     searchedFactor = await searchClimatiqFactor({ query: searchQuery, region: "IN", dataVersion: "^6", resultsPerPage: 10 });
     if (!searchedFactor?.activity_id) {
@@ -431,9 +452,10 @@ export async function calculateIndiaClimatiqFallback(
     // MS / TMT / billet / round bar → generic "steel bars rods" to avoid
     // picking up "alloy steel forged" factors for ordinary mild steel.
     let searchQuery: string;
-    let genericQuery: string = input.category;
+    const searchCategory = CLIMATIQ_CATEGORY_MAPPING[input.category] || input.category;
+    let genericQuery: string = searchCategory;
 
-    if (input.category === "steel") {
+    if (input.category === "steel" || input.category === "finished_steel" || input.category === "semi_finished_steel") {
       const nameLower = input.itemName.toLowerCase();
       if (
         nameLower.includes("ms billet") ||
@@ -452,7 +474,7 @@ export async function calculateIndiaClimatiqFallback(
         searchQuery = `steel ${cleanItemName}`;
       }
     } else {
-      searchQuery = `${input.category} ${cleanItemName} India`;
+      searchQuery = `${searchCategory} ${cleanItemName} India`;
     }
     // ─────────────────────────────────────────────────────────────────────
 
