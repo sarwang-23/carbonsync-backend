@@ -1,4 +1,5 @@
 import fs from "fs";
+import axios from "axios";
 import { Mistral } from "@mistralai/mistralai";
 import type { NormalizedInvoice, NormalizedInvoiceItem } from "../types/invoice.types.js";
 
@@ -35,12 +36,10 @@ function safeNumber(value: any): number | null {
 
 function getMimeType(filePath: string) {
   const lower = filePath.toLowerCase();
-
   if (lower.endsWith(".pdf")) return "application/pdf";
   if (lower.endsWith(".png")) return "image/png";
   if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
   if (lower.endsWith(".webp")) return "image/webp";
-
   return "application/pdf";
 }
 
@@ -85,19 +84,52 @@ function normalizeMistralInvoice(parsed: any, rawResponse: any): NormalizedInvoi
   };
 }
 
-export async function extractInvoiceWithMistral(filePath: string): Promise<NormalizedInvoice> {
-  if (!MISTRAL_API_KEY) {
-    throw new Error("MISTRAL_API_KEY missing");
-  }
-
+/**
+ * Step 1: Mistral OCR API — PDF/image se raw text extract karo.
+ * Agar OCR fail ho toh empty string return karo (chat step gracefully handle karega).
+ */
+async function extractTextWithMistralOCR(filePath: string): Promise<string> {
   const fileBuffer = fs.readFileSync(filePath);
   const base64 = fileBuffer.toString("base64");
   const mimeType = getMimeType(filePath);
 
-  const prompt = `
-You are an invoice extraction engine.
+  try {
+    const response = await axios.post(
+      "https://api.mistral.ai/v1/ocr",
+      {
+        model: "mistral-ocr-latest",
+        document: {
+          type: "document_url",
+          document_url: `data:${mimeType};base64,${base64}`
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${MISTRAL_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 60000
+      }
+    );
 
-Extract invoice data from this document.
+    // OCR response: pages array with markdown content
+    const pages: any[] = response.data?.pages || [];
+    const fullText = pages.map((p: any) => p.markdown || p.text || "").join("\n\n");
+    console.log(`[Mistral OCR] Extracted ${fullText.length} chars from ${pages.length} page(s)`);
+    return fullText;
+  } catch (err: any) {
+    console.warn("[Mistral OCR] OCR step failed:", err?.response?.data || err.message);
+    return "";
+  }
+}
+
+/**
+ * Step 2: Mistral Chat — extracted text ko structured JSON me parse karo.
+ */
+async function extractJsonWithMistralChat(rawText: string): Promise<{ parsed: any; raw: any }> {
+  const prompt = `You are an invoice extraction engine.
+
+Extract invoice data from the following document text.
 
 Return ONLY valid JSON with this structure:
 
@@ -157,32 +189,18 @@ Rules:
   * "passengers": number of passengers (default 1)
   * "travel_class": (e.g. "Economy")
   IGNORE line items like taxes, convenience fee, discount, baggage, seat, meal, insurance. ONLY extract the actual flight travel item.
-`;
+
+--- DOCUMENT TEXT START ---
+${rawText || "(No text extracted — document may be scanned or empty)"}
+--- DOCUMENT TEXT END ---`;
 
   const response = await client.chat.complete({
     model: MISTRAL_MODEL,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: prompt
-          },
-          {
-            type: "image_url",
-            imageUrl: `data:${mimeType};base64,${base64}`
-          } as any
-        ]
-      }
-    ],
-    responseFormat: {
-      type: "json_object"
-    } as any
+    messages: [{ role: "user", content: prompt }],
+    responseFormat: { type: "json_object" } as any
   });
 
   const content = response.choices?.[0]?.message?.content;
-
   const text =
     typeof content === "string"
       ? content
@@ -190,7 +208,19 @@ Rules:
         ? content.map((c: any) => c.text || "").join("")
         : "";
 
-  const parsed = safeJsonParse(text);
+  return { parsed: safeJsonParse(text), raw: response };
+}
 
-  return normalizeMistralInvoice(parsed, response);
+export async function extractInvoiceWithMistral(filePath: string): Promise<NormalizedInvoice> {
+  if (!MISTRAL_API_KEY) {
+    throw new Error("MISTRAL_API_KEY missing");
+  }
+
+  // Step 1: OCR — PDF/image se text extract karo
+  const rawText = await extractTextWithMistralOCR(filePath);
+
+  // Step 2: Chat — raw text ko structured JSON me convert karo
+  const { parsed, raw } = await extractJsonWithMistralChat(rawText);
+
+  return normalizeMistralInvoice(parsed, raw);
 }
