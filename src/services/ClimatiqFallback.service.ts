@@ -202,6 +202,15 @@ function convertForClimatiq(input: {
     };
   }
 
+  if (input.expectedParameterName === "number") {
+    return {
+      value: input.value,
+      parameterName: "number",
+      parameterUnit: input.expectedParameterUnit || input.unit,
+      converted: false,
+    };
+  }
+
   return {
     value: input.value,
     parameterName: input.expectedParameterName || "energy",
@@ -257,9 +266,10 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
 
     // Infer parameter based on common category groups
     const WEIGHT_CATS = ["steel", "aluminium", "textile", "electrical", "lpg", "coal", "cement", "concrete", "glass", "plastic", "paper", "wood", "food", "chemicals", "refrigerant", "waste", "purchased_goods"];
-    const ENERGY_CATS = ["electricity", "diesel", "petrol", "natural_gas"];
+    const ENERGY_CATS = ["electricity", "diesel", "petrol", "natural_gas", "district_heating"];
     const VOLUME_CATS = ["water", "natural_gas"];
     const DISTANCE_CATS = ["transport", "freight", "flight", "railway"];
+    const NUMBER_CATS = ["hotel"];
 
     let inferredParameterName = "weight";
     let inferredParameterUnit = "kg";
@@ -272,6 +282,9 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
     } else if (DISTANCE_CATS.includes(input.category)) {
       inferredParameterName = "distance";
       inferredParameterUnit = "km";
+    } else if (NUMBER_CATS.includes(input.category)) {
+      inferredParameterName = "number";
+      inferredParameterUnit = "room";
     }
 
     const converted = convertForClimatiq({

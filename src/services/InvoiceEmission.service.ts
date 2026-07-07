@@ -998,9 +998,38 @@ export async function processInvoiceEmissions(
             unit: item.unit,
           });
           
-          if (fallback) {
-            // Future logic for successful fallback
-            // For now, it returns null, so it falls through to review.
+          if (fallback && fallback.success) {
+            const localCalc = calculateWithLocalFactor(Number(item.value), item.unit, fallback.factor);
+            
+            if (localCalc.success) {
+              const calcResult = localCalc as any;
+              calculatedCount++;
+              totalCo2e += calcResult.co2e || 0;
+              
+              results.push({
+                item_name: item.item_name,
+                category: item.category,
+                value: item.value,
+                unit: item.unit,
+                status: "calculated",
+                source_engine: "fuzzy_fallback",
+                preferred_source: "Official DB Fuzzy Match",
+                region: input.region,
+                country_name: input.country_name,
+                factor_name: fallback.factor.name,
+                factor_value: fallback.factor.factor,
+                factor_unit: fallback.factor.unit,
+                source_dataset: fallback.factor.source_dataset,
+                activity_id: fallback.factor.activity_id,
+                converted: calcResult.converted,
+                co2e: calcResult.co2e,
+                co2e_unit: calcResult.co2e_unit,
+                confidence_score: fallback.confidence_score,
+                match_type: fallback.match_type,
+                warning: fallback.warning,
+              });
+              continue;
+            }
           }
 
           reviewCount++;
