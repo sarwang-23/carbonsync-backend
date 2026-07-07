@@ -1185,17 +1185,18 @@ export async function processInvoiceEmissions(
     }
   }
 
+  const emissionItems = results.filter(item => item.status !== "ignored");
+
   return {
     success: failedCount === 0,
     region: input.region,
     country_name: input.country_name,
-    total_items: input.items.length,
+    total_items: emissionItems.length,
     calculated_count: calculatedCount,
     review_count: reviewCount,
-    ignored_count: ignoredCount,
     failed_count: failedCount,
     total_co2e: Number(totalCo2e.toFixed(6)),
     total_co2e_unit: "kg",
-    results,
+    results: emissionItems,
   };
 }
