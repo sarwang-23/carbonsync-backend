@@ -2,34 +2,118 @@ export function detectCategoryFromText(text: string): string {
   const lower = text.toLowerCase();
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PRIORITY 0: Industry-specific raw materials — MUST be BEFORE generic steel/coal
-  // to prevent Iron Ore → steel, Coke → coal (wrong mapping) etc.
+  // PRIORITY 0: Industry-specific raw materials & intermediates
+  // Must run BEFORE generic steel/coal to prevent misclassification
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // ── Iron Ore (raw mining material — NOT finished steel) ───────────────────
+  // 1. Iron Ore
   if (
     lower.includes("iron ore") ||
     lower.includes("iron ore fines") ||
     lower.includes("iron ore lumps") ||
-    lower.includes("iron ore pellet") ||
+    lower.includes("iron ore pellets") ||
+    lower.includes("iron ore concentrate") ||
     lower.includes("ore fines") ||
     lower.includes("ore lumps") ||
+    lower.includes("sinter feed") ||
+    lower.includes("pellet feed") ||
     lower.includes("magnetite") ||
     lower.includes("hematite") ||
-    lower.includes("sinter feed") ||
-    lower.includes("lump ore") ||
-    lower.includes("pellet feed") ||
-    lower.includes("sponge iron") ||
-    lower.includes("pig iron") ||
-    lower.includes("direct reduced iron") ||
-    /\bdri\b/.test(lower) ||
-    lower.includes("hot briquetted iron") ||
-    /\bhbi\b/.test(lower)
+    lower.includes("beneficiated ore") ||
+    lower.includes("iron concentrate") ||
+    lower.includes("lump ore")
   ) {
     return "iron_ore";
   }
 
-  // ── Ferro Alloys ─────────────────────────────────────────────────────────
+  // 2. Direct Reduced Iron (DRI) / Sponge Iron
+  if (
+    lower.includes("dri") ||
+    lower.includes("direct reduced iron") ||
+    lower.includes("sponge iron") ||
+    lower.includes("hot briquetted iron") ||
+    lower.includes("hbi") ||
+    lower.includes("cold dri")
+  ) {
+    return "dri";
+  }
+
+  // 3. Pig Iron
+  if (
+    lower.includes("pig iron") ||
+    lower.includes("basic pig iron") ||
+    lower.includes("foundry pig iron") ||
+    lower.includes("steel grade pig iron")
+  ) {
+    return "pig_iron";
+  }
+
+  // 4. Coke
+  if (
+    lower.includes("coke breeze") ||
+    lower.includes("met coke") ||
+    lower.includes("metallurgical coke") ||
+    lower.includes("nut coke") ||
+    lower.includes("foundry coke") ||
+    lower.includes("blast furnace coke") ||
+    lower.includes("bf coke") ||
+    lower.includes("coke fines") ||
+    lower.includes("green coke") ||
+    lower.includes("calcined coke") ||
+    lower.includes("pet coke") ||
+    lower.includes("petroleum coke") ||
+    lower.includes("coke nut") ||
+    lower.includes("pearl coke") ||
+    // precise match for standalone 'coke'
+    /\bcoke\b/.test(lower) && !lower.includes("coca") 
+  ) {
+    return "coke";
+  }
+
+  // 5. Dolomite
+  if (
+    lower.includes("dolomite") ||
+    lower.includes("dolomite chips") ||
+    lower.includes("dolomite powder") ||
+    lower.includes("raw dolomite") ||
+    lower.includes("burnt dolomite") ||
+    lower.includes("calcined dolomite")
+  ) {
+    return "dolomite";
+  }
+
+  // 6. Limestone
+  if (
+    lower.includes("limestone") ||
+    lower.includes("limestone chips") ||
+    lower.includes("limestone powder") ||
+    lower.includes("lime stone") ||
+    lower.includes("dolomite limestone") ||
+    lower.includes("calcite") ||
+    lower.includes("crushed limestone") ||
+    lower.includes("high calcium limestone") ||
+    lower.includes("flux limestone") ||
+    lower.includes("calcium carbonate") ||
+    lower.includes("magnesium carbonate") ||
+    lower.includes("flux stone")
+  ) {
+    return "limestone";
+  }
+
+  // 7. Lime
+  if (
+    lower.includes("quick lime") ||
+    lower.includes("quicklime") ||
+    lower.includes("hydrated lime") ||
+    lower.includes("burnt lime") ||
+    lower.includes("calcined lime") ||
+    lower.includes("cao") ||
+    lower.includes("calcium oxide")
+  ) {
+    return "lime";
+  }
+
+  // 8. Ferro Alloys
   if (
     lower.includes("ferro silicon") ||
     lower.includes("ferrosilicon") ||
@@ -46,70 +130,132 @@ export function detectCategoryFromText(text: string): string {
     lower.includes("ferrochrome") ||
     lower.includes("fe-cr") ||
     lower.includes("fecr") ||
+    lower.includes("low carbon ferro chrome") ||
+    lower.includes("high carbon ferro chrome") ||
+    lower.includes("ferro nickel") ||
+    lower.includes("ferro vanadium") ||
+    lower.includes("ferro titanium") ||
+    lower.includes("ferro boron") ||
+    lower.includes("ferro phosphorus") ||
+    lower.includes("ferro molybdenum") ||
+    lower.includes("ferro tungsten") ||
+    lower.includes("ferro niobium") ||
+    lower.includes("ferro zirconium") ||
+    lower.includes("ferro aluminium") ||
+    lower.includes("ferro cobalt") ||
     lower.includes("ferro alloy") ||
     lower.includes("ferroalloy") ||
-    lower.includes("ferro titanium") ||
-    lower.includes("ferro molybdenum") ||
-    lower.includes("ferro vanadium") ||
-    lower.includes("ferro boron") ||
-    lower.includes("ferro niobium") ||
     lower.includes("calcium silicide") ||
     lower.includes("cored wire")
   ) {
     return "ferro_alloy";
   }
 
-  // ── Limestone & Minerals ─────────────────────────────────────────────────
+  // 9. Scrap (Steel Scrap)
   if (
-    lower.includes("limestone") ||
-    lower.includes("lime stone") ||
-    lower.includes("dolomite") ||
-    lower.includes("quick lime") ||
-    lower.includes("quicklime") ||
-    lower.includes("hydrated lime") ||
-    lower.includes("calcined lime") ||
-    lower.includes("burnt lime") ||
-    lower.includes("calcium carbonate") ||
-    lower.includes("calcium oxide") ||
-    lower.includes("magnesium carbonate") ||
-    lower.includes("calcite") ||
-    lower.includes("flux stone")
-  ) {
-    return "limestone";
-  }
-
-  // ── Metallurgical Coke (steel industry input — NOT thermal coal) ──────────
-  if (
-    lower.includes("coke breeze") ||
-    lower.includes("met coke") ||
-    lower.includes("metallurgical coke") ||
-    lower.includes("bf coke") ||
-    lower.includes("blast furnace coke") ||
-    lower.includes("coke nut") ||
-    lower.includes("pearl coke") ||
-    lower.includes("foundry coke") ||
-    lower.includes("petroleum coke") ||
-    lower.includes("pet coke") ||
-    lower.includes("petcoke")
-  ) {
-    return "coal"; // Mapped to coal category (Climatiq has coke under coal EFs)
-  }
-
-  // ── Scrap Metal ──────────────────────────────────────────────────────────
-  if (
-    lower.includes("scrap metal") ||
     lower.includes("steel scrap") ||
-    lower.includes("iron scrap") ||
-    lower.includes("metal scrap") ||
     lower.includes("ms scrap") ||
+    lower.includes("heavy melting scrap") ||
+    lower.includes("hms") ||
     lower.includes("shredded scrap") ||
-    lower.includes("hms scrap") ||
-    lower.includes("heavy melting scrap")
+    lower.includes("plate scrap") ||
+    lower.includes("turnings") ||
+    lower.includes("busheling") ||
+    lower.includes("pig iron scrap") ||
+    lower.includes("iron scrap") ||
+    lower.includes("cast iron scrap") ||
+    lower.includes("recycled steel") ||
+    lower.includes("metal scrap") ||
+    lower.includes("scrap metal")
   ) {
-    return "scrap_metal";
+    return "steel_scrap";
   }
 
-  // ── Bauxite & Alumina (aluminium production inputs) ──────────────────────
+  // 10. Semi-Finished (Billet, Bloom, Slab)
+  if (
+    lower.includes("billet") ||
+    lower.includes("steel billet") ||
+    lower.includes("ms billet") ||
+    lower.includes("alloy billet") ||
+    lower.includes("square billet")
+  ) {
+    return "billet";
+  }
+
+  if (
+    lower.includes("bloom") ||
+    lower.includes("steel bloom")
+  ) {
+    return "bloom";
+  }
+
+  if (
+    lower.includes("slab") ||
+    lower.includes("steel slab") ||
+    lower.includes("hot slab")
+  ) {
+    return "slab";
+  }
+
+  // 11. Refractories
+  if (
+    lower.includes("refractory") ||
+    lower.includes("fire brick") ||
+    lower.includes("magnesia brick") ||
+    lower.includes("alumina brick") ||
+    lower.includes("graphite electrode") ||
+    lower.includes("carbon brick") ||
+    lower.includes("ceramic lining")
+  ) {
+    return "refractory";
+  }
+
+  // 12. Flux
+  if (
+    lower.includes("flux") && !lower.includes("flux limestone") && !lower.includes("flux stone") ||
+    lower.includes("flux material") ||
+    lower.includes("bf flux") ||
+    lower.includes("bof flux") ||
+    lower.includes("sinter flux") ||
+    lower.includes("basic flux")
+  ) {
+    return "flux";
+  }
+
+  // 13. Industrial Gases
+  if (
+    lower.includes("oxygen") ||
+    lower.includes("liquid oxygen") ||
+    lower.includes("nitrogen") ||
+    lower.includes("liquid nitrogen") ||
+    lower.includes("argon") ||
+    lower.includes("liquid argon") ||
+    lower.includes("hydrogen") ||
+    lower.includes("acetylene") ||
+    lower.includes("compressed air") ||
+    lower.includes("industrial gas")
+  ) {
+    return "industrial_gas";
+  }
+
+  // 14. By-products
+  if (
+    lower.includes("slag") ||
+    lower.includes("blast furnace slag") ||
+    lower.includes("bof slag") ||
+    lower.includes("steel slag") ||
+    lower.includes("mill scale") ||
+    lower.includes("fly ash") ||
+    lower.includes("dust") ||
+    /\bash\b/.test(lower) ||
+    lower.includes("waste heat") ||
+    lower.includes("tar") ||
+    lower.includes("benzol")
+  ) {
+    return "byproduct";
+  }
+
+  // 15. Other non-steel raw materials (Bauxite, Copper, Aggregates)
   if (
     lower.includes("bauxite") ||
     lower.includes("alumina") ||
@@ -120,7 +266,6 @@ export function detectCategoryFromText(text: string): string {
     return "bauxite";
   }
 
-  // ── Copper Ore & Concentrate ─────────────────────────────────────────────
   if (
     lower.includes("copper ore") ||
     lower.includes("copper concentrate") ||
@@ -131,7 +276,6 @@ export function detectCategoryFromText(text: string): string {
     return "copper";
   }
 
-  // ── Sand, Aggregates, Quarried Materials ─────────────────────────────────
   if (
     lower.includes("silica sand") ||
     lower.includes("quartz sand") ||
@@ -146,8 +290,9 @@ export function detectCategoryFromText(text: string): string {
     return "aggregates";
   }
 
+
   // ═══════════════════════════════════════════════════════════════════════════
-  // PRIORITY 1: Energy & Utilities
+  // PRIORITY 1: Energy, Utilities & Transport (Untouched for backward compatibility)
   // ═══════════════════════════════════════════════════════════════════════════
 
   // ── District Heating ─────────────────────────────────────────────────────
@@ -217,6 +362,7 @@ export function detectCategoryFromText(text: string): string {
     lower.includes("pipeline gas") ||
     lower.includes("png") ||
     lower.includes("cng") ||
+    lower.includes("lng") ||
     lower.includes("gas supply") ||
     lower.includes("gas usage") ||
     lower.includes("gas charges") ||
@@ -232,7 +378,7 @@ export function detectCategoryFromText(text: string): string {
     return "natural_gas";
   }
 
-  // ── Diesel ───────────────────────────────────────────────────────────────
+  // ── Fuel (Diesel / FO / etc) ─────────────────────────────────────────────
   if (
     lower.includes("diesel") ||
     lower.includes("diesel oil") ||
@@ -241,10 +387,16 @@ export function detectCategoryFromText(text: string): string {
     lower.includes("fuel oil no.2") ||
     lower.includes("no. 2 fuel oil") ||
     lower.includes("high speed diesel") ||
+    lower.includes("hsd") ||
     lower.includes("ultra low sulfur diesel") ||
-    lower.includes("ulsd")
+    lower.includes("ulsd") ||
+    lower.includes("light diesel oil") ||
+    lower.includes("furnace oil") ||
+    lower.includes("heavy fuel oil") ||
+    /\bfo\b/.test(lower) ||
+    lower.includes("biofuel")
   ) {
-    return "diesel";
+    return "fuel"; // Previously diesel, now fuel to group them correctly
   }
 
   // ── Petrol ───────────────────────────────────────────────────────────────
@@ -265,8 +417,14 @@ export function detectCategoryFromText(text: string): string {
   // ── Electricity ──────────────────────────────────────────────────────────
   if (
     lower.includes("electricity") ||
+    lower.includes("power") && !lower.includes("power bill") && !lower.includes("powder") ||
     lower.includes("power bill") ||
     lower.includes("electric bill") ||
+    lower.includes("grid electricity") ||
+    lower.includes("purchased electricity") ||
+    lower.includes("renewable electricity") ||
+    lower.includes("solar power") ||
+    lower.includes("wind power") ||
     lower.includes("kwh") ||
     lower.includes("kwj") ||
     lower.includes("unit consumed") ||
@@ -300,16 +458,20 @@ export function detectCategoryFromText(text: string): string {
     return "electricity";
   }
 
-  // ── Coal ─────────────────────────────────────────────────────────────────
+  // ── Coal (General) ───────────────────────────────────────────────────────
   if (
     lower.includes("coal") ||
-    lower.includes("lignite") ||
-    lower.includes("coking coal") ||
-    lower.includes("thermal coal") ||
     lower.includes("steam coal") ||
-    lower.includes("sub-bituminous") ||
-    lower.includes("bituminous coal") ||
+    lower.includes("thermal coal") ||
+    lower.includes("coking coal") ||
+    lower.includes("metallurgical coal") ||
+    lower.includes("pci coal") ||
+    lower.includes("pulverized coal") ||
     lower.includes("anthracite") ||
+    lower.includes("bituminous coal") ||
+    lower.includes("sub-bituminous coal") ||
+    lower.includes("lignite") ||
+    lower.includes("brown coal") ||
     lower.includes("coal fines") ||
     lower.includes("washed coal") ||
     lower.includes("coal dust")
@@ -318,38 +480,68 @@ export function detectCategoryFromText(text: string): string {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PRIORITY 2: Finished Materials (steel must be AFTER iron_ore / scrap_metal)
+  // PRIORITY 2: Finished Materials (Steel, Alu, Chem, etc)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // ── Steel (finished products only) ───────────────────────────────────────
+  // ── Stainless Steel ──────────────────────────────────────────────────────
   if (
+    lower.includes("stainless steel") ||
+    lower.includes("ss coil") ||
+    lower.includes("ss sheet") ||
+    lower.includes("ss pipe") ||
+    lower.includes("ss plate") ||
+    lower.includes("ss scrap")
+  ) {
+    return "stainless_steel";
+  }
+
+  // ── Alloy Steel ──────────────────────────────────────────────────────────
+  if (
+    lower.includes("alloy steel") ||
+    lower.includes("carbon steel") ||
+    lower.includes("tool steel") ||
+    lower.includes("spring steel") ||
+    lower.includes("bearing steel") ||
+    lower.includes("electrical steel") ||
+    lower.includes("silicon steel")
+  ) {
+    return "alloy_steel";
+  }
+
+  // ── Finished Steel ───────────────────────────────────────────────────────
+  if (
+    lower.includes("steel coil") ||
+    lower.includes("hot rolled coil") ||
+    lower.includes("cold rolled coil") ||
+    lower.includes("crc") ||
+    lower.includes("hrc") ||
+    lower.includes("steel plate") ||
+    lower.includes("steel sheet") ||
+    lower.includes("steel bar") ||
+    lower.includes("steel rod") ||
+    lower.includes("wire rod") ||
+    lower.includes("steel pipe") ||
+    lower.includes("steel tube") ||
+    lower.includes("steel beam") ||
+    lower.includes("steel rail") ||
+    lower.includes("steel section") ||
+    lower.includes("rebar") ||
+    lower.includes("tmt bar") ||
+    lower.includes("angle") ||
+    lower.includes("channel") ||
+    lower.includes("flat steel") ||
+    lower.includes("structural steel") ||
+    // generic fallback
     lower.includes("steel") ||
     lower.includes("tmt") ||
     lower.includes("ms steel") ||
     lower.includes("mild steel") ||
-    lower.includes("steel rod") ||
-    lower.includes("steel bar") ||
-    lower.includes("steel pipe") ||
-    lower.includes("ms billet") ||
-    lower.includes("billet") ||
-    lower.includes("tmt bar") ||
-    lower.includes("round bar") ||
-    lower.includes("rebar") ||
-    lower.includes("structural steel") ||
-    lower.includes("steel section") ||
-    lower.includes("steel coil") ||
-    lower.includes("wire rod") ||
-    lower.includes("steel beam") ||
-    lower.includes("steel angle") ||
-    lower.includes("steel channel") ||
-    lower.includes("hot rolled") ||
-    lower.includes("cold rolled") ||
     lower.includes("galvanized") ||
     lower.includes("gi sheet") ||
     lower.includes("hr coil") ||
     lower.includes("cr coil")
   ) {
-    return "steel";
+    return "finished_steel";
   }
 
   // ── Aluminium ────────────────────────────────────────────────────────────
@@ -388,7 +580,7 @@ export function detectCategoryFromText(text: string): string {
     return "concrete";
   }
 
-  // ── Chemicals ────────────────────────────────────────────────────────────
+  // ── Industrial Chemicals ─────────────────────────────────────────────────
   if (
     lower.includes("chemical") ||
     lower.includes("paint") ||
@@ -403,7 +595,10 @@ export function detectCategoryFromText(text: string): string {
     lower.includes("ammonia") ||
     lower.includes("sodium hydroxide") ||
     lower.includes("ferric chloride") ||
-    lower.includes("flux")
+    lower.includes("carbon powder") ||
+    lower.includes("binder") ||
+    lower.includes("lubricant") ||
+    lower.includes("flux oil")
   ) {
     return "chemicals";
   }
@@ -518,26 +713,34 @@ export function detectCategoryFromText(text: string): string {
   // ── Water ────────────────────────────────────────────────────────────────
   if (
     lower.includes("water") ||
+    lower.includes("industrial water") ||
+    lower.includes("raw water") ||
+    lower.includes("process water") ||
+    lower.includes("dm water") ||
+    lower.includes("soft water") ||
+    lower.includes("cooling water") ||
     lower.includes("water supply") ||
     lower.includes("water bill")
   ) {
     return "water";
   }
 
-  // ── Freight / Logistics ──────────────────────────────────────────────────
+  // ── Freight / Logistics / Transport ──────────────────────────────────────
   if (
     lower.includes("freight") ||
     lower.includes("logistics") ||
     lower.includes("shipping") ||
     lower.includes("tonne-km") ||
     lower.includes("tkm") ||
-    lower.includes("goods transport")
-  ) {
-    return "freight";
-  }
-
-  // ── Transport ────────────────────────────────────────────────────────────
-  if (
+    lower.includes("goods transport") ||
+    lower.includes("truck transport") ||
+    lower.includes("rail transport") ||
+    lower.includes("sea freight") ||
+    lower.includes("ocean freight") ||
+    lower.includes("container") ||
+    lower.includes("bulk carrier") ||
+    lower.includes("barge") ||
+    lower.includes("air freight") ||
     lower.includes("transport") ||
     lower.includes("vehicle") ||
     lower.includes("truck") ||
@@ -545,7 +748,7 @@ export function detectCategoryFromText(text: string): string {
     lower.includes("cab") ||
     lower.includes("taxi")
   ) {
-    return "transport";
+    return "transport"; // Combines freight/transport under transport umbrella
   }
 
   // ── Hotel ────────────────────────────────────────────────────────────────

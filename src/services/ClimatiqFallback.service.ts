@@ -338,17 +338,45 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
 
     console.log(`[${input.region}] No-mapping Climatiq search found: ${searchedFactor.activity_id} (region: ${targetRegion})`);
 
+    // Helper: try Climatiq estimate with automatic unit-type retry
+    const tryClimatiqWithRetry = async (actId: string, region: string | undefined, converted: any) => {
+      const paramVariants = [
+        // Primary attempt
+        { [converted.parameterName]: converted.value, ...(converted.parameterUnit ? { [`${converted.parameterName}_unit`]: converted.parameterUnit } : {}) },
+        // Retry 1: if primary was 'weight/kg' try 'mass/kg' (Climatiq sometimes uses mass)
+        ...(converted.parameterName === "weight" ? [{ mass: converted.value, mass_unit: converted.parameterUnit || "kg" }] : []),
+        // Retry 2: if primary was 'mass' try 'weight'
+        ...(converted.parameterName === "mass" ? [{ weight: converted.value, weight_unit: converted.parameterUnit || "kg" }] : []),
+        // Retry 3: if primary was 'weight/kg' try 'weight/t' (tonne)
+        ...(converted.parameterName === "weight" && converted.parameterUnit === "kg" ? [{ weight: Number((converted.value / 1000).toFixed(6)), weight_unit: "t" }] : []),
+        // Retry 4: if primary was 'weight/t' try 'weight/kg'
+        ...(converted.parameterName === "weight" && (converted.parameterUnit === "t" || converted.parameterUnit === "tonne") ? [{ weight: converted.value * 1000, weight_unit: "kg" }] : []),
+      ];
+
+      for (let attempt = 0; attempt < paramVariants.length; attempt++) {
+        try {
+          const params = paramVariants[attempt];
+          if (attempt > 0) {
+            console.log(`[Climatiq Retry ${attempt}] Trying alternate params:`, params);
+          }
+          const result = await estimateWithClimatiq({
+            selectedEF: { activity_id: actId, ...(region && region !== "GLO" && region !== "RoW" ? { region } : {}) },
+            parameters: params,
+          });
+          return { result, usedParams: params };
+        } catch (err: any) {
+          const errCode = err?.response?.data?.error_code || "";
+          const errMsg = String(err?.response?.data?.message || err?.message || "");
+          const isUnitError = errCode === "no_compatible_unit_types" || errMsg.includes("compatible") || errMsg.includes("unit_type");
+          // Only continue retrying for unit errors; rethrow other errors on last attempt
+          if (!isUnitError || attempt === paramVariants.length - 1) throw err;
+        }
+      }
+      throw new Error("All Climatiq parameter variants exhausted");
+    };
+
     try {
-      const climatiqResult = await estimateWithClimatiq({
-        selectedEF: {
-          activity_id: searchedFactor.activity_id,
-          ...(targetRegion && targetRegion !== "GLO" && targetRegion !== "RoW" ? { region: targetRegion } : {}),
-        },
-        parameters: {
-          [converted.parameterName]: converted.value,
-          ...(converted.parameterUnit ? { [`${converted.parameterName}_unit`]: converted.parameterUnit } : {}),
-        },
-      });
+      const { result: climatiqResult } = await tryClimatiqWithRetry(searchedFactor.activity_id, targetRegion, converted);
 
       return {
         success: true,
@@ -462,47 +490,75 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
   const GLOBAL_ONLY_CATEGORIES = new Set(['freight', 'railway', 'flight', 'coal', 'petrol', 'lpg']);
   const climatiqRegion = GLOBAL_ONLY_CATEGORIES.has(input.category) ? undefined : input.region;
 
-  try {
-    let climatiqResult: any;
-    
-    try {
-      climatiqResult = await estimateWithClimatiq({
-        selectedEF: {
-          activity_id: activityId,
-          ...(climatiqRegion ? { region: climatiqRegion } : {}),
-        },
-        parameters: {
-          [converted.parameterName]: converted.value,
-          ...(converted.parameterUnit ? { [`${converted.parameterName}_unit`]: converted.parameterUnit } : {}),
-          ...((converted as any).extraParameterName ? {
-            [(converted as any).extraParameterName]: (converted as any).extraParameterValue,
-            ...((converted as any).extraParameterUnit ? { [`${(converted as any).extraParameterName}_unit`]: (converted as any).extraParameterUnit } : {})
-          } : {}),
+  // Helper: try Climatiq estimate with automatic unit-type retry (Mapped Path)
+  const tryClimatiqWithRetryMapped = async (actId: string, region: string | undefined, converted: any) => {
+    const baseParams = {
+      [converted.parameterName]: converted.value,
+      ...(converted.parameterUnit ? { [`${converted.parameterName}_unit`]: converted.parameterUnit } : {}),
+      ...((converted as any).extraParameterName ? {
+        [(converted as any).extraParameterName]: (converted as any).extraParameterValue,
+        ...((converted as any).extraParameterUnit ? { [`${(converted as any).extraParameterName}_unit`]: (converted as any).extraParameterUnit } : {})
+      } : {}),
+    };
+
+    const paramVariants = [
+      baseParams,
+      // Retry 1: weight -> mass
+      ...(converted.parameterName === "weight" ? [{ ...baseParams, weight: undefined, weight_unit: undefined, mass: converted.value, mass_unit: converted.parameterUnit || "kg" }] : []),
+      // Retry 2: mass -> weight
+      ...(converted.parameterName === "mass" ? [{ ...baseParams, mass: undefined, mass_unit: undefined, weight: converted.value, weight_unit: converted.parameterUnit || "kg" }] : []),
+      // Retry 3: weight/kg -> weight/t
+      ...(converted.parameterName === "weight" && converted.parameterUnit === "kg" ? [{ ...baseParams, weight: Number((converted.value / 1000).toFixed(6)), weight_unit: "t" }] : []),
+      // Retry 4: weight/t -> weight/kg
+      ...(converted.parameterName === "weight" && (converted.parameterUnit === "t" || converted.parameterUnit === "tonne") ? [{ ...baseParams, weight: converted.value * 1000, weight_unit: "kg" }] : []),
+    ];
+
+    for (let attempt = 0; attempt < paramVariants.length; attempt++) {
+      try {
+        const params = paramVariants[attempt];
+        // Remove undefined values
+        Object.keys(params).forEach(key => params[key] === undefined && delete params[key]);
+        
+        if (attempt > 0) {
+          console.log(`[Climatiq Retry ${attempt}] Trying alternate params:`, params);
         }
-      });
-    } catch (initialError: any) {
-      // If it failed and we provided a region, try again WITHOUT the region (global fallback)
-      if (climatiqRegion && initialError?.response?.data?.error_code === 'no_emission_factors_found') {
-        console.log(`\nRegion specific factor not found for ${climatiqRegion}. Retrying without region...`);
-        climatiqResult = await estimateWithClimatiq({
-          selectedEF: {
-            activity_id: activityId,
-          },
-          parameters: {
-            [converted.parameterName]: converted.value,
-            ...(converted.parameterUnit ? { [`${converted.parameterName}_unit`]: converted.parameterUnit } : {}),
-            ...((converted as any).extraParameterName ? {
-              [(converted as any).extraParameterName]: (converted as any).extraParameterValue,
-              ...((converted as any).extraParameterUnit ? { [`${(converted as any).extraParameterName}_unit`]: (converted as any).extraParameterUnit } : {})
-            } : {}),
-          }
+        const result = await estimateWithClimatiq({
+          selectedEF: { activity_id: actId, ...(region ? { region } : {}) },
+          parameters: params,
         });
-      } else {
-        throw initialError;
+        return { result, usedParams: params };
+      } catch (err: any) {
+        const errCode = err?.response?.data?.error_code || "";
+        const errMsg = String(err?.response?.data?.message || err?.message || "");
+        const isUnitError = errCode === "no_compatible_unit_types" || errMsg.includes("compatible") || errMsg.includes("unit_type");
+        
+        // If region specific factor not found, try without region (Global fallback)
+        if (region && errCode === 'no_emission_factors_found') {
+          console.log(`\nRegion specific factor not found for ${region}. Retrying without region...`);
+          try {
+             const result = await estimateWithClimatiq({
+               selectedEF: { activity_id: actId },
+               parameters: paramVariants[attempt],
+             });
+             return { result, usedParams: paramVariants[attempt] };
+          } catch (fallbackError: any) {
+              const fallbackErrCode = fallbackError?.response?.data?.error_code || "";
+              const fallbackErrMsg = String(fallbackError?.response?.data?.message || fallbackError?.message || "");
+              const isFallbackUnitError = fallbackErrCode === "no_compatible_unit_types" || fallbackErrMsg.includes("compatible") || fallbackErrMsg.includes("unit_type");
+              
+              if (!isFallbackUnitError || attempt === paramVariants.length - 1) throw fallbackError;
+              continue;
+          }
+        }
+
+        if (!isUnitError || attempt === paramVariants.length - 1) throw err;
       }
     }
+    throw new Error("All Climatiq parameter variants exhausted");
+  };
 
-    console.log(`Status:\n200`);
+  try {
+    const { result: climatiqResult } = await tryClimatiqWithRetryMapped(activityId, climatiqRegion, converted);
     console.log(`Response:\n${JSON.stringify(climatiqResult.data)}`);
 
     return {
