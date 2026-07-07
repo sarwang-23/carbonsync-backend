@@ -584,27 +584,58 @@ export async function calculateIndiaClimatiqFallback(
         const errMsg = String(err?.message || "");
         const isUnitError = errMsg.includes("compatible") || errMsg.includes("unit_type") || errMsg.includes("Invalid Climatiq value") || errMsg.includes("no_compatible_unit_types") || errMsg.includes("parameters") || errMsg.includes("incorrect");
         
-        // If region specific factor not found, try without region (Global fallback)
-        if (region && errMsg.includes("No emission factors could be found")) {
-          console.log(`\nRegion specific factor not found for ${region}. Retrying without region...`);
-          try {
-             const result = await estimateWithClimatiqDirect({
-               activityId: actId,
-               parameterName: paramVariants[attempt].parameterName,
-               value: paramVariants[attempt].value,
-               parameterUnit: paramVariants[attempt].parameterUnit,
-               dataVersion: mapping.data_version || "^6",
-               region: undefined,
-               parameters: paramVariants[attempt].parameters
-             });
-             return { result, usedParams: paramVariants[attempt] };
-          } catch (fallbackError: any) {
-              const fallbackErrMsg = String(fallbackError?.message || "");
-              const isFallbackUnitError = fallbackErrMsg.includes("compatible") || fallbackErrMsg.includes("unit_type") || fallbackErrMsg.includes("Invalid Climatiq value") || fallbackErrMsg.includes("no_compatible_unit_types") || fallbackErrMsg.includes("parameters") || fallbackErrMsg.includes("incorrect");
-              
-              if (!isFallbackUnitError || attempt === paramVariants.length - 1) throw fallbackError;
-              continue;
+        // If region specific factor not found, implement IN -> GLO -> RoW fallback
+        const isRegionError = errMsg.includes("No emission factors could be found") || errMsg.includes("region");
+        
+        if (region && isRegionError) {
+          console.log(`\n[Climatiq] Region specific factor not found for ${region}. Starting fallback...`);
+          
+          let regionsToTry: string[] = [];
+          if (region === "IN") regionsToTry = ["GLO", "RoW"];
+          else if (region === "GLO") regionsToTry = ["RoW"];
+          else if (region !== "IN" && region !== "GLO" && region !== "RoW") regionsToTry = ["GLO", "RoW"];
+          
+          let fallbackSuccess = false;
+          let fallbackResult: any = null;
+          let lastFallbackError: any = null;
+
+          for (const nextRegion of regionsToTry) {
+             console.log(`[Climatiq] Retrying with region: ${nextRegion}...`);
+             try {
+                const result = await estimateWithClimatiqDirect({
+                  activityId: actId,
+                  parameterName: paramVariants[attempt].parameterName,
+                  value: paramVariants[attempt].value,
+                  parameterUnit: paramVariants[attempt].parameterUnit,
+                  dataVersion: mapping.data_version || "^6",
+                  region: nextRegion,
+                  parameters: paramVariants[attempt].parameters
+                });
+                fallbackResult = { result, usedParams: paramVariants[attempt] };
+                fallbackSuccess = true;
+                break; // Success! Stop trying next regions
+             } catch (fallbackError: any) {
+                 lastFallbackError = fallbackError;
+                 const fallbackErrMsg = String(fallbackError?.message || "");
+                 const isFallbackRegionError = fallbackErrMsg.includes("No emission factors could be found") || fallbackErrMsg.includes("region");
+                 
+                 if (isFallbackRegionError) {
+                     continue; // Try next region in regionsToTry
+                 } else {
+                     const isFallbackUnitError = fallbackErrMsg.includes("compatible") || fallbackErrMsg.includes("unit_type") || fallbackErrMsg.includes("Invalid Climatiq value") || fallbackErrMsg.includes("no_compatible_unit_types") || fallbackErrMsg.includes("parameters") || fallbackErrMsg.includes("incorrect");
+                     if (!isFallbackUnitError || attempt === paramVariants.length - 1) throw fallbackError;
+                     break; // Not a region error, but a unit error - break region loop to let outer unit-retry loop continue
+                 }
+             }
           }
+          
+          if (fallbackSuccess) return fallbackResult;
+          
+          // If we exhausted regions or hit a non-region error, let outer loop decide based on isUnitError
+          if (!isUnitError || attempt === paramVariants.length - 1) {
+              throw lastFallbackError || err;
+          }
+          continue;
         }
 
         if (!isUnitError || attempt === paramVariants.length - 1) throw err;
