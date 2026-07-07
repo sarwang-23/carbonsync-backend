@@ -168,7 +168,15 @@ Return ONLY valid JSON with this structure:
 Rules:
 - Return JSON only.
 - Do not guess emission factors or calculate CO2.
-- Keep original invoice item names.
+- MUST Extract complete line item description. Never return ONLY a product code. 
+  * Correct: "TMT BAR FE500 10MM"
+  * Correct: "Steel Billet"
+  * Correct: "Iron Ore Fines"
+  * Wrong: "F3011-011"
+  * Wrong: "P10023"
+  * Wrong: "ABC-009"
+- If a description is available alongside a product code, always extract the full description.
+- Keep original invoice item names but ensure they are descriptive.
 - Extract quantity and unit separately.
 - If quantity and unit appear together like "18500 kWh", split them.
 - If invoice is from Malaysia and currency is missing, use MYR.
