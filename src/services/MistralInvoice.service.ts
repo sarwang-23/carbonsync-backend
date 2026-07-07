@@ -3,6 +3,7 @@ import { Mistral } from "@mistralai/mistralai";
 import type { NormalizedInvoice, NormalizedInvoiceItem } from "../types/invoice.types.js";
 
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
+const MISTRAL_MODEL = process.env.MISTRAL_MODEL || "mistral-small-latest";
 
 const client = new Mistral({
   apiKey: MISTRAL_API_KEY || ""
@@ -159,7 +160,7 @@ Rules:
 `;
 
   const response = await client.chat.complete({
-    model: "pixtral-large-latest",
+    model: MISTRAL_MODEL,
     messages: [
       {
         role: "user",
@@ -169,8 +170,8 @@ Rules:
             text: prompt
           },
           {
-            type: "document_url",
-            documentUrl: `data:${mimeType};base64,${base64}`
+            type: "image_url",
+            imageUrl: `data:${mimeType};base64,${base64}`
           } as any
         ]
       }

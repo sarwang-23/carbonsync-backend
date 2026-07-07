@@ -48,6 +48,7 @@ export async function extractInvoiceBestEffort(filePath: string) {
 
   let affindaResult: NormalizedInvoice | null = null;
   let affindaScore = 0;
+  let skipAffinda = false;
 
   try {
     affindaResult = await extractInvoiceWithAffinda(filePath);
@@ -69,6 +70,14 @@ export async function extractInvoiceBestEffort(filePath: string) {
       };
     }
   } catch (error: any) {
+    // 403 = API key expired / unauthorized — no point retrying Affinda
+    const status = error?.response?.status || error?.status;
+    if (status === 403 || error.message?.includes("403")) {
+      console.warn("[Affinda] 403 Unauthorized — API key expired or plan limit reached. Skipping Affinda and falling back to Mistral.");
+      skipAffinda = true;
+    } else {
+      console.error("[Affinda] Extraction failed:", error.message);
+    }
     attempts.push({
       provider: "affinda",
       status: "failed",
