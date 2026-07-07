@@ -276,11 +276,15 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
       "bloom": "steel bloom",
       "slab": "steel slab",
       "steel_scrap": "steel scrap",
-      "ferro_alloy": "ferro alloy"
+      "ferro_alloy": "ferro alloy",
+      "limestone": "limestone",
+      "dolomite": "dolomite",
+      "coke": "coke",
+      "iron_ore": "iron ore"
     };
 
     // Infer parameter based on common category groups
-    const WEIGHT_CATS = ["steel", "finished_steel", "semi_finished_steel", "raw_material_steel", "stainless_steel", "alloy_steel", "aluminium", "textile", "electrical", "lpg", "coal", "cement", "concrete", "glass", "plastic", "paper", "wood", "food", "chemicals", "refrigerant", "waste", "purchased_goods"];
+    const WEIGHT_CATS = ["steel", "finished_steel", "semi_finished_steel", "raw_material_steel", "stainless_steel", "alloy_steel", "aluminium", "textile", "electrical", "lpg", "coal", "coke", "limestone", "dolomite", "ferro_alloy", "iron_ore", "pig_iron", "dri", "billet", "bloom", "slab", "steel_scrap", "cement", "concrete", "glass", "plastic", "paper", "wood", "food", "chemicals", "refrigerant", "waste", "purchased_goods"];
     const ENERGY_CATS = ["electricity", "diesel", "petrol", "natural_gas", "district_heating"];
     const VOLUME_CATS = ["water", "natural_gas"];
     const DISTANCE_CATS = ["transport", "freight", "flight", "railway"];
@@ -383,7 +387,7 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
         } catch (err: any) {
           const errCode = err?.response?.data?.error_code || "";
           const errMsg = String(err?.response?.data?.message || err?.message || "");
-          const isUnitError = errCode === "no_compatible_unit_types" || errMsg.includes("compatible") || errMsg.includes("unit_type");
+          const isUnitError = errCode === "no_compatible_unit_types" || errCode === "parameters_incorrect" || errMsg.includes("compatible") || errMsg.includes("unit_type") || errMsg.includes("parameters") || errMsg.includes("incorrect");
           // Only continue retrying for unit errors; rethrow other errors on last attempt
           if (!isUnitError || attempt === paramVariants.length - 1) throw err;
         }
@@ -475,7 +479,11 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
       "bloom": "steel bloom",
       "slab": "steel slab",
       "steel_scrap": "steel scrap",
-      "ferro_alloy": "ferro alloy"
+      "ferro_alloy": "ferro alloy",
+      "limestone": "limestone",
+      "dolomite": "dolomite",
+      "coke": "coke",
+      "iron_ore": "iron ore"
     };
     const searchCategory = CLIMATIQ_CATEGORY_MAPPING[input.category] || input.category;
     const searchQuery = `${searchCategory} ${cleanItemName}`;
@@ -561,7 +569,7 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
       } catch (err: any) {
         const errCode = err?.response?.data?.error_code || "";
         const errMsg = String(err?.response?.data?.message || err?.message || "");
-        const isUnitError = errCode === "no_compatible_unit_types" || errMsg.includes("compatible") || errMsg.includes("unit_type");
+        const isUnitError = errCode === "no_compatible_unit_types" || errCode === "parameters_incorrect" || errMsg.includes("compatible") || errMsg.includes("unit_type") || errMsg.includes("parameters") || errMsg.includes("incorrect");
         
         // If region specific factor not found, try without region (Global fallback)
         if (region && errCode === 'no_emission_factors_found') {
@@ -575,7 +583,7 @@ export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput
           } catch (fallbackError: any) {
               const fallbackErrCode = fallbackError?.response?.data?.error_code || "";
               const fallbackErrMsg = String(fallbackError?.response?.data?.message || fallbackError?.message || "");
-              const isFallbackUnitError = fallbackErrCode === "no_compatible_unit_types" || fallbackErrMsg.includes("compatible") || fallbackErrMsg.includes("unit_type");
+              const isFallbackUnitError = fallbackErrCode === "no_compatible_unit_types" || fallbackErrCode === "parameters_incorrect" || fallbackErrMsg.includes("compatible") || fallbackErrMsg.includes("unit_type") || fallbackErrMsg.includes("parameters") || fallbackErrMsg.includes("incorrect");
               
               if (!isFallbackUnitError || attempt === paramVariants.length - 1) throw fallbackError;
               continue;

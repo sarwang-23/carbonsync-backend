@@ -22,7 +22,11 @@ const CLIMATIQ_CATEGORY_MAPPING: Record<string, string> = {
   "bloom": "steel bloom",
   "slab": "steel slab",
   "steel_scrap": "steel scrap",
-  "ferro_alloy": "ferro alloy"
+  "ferro_alloy": "ferro alloy",
+  "limestone": "limestone",
+  "dolomite": "dolomite",
+  "coke": "coke",
+  "iron_ore": "iron ore"
 };
 
 const WEIGHT_CATEGORIES = [
@@ -37,6 +41,17 @@ const WEIGHT_CATEGORIES = [
   "electrical",
   "lpg",
   "coal",
+  "coke",
+  "limestone",
+  "dolomite",
+  "ferro_alloy",
+  "iron_ore",
+  "pig_iron",
+  "dri",
+  "billet",
+  "bloom",
+  "slab",
+  "steel_scrap",
   "cement",
   "concrete",
   "glass",
@@ -365,7 +380,7 @@ export async function calculateIndiaClimatiqFallback(
           return { result, usedParams: params };
         } catch (err: any) {
           const errMsg = String(err?.message || "");
-          const isUnitError = errMsg.includes("compatible") || errMsg.includes("unit_type") || errMsg.includes("Invalid Climatiq value") || errMsg.includes("no_compatible_unit_types");
+          const isUnitError = errMsg.includes("compatible") || errMsg.includes("unit_type") || errMsg.includes("Invalid Climatiq value") || errMsg.includes("no_compatible_unit_types") || errMsg.includes("parameters") || errMsg.includes("incorrect");
           // Only continue retrying for unit errors; rethrow other errors on last attempt
           if (!isUnitError || attempt === paramVariants.length - 1) throw err;
         }
@@ -567,7 +582,7 @@ export async function calculateIndiaClimatiqFallback(
         return { result, usedParams: params };
       } catch (err: any) {
         const errMsg = String(err?.message || "");
-        const isUnitError = errMsg.includes("compatible") || errMsg.includes("unit_type") || errMsg.includes("Invalid Climatiq value") || errMsg.includes("no_compatible_unit_types");
+        const isUnitError = errMsg.includes("compatible") || errMsg.includes("unit_type") || errMsg.includes("Invalid Climatiq value") || errMsg.includes("no_compatible_unit_types") || errMsg.includes("parameters") || errMsg.includes("incorrect");
         
         // If region specific factor not found, try without region (Global fallback)
         if (region && errMsg.includes("No emission factors could be found")) {
@@ -585,7 +600,7 @@ export async function calculateIndiaClimatiqFallback(
              return { result, usedParams: paramVariants[attempt] };
           } catch (fallbackError: any) {
               const fallbackErrMsg = String(fallbackError?.message || "");
-              const isFallbackUnitError = fallbackErrMsg.includes("compatible") || fallbackErrMsg.includes("unit_type") || fallbackErrMsg.includes("Invalid Climatiq value") || fallbackErrMsg.includes("no_compatible_unit_types");
+              const isFallbackUnitError = fallbackErrMsg.includes("compatible") || fallbackErrMsg.includes("unit_type") || fallbackErrMsg.includes("Invalid Climatiq value") || fallbackErrMsg.includes("no_compatible_unit_types") || fallbackErrMsg.includes("parameters") || fallbackErrMsg.includes("incorrect");
               
               if (!isFallbackUnitError || attempt === paramVariants.length - 1) throw fallbackError;
               continue;
