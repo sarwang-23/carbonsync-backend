@@ -238,7 +238,34 @@ export function detectCategoryFromText(text: string): string {
     return "industrial_gas";
   }
 
-  // 14. By-products
+  // 14. Cast Products & Powders
+  if (
+    lower.includes("cast iron") ||
+    lower.includes("ductile iron") ||
+    lower.includes("grey iron")
+  ) {
+    return "cast_iron";
+  }
+
+  if (
+    lower.includes("iron powder")
+  ) {
+    return "iron_powder";
+  }
+
+  if (
+    lower.includes("steel powder")
+  ) {
+    return "steel_powder";
+  }
+
+  if (
+    lower.includes("ingot")
+  ) {
+    return "ingot";
+  }
+
+  // 15. By-products
   if (
     lower.includes("slag") ||
     lower.includes("blast furnace slag") ||
@@ -255,7 +282,19 @@ export function detectCategoryFromText(text: string): string {
     return "byproduct";
   }
 
-  // 15. Other non-steel raw materials (Bauxite, Copper, Aggregates)
+  // 16. Other non-steel raw materials (Bauxite, Copper, Aggregates, Minerals)
+  if (
+    lower.includes("quartz")
+  ) {
+    return "quartz";
+  }
+
+  if (
+    lower.includes("bentonite")
+  ) {
+    return "bentonite";
+  }
+
   if (
     lower.includes("bauxite") ||
     lower.includes("alumina") ||
@@ -508,38 +547,85 @@ export function detectCategoryFromText(text: string): string {
     return "alloy_steel";
   }
 
-  // ── Finished Steel ───────────────────────────────────────────────────────
+  // ── Structural Steel ──────────────────────────────────────────────────────
   if (
+    lower.includes("angle") ||
+    lower.includes("channel") ||
+    lower.includes("beam") ||
+    lower.includes("joist") ||
+    lower.includes("h beam") ||
+    lower.includes("i beam") ||
+    lower.includes("structural steel") ||
+    lower.includes("steel section") ||
+    lower.includes("steel rail")
+  ) {
+    return "structural_steel";
+  }
+
+  // ── Steel Plate ──────────────────────────────────────────────────────────
+  if (
+    lower.includes("plate") ||
+    lower.includes("steel plate") ||
+    lower.includes("ms plate")
+  ) {
+    return "steel_plate";
+  }
+
+  // ── Steel Sheet ──────────────────────────────────────────────────────────
+  if (
+    lower.includes("sheet") ||
+    lower.includes("steel sheet") ||
+    lower.includes("cr sheet") ||
+    lower.includes("hr sheet") ||
+    lower.includes("gi sheet") ||
+    lower.includes("gp sheet")
+  ) {
+    return "steel_sheet";
+  }
+
+  // ── Steel Coil ───────────────────────────────────────────────────────────
+  if (
+    lower.includes("coil") ||
     lower.includes("steel coil") ||
     lower.includes("hot rolled coil") ||
     lower.includes("cold rolled coil") ||
+    lower.includes("gp coil") ||
+    lower.includes("gi coil") ||
+    lower.includes("hr coil") ||
+    lower.includes("cr coil") ||
     lower.includes("crc") ||
-    lower.includes("hrc") ||
-    lower.includes("steel plate") ||
-    lower.includes("steel sheet") ||
-    lower.includes("steel bar") ||
-    lower.includes("steel rod") ||
-    lower.includes("wire rod") ||
+    lower.includes("hrc")
+  ) {
+    return "steel_coil";
+  }
+
+  // ── Steel Pipe ───────────────────────────────────────────────────────────
+  if (
+    lower.includes("pipe") ||
     lower.includes("steel pipe") ||
+    lower.includes("tube") ||
     lower.includes("steel tube") ||
-    lower.includes("steel beam") ||
-    lower.includes("steel rail") ||
-    lower.includes("steel section") ||
-    lower.includes("rebar") ||
+    lower.includes("hollow section")
+  ) {
+    return "steel_pipe";
+  }
+
+  // ── Finished Steel (Bars, Rods, Generic) ─────────────────────────────────
+  if (
     lower.includes("tmt bar") ||
-    lower.includes("angle") ||
-    lower.includes("channel") ||
+    lower.includes("tmt fe500") ||
+    lower.includes("tmt fe550") ||
+    lower.includes("rebar") ||
+    lower.includes("steel rod") ||
+    lower.includes("steel bar") ||
+    lower.includes("wire rod") ||
+    lower.includes("ms rod") ||
     lower.includes("flat steel") ||
-    lower.includes("structural steel") ||
-    // generic fallback
     lower.includes("steel") ||
     lower.includes("tmt") ||
     lower.includes("ms steel") ||
     lower.includes("mild steel") ||
-    lower.includes("galvanized") ||
-    lower.includes("gi sheet") ||
-    lower.includes("hr coil") ||
-    lower.includes("cr coil")
+    lower.includes("galvanized")
   ) {
     return "finished_steel";
   }
