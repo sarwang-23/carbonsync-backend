@@ -91,6 +91,222 @@ const MONEY_CATEGORIES = [
   "services",
 ];
 
+/**
+ * Region fallback order for Climatiq estimate calls.
+ * India first, then major global regions, finally undefined (GLOBAL).
+ */
+const REGION_FALLBACK_ORDER: (string | undefined)[] = [
+  "IN", "AU", "US", "EU", "GLO", "RoW", undefined,
+];
+
+/**
+ * Prioritized list of Climatiq activity_ids per category.
+ * Engine tries each activity_id × each region until first success.
+ * Add new IDs at the top of each array (highest priority first).
+ */
+const CATEGORY_ACTIVITY_MAP: Record<string, string[]> = {
+
+  // ── Aluminium ──────────────────────────────────────────────────────────────
+  aluminium: [
+    "metals-type_primary_aluminium",
+    "metals-type_aluminium_primary_aluminium_ingot",
+    "metals-type_secondary_aluminium",
+    "metals-type_aluminium_secondary_aluminium_ingot",
+    "metals-type_aluminium_ingot",
+    "metals-type_aluminium_billet",
+    "metals-type_aluminium_slab",
+    "metals-type_aluminium_extrusion",
+    "metals-type_aluminium_sheet",
+    "metals-type_aluminium_plate",
+    "metals-type_aluminium_coil",
+    "metals-type_aluminium_foil",
+    "metals-type_aluminium_profile",
+    "metals-type_aluminium_casting",
+    "metals-type_aluminium_alloy",
+    "metals-type_aluminium_scrap",
+    "metals-type_recycled_aluminium",
+    "metals-type_aluminium_products",
+    "metals-type_aluminium_metal",
+    "metals-type_aluminium",
+  ],
+
+  // ── Steel (finished) ───────────────────────────────────────────────────────
+  finished_steel: [
+    "metals-type_iron_non_alloy_steel_bars_rods_nec",
+    "metals-type_iron_non_alloy_steel_hot_rolled_drawn_extruded_bars_rods_long",
+    "metals-type_steel_bars_and_rods",
+    "metals-type_iron_non_alloy_steel_other_bars_rods",
+    "metals-type_iron_non_alloy_steel_flat_rolled_products",
+    "metals-type_hot_rolled_coil",
+    "metals-type_iron_non_alloy_steel",
+  ],
+
+  // ── Semi-finished steel ────────────────────────────────────────────────────
+  semi_finished_steel: [
+    "metals-type_iron_non_alloy_steel_bars_rods_nec",
+    "metals-type_iron_non_alloy_steel_semis_billets_blooms_slabs",
+    "metals-type_steel_billet",
+    "metals-type_iron_non_alloy_steel",
+  ],
+
+  // ── Billet ─────────────────────────────────────────────────────────────────
+  billet: [
+    "metals-type_iron_non_alloy_steel_semis_billets_blooms_slabs",
+    "metals-type_steel_billet",
+    "metals-type_iron_non_alloy_steel_bars_rods_nec",
+    "metals-type_iron_non_alloy_steel",
+  ],
+
+  // ── Steel scrap ────────────────────────────────────────────────────────────
+  steel_scrap: [
+    "metals-type_steel_scrap",
+    "metals-type_iron_non_alloy_steel_scrap",
+    "metals-type_ferrous_scrap",
+    "metals-type_iron_non_alloy_steel",
+  ],
+
+  // ── Stainless steel ────────────────────────────────────────────────────────
+  stainless_steel: [
+    "metals-type_stainless_steel_bars_rods_hot_rolled_coils",
+    "metals-type_stainless_steel",
+    "metals-type_iron_non_alloy_steel_bars_rods_nec",
+  ],
+
+  // ── Iron ore ───────────────────────────────────────────────────────────────
+  iron_ore: [
+    "metals-type_iron_ores_concentrates",
+    "metals-type_iron_ore_pellets",
+    "metals-type_iron_ore_sinter",
+    "metals-type_iron_ore_fines",
+    "metals-type_iron_ore",
+  ],
+
+  // ── Pig iron ───────────────────────────────────────────────────────────────
+  pig_iron: [
+    "metals-type_pig_iron",
+    "metals-type_basic_pig_iron",
+    "metals-type_foundry_pig_iron",
+    "metals-type_iron_non_alloy_steel",
+  ],
+
+  // ── DRI / Sponge iron ──────────────────────────────────────────────────────
+  dri: [
+    "metals-type_direct_reduced_iron",
+    "metals-type_sponge_iron",
+    "metals-type_hot_briquetted_iron",
+    "metals-type_iron_non_alloy_steel",
+  ],
+
+  // ── Ferro alloys ───────────────────────────────────────────────────────────
+  ferro_alloy: [
+    "metals-type_ferro_alloys_ferro_nickel",
+    "metals-type_ferro_alloys_ferro_manganese",
+    "metals-type_ferro_alloys_ferro_chromium",
+    "metals-type_ferro_alloys_ferro_silicon",
+    "metals-type_ferro_alloys",
+    "metals-type_ferro_silicon",
+    "metals-type_ferro_manganese",
+    "metals-type_ferro_chrome",
+  ],
+
+  // ── Coke ───────────────────────────────────────────────────────────────────
+  coke: [
+    "fuel-type_coke_oven_coke_and_lignite_coke-fuel_use_na",
+    "fuel-type_coking_coal-fuel_use_na",
+    "fuel-type_coal_coking-fuel_use_na",
+    "fuel-type_coke-fuel_use_na",
+    "materials-type_coke",
+  ],
+
+  // ── Coal ───────────────────────────────────────────────────────────────────
+  coal: [
+    "fuel-type_coal_bituminous-fuel_use_na",
+    "fuel-type_coal_sub_bituminous-fuel_use_na",
+    "fuel-type_coal_anthracite-fuel_use_na",
+    "fuel-type_coal_lignite-fuel_use_na",
+    "fuel-type_thermal_coal-fuel_use_na",
+    "fuel-type_coal-fuel_use_na",
+  ],
+
+  // ── Limestone ──────────────────────────────────────────────────────────────
+  limestone: [
+    "building_materials-type_aggregates_primary_material_production",
+    "building_materials-type_limestone",
+    "materials-type_limestone",
+    "building_materials-type_stone",
+    "building_materials-type_aggregate",
+  ],
+
+  // ── Cement ─────────────────────────────────────────────────────────────────
+  cement: [
+    "building_materials-type_cement_average",
+    "building_materials-type_portland_cement",
+    "building_materials-type_cement_general_purpose",
+    "building_materials-type_cement",
+    "materials-type_cement",
+  ],
+
+  // ── Copper ─────────────────────────────────────────────────────────────────
+  copper: [
+    "metals-type_copper_cathode",
+    "metals-type_copper_wire_rod",
+    "metals-type_copper_ingot",
+    "metals-type_copper_primary",
+    "metals-type_copper_secondary",
+    "metals-type_copper",
+  ],
+
+  // ── Zinc ───────────────────────────────────────────────────────────────────
+  zinc: [
+    "metals-type_zinc_primary",
+    "metals-type_zinc_ingot",
+    "metals-type_zinc_secondary",
+    "metals-type_zinc",
+  ],
+
+  // ── Lead ───────────────────────────────────────────────────────────────────
+  lead: [
+    "metals-type_lead_primary",
+    "metals-type_lead_ingot",
+    "metals-type_lead_secondary",
+    "metals-type_lead",
+  ],
+
+  // ── Nickel ─────────────────────────────────────────────────────────────────
+  nickel: [
+    "metals-type_nickel_primary",
+    "metals-type_nickel_refined",
+    "metals-type_nickel",
+  ],
+
+  // ── Chemicals ──────────────────────────────────────────────────────────────
+  chemicals: [
+    "chemicals-type_sodium_hydroxide",
+    "chemicals-type_hydrochloric_acid",
+    "chemicals-type_sulphuric_acid",
+    "chemicals-type_ammonia",
+    "chemicals-type_industrial_chemicals",
+    "chemicals-type_chemicals",
+  ],
+
+  // ── Plastic ────────────────────────────────────────────────────────────────
+  plastic: [
+    "materials-type_plastics_general",
+    "materials-type_hdpe",
+    "materials-type_ldpe",
+    "materials-type_pvc",
+    "materials-type_plastic",
+  ],
+
+  // ── Glass ──────────────────────────────────────────────────────────────────
+  glass: [
+    "building_materials-type_glass_float",
+    "building_materials-type_glass_toughened",
+    "building_materials-type_glass_general",
+    "materials-type_glass",
+  ],
+};
+
 function convertForClimatiq(input: {
   category: string;
   value: number;
@@ -281,19 +497,11 @@ export async function calculateIndiaClimatiqFallback(
 ) {
   const mapping = await getIndiaFallbackMapping(input.category);
 
-  // ── No DB mapping: infer defaults and still try Climatiq search ──────────
+  // ── No DB mapping → multi-activity + multi-region fallback engine ─────────
   if (!mapping) {
-    console.log(`[IN] No DB mapping for "${input.category}" — attempting direct Climatiq search`);
+    console.log(`[IN] No DB mapping for "${input.category}" — starting multi-activity fallback engine`);
 
-    const cleanItemName = input.itemName
-      .replace(/[^a-zA-Z\s]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .split(" ")
-      .slice(0, 3)
-      .join(" ");
-
-    // Infer parameter based on category lists
+    // Infer unit conversion defaults based on category type
     let inferredParameterName = "weight";
     let inferredParameterUnit = "kg";
     if (ENERGY_CATEGORIES.includes(input.category)) {
@@ -307,7 +515,6 @@ export async function calculateIndiaClimatiqFallback(
       inferredParameterUnit = "km";
     }
 
-    // Convert value using inferred parameter
     const converted = convertForClimatiq({
       category: input.category,
       value: input.value,
@@ -316,127 +523,81 @@ export async function calculateIndiaClimatiqFallback(
       expectedParameterUnit: inferredParameterUnit,
     });
 
-    // Search IN → GLO → RoW
-    let searchedFactor: any = null;
-    let targetRegion: string | undefined = "IN";
+    // Build ordered activity ID list:
+    // 1. DB-seeded mappings (from CATEGORY_ACTIVITY_MAP)
+    // 2. Climatiq search as last resort
+    const priorityActivityIds: string[] = [
+      ...(CATEGORY_ACTIVITY_MAP[input.category] || []),
+    ];
 
-    const searchCategory = CLIMATIQ_CATEGORY_MAPPING[input.category] || input.category;
-    const searchQuery = `${searchCategory} ${cleanItemName}`;
-    const genericQuery = searchCategory;
+    // Try each activity_id × each region
+    for (const actId of priorityActivityIds) {
+      for (const region of REGION_FALLBACK_ORDER) {
+        // Try both kg and tonne variants for weight-based categories
+        const paramVariants = [
+          { parameterName: converted.parameterName, value: converted.value, parameterUnit: converted.parameterUnit },
+          ...(converted.parameterName === "weight" && converted.parameterUnit === "kg"
+            ? [{ parameterName: "weight", value: Number((converted.value / 1000).toFixed(6)), parameterUnit: "t" }]
+            : []),
+          ...(converted.parameterName === "weight" && (converted.parameterUnit === "t" || converted.parameterUnit === "tonne")
+            ? [{ parameterName: "weight", value: converted.value * 1000, parameterUnit: "kg" }]
+            : []),
+        ];
 
-    searchedFactor = await searchClimatiqFactor({ query: searchQuery, region: "IN", dataVersion: "^6", resultsPerPage: 10 });
-    if (!searchedFactor?.activity_id) {
-      searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "IN", dataVersion: "^6", resultsPerPage: 1 });
-    }
+        for (const params of paramVariants) {
+          try {
+            const result = await estimateWithClimatiqDirect({
+              activityId: actId,
+              parameterName: params.parameterName,
+              value: params.value,
+              parameterUnit: params.parameterUnit,
+              dataVersion: "^6",
+              region,
+            });
 
-    if (!searchedFactor?.activity_id) {
-      searchedFactor = await searchClimatiqFactor({ query: searchQuery, region: "GLO", dataVersion: "^6", resultsPerPage: 10 });
-      if (!searchedFactor?.activity_id) {
-        searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "GLO", dataVersion: "^6", resultsPerPage: 1 });
-      }
-      if (searchedFactor?.activity_id) targetRegion = "GLO";
-    }
+            console.log(`[IN Multi-Fallback] ✅ ${actId} | region=${region ?? "GLOBAL"} | co2e=${result.co2e}`);
 
-    if (!searchedFactor?.activity_id) {
-      searchedFactor = await searchClimatiqFactor({ query: searchQuery, region: "RoW", dataVersion: "^6", resultsPerPage: 10 });
-      if (!searchedFactor?.activity_id) {
-        searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "RoW", dataVersion: "^6", resultsPerPage: 1 });
-      }
-      if (searchedFactor?.activity_id) targetRegion = "RoW";
-    }
-
-    if (!searchedFactor?.activity_id) {
-      return {
-        success: false,
-        status: "review",
-        source_engine: "climatiq",
-        region: "IN",
-        country_name: "India",
-        category: input.category,
-        reason: "NO_INDIA_CLIMATIQ_MAPPING",
-        message: `No Climatiq factor found for category: ${input.category} (IN/GLO/RoW)`,
-      };
-    }
-
-    console.log(`[IN] No-mapping Climatiq search found: ${searchedFactor.activity_id} (region: ${targetRegion})`);
-
-    // Helper: try Climatiq estimate with automatic unit-type retry
-    const tryClimatiqWithRetry = async (actId: string, region: string | undefined, converted: any) => {
-      const paramVariants = [
-        // Primary attempt
-        { parameterName: converted.parameterName, value: converted.value, parameterUnit: converted.parameterUnit },
-        // Retry 1: weight -> mass
-        ...(converted.parameterName === "weight" ? [{ parameterName: "mass", value: converted.value, parameterUnit: converted.parameterUnit || "kg" }] : []),
-        // Retry 2: mass -> weight
-        ...(converted.parameterName === "mass" ? [{ parameterName: "weight", value: converted.value, parameterUnit: converted.parameterUnit || "kg" }] : []),
-        // Retry 3: weight/kg -> weight/t
-        ...(converted.parameterName === "weight" && converted.parameterUnit === "kg" ? [{ parameterName: "weight", value: Number((converted.value / 1000).toFixed(6)), parameterUnit: "t" }] : []),
-        // Retry 4: weight/t -> weight/kg
-        ...(converted.parameterName === "weight" && (converted.parameterUnit === "t" || converted.parameterUnit === "tonne") ? [{ parameterName: "weight", value: converted.value * 1000, parameterUnit: "kg" }] : []),
-      ];
-
-      for (let attempt = 0; attempt < paramVariants.length; attempt++) {
-        try {
-          const params = paramVariants[attempt];
-          if (attempt > 0) {
-            console.log(`[Climatiq Retry ${attempt}] Trying alternate params:`, params);
+            return {
+              success: true,
+              status: "calculated",
+              source_engine: "climatiq",
+              preferred_source: "Climatiq",
+              region: "IN",
+              country_name: "India",
+              category: input.category,
+              item_name: input.itemName,
+              input_value: input.value,
+              input_unit: input.unit,
+              converted: { ...params },
+              activity_id: actId,
+              parameter_name: params.parameterName,
+              parameter_unit: params.parameterUnit,
+              co2e: result.co2e,
+              co2e_unit: result.co2e_unit,
+              factor_name: result.factor_name,
+              factor_source: result.factor_source,
+              factor_region: result.factor_region ?? region ?? "GLOBAL",
+              raw: result.raw,
+            };
+          } catch (_) {
+            // Silent: try next variant / region / activity
           }
-          const result = await estimateWithClimatiqDirect({
-            activityId: actId,
-            parameterName: params.parameterName,
-            value: params.value,
-            parameterUnit: params.parameterUnit,
-            dataVersion: "^6",
-            region,
-          });
-          return { result, usedParams: params };
-        } catch (err: any) {
-          const errMsg = String(err?.message || "");
-          const isUnitError = errMsg.includes("compatible") || errMsg.includes("unit_type") || errMsg.includes("Invalid Climatiq value") || errMsg.includes("no_compatible_unit_types") || errMsg.includes("parameters") || errMsg.includes("incorrect");
-          // Only continue retrying for unit errors; rethrow other errors on last attempt
-          if (!isUnitError || attempt === paramVariants.length - 1) throw err;
         }
       }
-      throw new Error("All Climatiq parameter variants exhausted");
-    };
-
-    try {
-      const { result: climatiqResult } = await tryClimatiqWithRetry(searchedFactor.activity_id, targetRegion, converted);
-
-      return {
-        success: true,
-        status: "calculated",
-        source_engine: "climatiq",
-        preferred_source: "Climatiq",
-        region: "IN",
-        country_name: "India",
-        category: input.category,
-        item_name: input.itemName,
-        input_value: input.value,
-        input_unit: input.unit,
-        converted,
-        activity_id: searchedFactor.activity_id,
-        parameter_name: converted.parameterName,
-        parameter_unit: converted.parameterUnit,
-        co2e: climatiqResult.co2e,
-        co2e_unit: climatiqResult.co2e_unit,
-        factor_name: climatiqResult.factor_name,
-        factor_source: climatiqResult.factor_source,
-        factor_region: climatiqResult.factor_region,
-        raw: climatiqResult.raw,
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        status: "review",
-        source_engine: "climatiq",
-        region: "IN",
-        country_name: "India",
-        category: input.category,
-        reason: "CLIMATIQ_API_ERROR",
-        message: err.message || "Climatiq API call failed",
-      };
+      console.log(`[IN Multi-Fallback] ✗ ${actId} — no region worked`);
     }
+
+    // All activity IDs exhausted — mark for review
+    return {
+      success: false,
+      status: "review",
+      source_engine: "climatiq",
+      region: "IN",
+      country_name: "India",
+      category: input.category,
+      reason: "NO_INDIA_CLIMATIQ_MAPPING",
+      message: `No Climatiq factor found for category "${input.category}" across ${priorityActivityIds.length} activity IDs and ${REGION_FALLBACK_ORDER.length} regions`,
+    };
   }
   // ─────────────────────────────────────────────────────────────────────────
 
