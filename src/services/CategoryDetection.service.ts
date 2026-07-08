@@ -894,6 +894,7 @@ export function detectCategoryFromText(text: string): string {
     return "exporter";
   }
 
+
   // ── Chemicals ──────────────────────────────────────────────────────────────
   if (
     lower.includes("chemical") ||
@@ -905,6 +906,56 @@ export function detectCategoryFromText(text: string): string {
     lower.includes("sodium hydroxide")
   ) {
     return "chemicals";
+  }
+
+  // ── Electrical equipment ──────────────────────────────────────────────────
+  // Covers: chokes, ballasts, lamps, tube lights, LEDs, pumps, motors, panels,
+  // fittings, switchgear, wires, cables, fans, ACs, inverters, transformers
+  if (
+    lower.includes("choke") ||
+    lower.includes("ballast") ||
+    lower.includes("lamp") ||
+    lower.includes("luminaire") ||
+    lower.includes("tube light") ||
+    lower.includes("led") ||
+    lower.includes("cfl") ||
+    lower.includes("fitting") ||
+    lower.includes("light fixture") ||
+    lower.includes("bulb") ||
+    lower.includes("electric pump") ||
+    lower.includes("submersible pump") ||
+    lower.includes("motor") ||
+    lower.includes("switchgear") ||
+    lower.includes("switchboard") ||
+    lower.includes("mcb") ||
+    lower.includes("mccb") ||
+    lower.includes("rccb") ||
+    lower.includes("circuit breaker") ||
+    lower.includes("transformer") ||
+    lower.includes("inverter") ||
+    lower.includes("ups") ||
+    lower.includes("cable") ||
+    lower.includes("wire") ||
+    lower.includes("conduit") ||
+    lower.includes("panel") ||
+    lower.includes("distribution board") ||
+    lower.includes("fan") ||
+    lower.includes("exhaust") ||
+    lower.includes("air conditioner") ||
+    lower.includes("ac unit") ||
+    lower.includes("capacitor") ||
+    lower.includes("contactor") ||
+    lower.includes("relay") ||
+    lower.includes("electric meter") ||
+    lower.includes("energy meter") ||
+    lower.includes("electronic component") ||
+    lower.includes("rectifier") ||
+    lower.includes("adaptor") ||
+    lower.includes("socket") ||
+    lower.includes("plug") ||
+    lower.includes("switch")
+  ) {
+    return "electrical";
   }
 
   return "unknown";

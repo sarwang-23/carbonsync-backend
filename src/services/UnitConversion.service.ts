@@ -79,8 +79,12 @@ export function normalizeUnit(unit?: string | null): string {
     "pieces": "pcs",
     "pcs": "pcs",
     "nos": "pcs",
+    "no": "pcs",
     "unit": "pcs",
-    "units": "pcs"
+    "units": "pcs",
+    // 'ft' on Indian hardware/electrical invoices = number of fittings/pieces, not feet
+    "ft": "pcs",
+    "feet": "pcs",
   };
 
   return unitMap[u] || u;

@@ -50,7 +50,6 @@ const WEIGHT_CATEGORIES = [
   "alloy_steel",
   "aluminium",
   "textile",
-  "electrical",
   "lpg",
   "coal",
   "coke",
@@ -89,6 +88,8 @@ const MONEY_CATEGORIES = [
   "exporter",
   "manufacturing",
   "services",
+  "electrical",
+  "electronics",
 ];
 
 /**
@@ -305,6 +306,27 @@ const CATEGORY_ACTIVITY_MAP: Record<string, string[]> = {
     "building_materials-type_glass_general",
     "materials-type_glass",
   ],
+
+  // ── Electrical equipment / electronics ─────────────────────────────────────
+  electrical: [
+    "electrical_equipment-type_electrical_equipment",
+    "electrical_equipment-type_lighting",
+    "electrical_equipment-type_motors",
+    "manufactured_goods-type_electrical_equipment",
+    "electronics-type_electronics",
+    "manufactured_goods-type_electronics",
+    "manufactured_goods-type_manufactured_goods",
+    "manufactured_goods-type_capital_goods",
+  ],
+
+  electronics: [
+    "electronics-type_electronics",
+    "electrical_equipment-type_electrical_equipment",
+    "manufactured_goods-type_electronics",
+    "manufactured_goods-type_electrical_equipment",
+    "manufactured_goods-type_manufactured_goods",
+    "manufactured_goods-type_capital_goods",
+  ],
 };
 
 function convertForClimatiq(input: {
@@ -515,6 +537,9 @@ export async function calculateIndiaClimatiqFallback(
     } else if (DISTANCE_CATEGORIES.includes(input.category)) {
       inferredParameterName = "distance";
       inferredParameterUnit = "km";
+    } else if (MONEY_CATEGORIES.includes(input.category)) {
+      inferredParameterName = "money";
+      inferredParameterUnit = "inr";
     }
 
     const converted = convertForClimatiq({
