@@ -394,7 +394,6 @@ export async function estimateWithClimatiqDirect(
   if (!input.parameters && input.parameterUnit) {
     body.parameters[`${input.parameterName}_unit`] = input.parameterUnit;
   }
-  console.log("[estimateWithClimatiqDirect] PAYLOAD:", JSON.stringify(body));
 
   const response = await fetch(`${CLIMATIQ_BASE_URL}/estimate`, {
     method: "POST",
