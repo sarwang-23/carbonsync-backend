@@ -366,6 +366,31 @@ const CATEGORY_ACTIVITY_MAP: Record<string, string[]> = {
     "materials-type_glass",
   ],
 
+  // ── Wood & Timber ──────────────────────────────────────────────────────────
+  wood: [
+    "timber_forestry-type_timber_softwood",
+    "timber_forestry-type_timber_hardwood",
+    "timber_forestry-type_hardwood_lumber",
+    "timber_forestry-type_egger_timber_structural_timber",
+    "timber_forestry-type_rubner_sawn_timber_rubner_sawn_timber_kiln_dried_rubner_sawn_timber_machine_graded_structural_timber",
+    "timber_forestry-type_timber_plywood",
+    "timber_forestry-type_plywood_board_generic",
+    "timber_forestry-type_timber_particle_board",
+    "timber_forestry-type_particle_board_raw",
+    "timber_forestry-type_timber_mdf",
+    "timber_forestry-type_medium_density_fibreboard_mdf_wood_fibre_boards",
+    "timber_forestry-type_timber_osb",
+    "timber_forestry-type_timber_parquet",
+    "timber_forestry-type_timber_laminate",
+    "timber_forestry-type_timber_open_panel_timber_frame_system",
+    "timber_forestry-type_timber_closed_panel_timber_frame_system",
+    "consumer_goods-type_plywood_veneer",
+    "timber_forestry-type_veneer_and_plywood",
+    "consumer_goods-type_wooden_windows_door_flooring",
+    "building_materials-type_group_folding_door_wooden-scenario_standard",
+    "building_materials-type_group_sliding_door_scandinavian_wooden-scenario_standard",
+  ],
+
   // ── Electrical equipment / electronics ─────────────────────────────────────
   electrical: [
     "electrical_equipment-type_electrical_equipment",

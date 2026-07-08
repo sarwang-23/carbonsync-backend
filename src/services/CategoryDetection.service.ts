@@ -984,5 +984,112 @@ export function detectCategoryFromText(text: string): string {
     return "electrical";
   }
 
+  // ── Wood & Timber ──────────────────────────────────────────────────────────
+  if (
+    // 1. Raw Timber
+    lower.includes("timber") ||
+    lower.includes("wood") ||
+    lower.includes("logs") ||
+    lower.includes("log") ||
+    lower.includes("roundwood") ||
+    lower.includes("softwood") ||
+    lower.includes("hardwood") ||
+    lower.includes("firewood") ||
+    lower.includes("wood chips") ||
+    lower.includes("wood pellets") ||
+    lower.includes("wood residue") ||
+    lower.includes("wood waste") ||
+    lower.includes("wood fuel") ||
+    // 2. Lumber
+    lower.includes("lumber") ||
+    lower.includes("sawn timber") ||
+    lower.includes("sawn wood") ||
+    lower.includes("sawnwood") ||
+    lower.includes("wood plank") ||
+    lower.includes("plank") ||
+    lower.includes("wood board") ||
+    lower.includes("boards") ||
+    lower.includes("beam") ||
+    lower.includes("joist") ||
+    lower.includes("stud") ||
+    lower.includes("batten") ||
+    lower.includes("wood section") ||
+    // 3. Engineered Wood
+    lower.includes("plywood") ||
+    lower.includes("marine plywood") ||
+    lower.includes("blockboard") ||
+    lower.includes("particle board") ||
+    lower.includes("chipboard") ||
+    lower.includes("mdf") ||
+    lower.includes("hdf") ||
+    lower.includes("hardboard") ||
+    lower.includes("osb") ||
+    lower.includes("laminated timber") ||
+    lower.includes("glulam") ||
+    lower.includes("lvl") ||
+    lower.includes("veneer") ||
+    lower.includes("wood panel") ||
+    // 4. Joinery Products
+    lower.includes("door") ||
+    lower.includes("door shutter") ||
+    lower.includes("wooden door") ||
+    lower.includes("flush door") ||
+    lower.includes("panel door") ||
+    lower.includes("door frame") ||
+    lower.includes("door jamb") ||
+    lower.includes("window") ||
+    lower.includes("window frame") ||
+    lower.includes("wood frame") ||
+    lower.includes("cabinet") ||
+    lower.includes("wardrobe") ||
+    lower.includes("cupboard") ||
+    lower.includes("drawer") ||
+    lower.includes("shelf") ||
+    // 5. Furniture
+    lower.includes("table") ||
+    lower.includes("chair") ||
+    lower.includes("desk") ||
+    lower.includes("bed") ||
+    lower.includes("sofa") ||
+    lower.includes("bench") ||
+    lower.includes("stool") ||
+    lower.includes("furniture") ||
+    lower.includes("wood furniture") ||
+    lower.includes("office furniture") ||
+    // 6. Flooring
+    lower.includes("flooring") ||
+    lower.includes("wood flooring") ||
+    lower.includes("parquet") ||
+    lower.includes("laminate flooring") ||
+    lower.includes("decking") ||
+    lower.includes("wood deck") ||
+    // 7. Packaging
+    lower.includes("pallet") ||
+    lower.includes("crate") ||
+    lower.includes("box") ||
+    lower.includes("wood box") ||
+    lower.includes("packing case") ||
+    lower.includes("wood packaging") ||
+    lower.includes("packing timber") ||
+    // 8. Construction Timber
+    lower.includes("construction timber") ||
+    lower.includes("structural timber") ||
+    lower.includes("treated timber") ||
+    lower.includes("framing timber") ||
+    lower.includes("roof timber") ||
+    lower.includes("scaffold board") ||
+    // 9. Bamboo
+    lower.includes("bamboo") ||
+    lower.includes("bamboo board") ||
+    lower.includes("bamboo plywood") ||
+    // 10. Paper Pulp
+    lower.includes("pulp") ||
+    lower.includes("wood pulp") ||
+    lower.includes("kraft pulp") ||
+    lower.includes("paper pulp")
+  ) {
+    return "wood";
+  }
+
   return "unknown";
 }
