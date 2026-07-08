@@ -26,8 +26,20 @@ const CLIMATIQ_CATEGORY_MAPPING: Record<string, string> = {
   "limestone": "limestone",
   "dolomite": "dolomite",
   "coke": "coke",
-  "iron_ore": "iron ore"
+  "iron_ore": "iron ore",
+  // newly added
+  "coal": "coal",
+  "lime": "lime",
+  "cement": "cement",
+  "refractory": "refractory",
+  "industrial_gas": "industrial gas",
+  "bauxite": "bauxite",
+  "aggregates": "aggregates",
+  "cast_iron": "cast iron",
+  "aluminium": "aluminium",
+  "chemicals": "chemicals",
 };
+
 
 const WEIGHT_CATEGORIES = [
   "steel",
