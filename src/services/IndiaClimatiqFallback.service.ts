@@ -602,10 +602,11 @@ export async function calculateIndiaClimatiqFallback(
         if (region && isRegionError) {
           console.log(`\n[Climatiq] Region specific factor not found for ${region}. Starting fallback...`);
           
-          let regionsToTry: string[] = [];
-          if (region === "IN") regionsToTry = ["GLO", "RoW"];
-          else if (region === "GLO") regionsToTry = ["RoW"];
-          else if (region !== "IN" && region !== "GLO" && region !== "RoW") regionsToTry = ["GLO", "RoW"];
+          let regionsToTry: (string | undefined)[] = [];
+          if (region === "IN") regionsToTry = ["GLO", "RoW", undefined];
+          else if (region === "GLO") regionsToTry = ["RoW", undefined];
+          else if (region === "RoW") regionsToTry = [undefined];
+          else if (region !== "IN" && region !== "GLO" && region !== "RoW") regionsToTry = ["GLO", "RoW", undefined];
           
           let fallbackSuccess = false;
           let fallbackResult: any = null;

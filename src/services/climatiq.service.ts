@@ -382,7 +382,9 @@ export async function estimateWithClimatiqDirect(
     emission_factor: {
       activity_id: input.activityId,
       data_version: input.dataVersion || "^6",
-      region: input.region,
+      // Only include region when explicitly set — omitting it lets Climatiq
+      // pick GLOBAL factors (e.g. coke oven coke) without a region-match error
+      ...(input.region ? { region: input.region } : {}),
     },
     parameters: input.parameters ? input.parameters : {
       [input.parameterName]: input.value,
