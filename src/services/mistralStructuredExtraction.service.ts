@@ -120,7 +120,7 @@ Rules:
 - Do not extract subtotal, VAT/GST, rounded off, total, previous balance, or payment notice as line items.
 - Prefer actual quantity columns such as Pcs/Kgs/Quantity/Usage/kWh/MT/kg/litre/m3.
 - For electricity bills, extract total kWh consumption, not the first slab.
-- For timber/door invoices, extract product rows like Door Shutter, Flush Door, Plywood, Timber.
+- For timber/door invoices: "item_name" MUST be strictly one of: timber, wood, plywood, flush door, door shutter, veneer, laminate, mdf, particle board, block board, wooden door. Put all other details (sizes, dimensions, grades, thickness like 18mm, 12mm) into "description".
 - Keep "item_name" concise (max 3-5 words), summarizing the core product. Put long specifications (sizes, meshes, "Bordering with Rope") into "description". Do not extract ONLY a size (like "Size: 10 Mtr x 5 Mtr") as an item name.
 - For amount, use line item amount only.
 - Currency should be INR for Indian invoices, MYR for Malaysia invoices.

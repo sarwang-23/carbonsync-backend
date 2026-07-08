@@ -136,7 +136,8 @@ IMPORTANT RULES:
 - For natural gas or heating gas: category = "fuel", unit = "kWh" or "m3".
 - For liquid fuels (diesel, petrol, lpg): category = "fuel", unit = "l" or "litre".
 - For water bills: category = "water", unit = "m3".
-- For materials (timber, steel, cement, plastic, wood, glass, etc): use item_name = the short material name.
+- For materials (steel, cement, plastic, glass, etc): use item_name = the short material name.
+- For timber/wood: "item_name" MUST be strictly one of: timber, wood, plywood, flush door, door shutter, veneer, laminate, mdf, particle board, block board, wooden door. Put all other details (sizes, dimensions, grades, thickness like 18mm, 12mm) into "description".
 - category must be one of: electricity_bill, fuel, water, purchased_goods, transport_logistics, flight, rail, hotel, waste, steel, wood, plastic, glass, cement, paper, unknown.
 - Keep "item_name" concise (max 3-5 words), summarizing the core product. Put long specifications (sizes, meshes, "Bordering with Rope") into "description". Do not extract ONLY a size (like "Size: 10 Mtr x 5 Mtr") as an item name.
 - country: Extract the strict 2-letter ISO code (e.g., DE, FR, GB, AU, IN, MY, US) based on vendor address, VAT ID, or explicit region codes. DO NOT default to US.

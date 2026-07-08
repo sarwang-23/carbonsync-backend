@@ -95,6 +95,7 @@ function inferMaterial(itemName: string) {
 
 function makeItem(input: {
     itemName: string;
+    description?: string;
     quantity: number;
     unit: string;
     amount: number | null;
@@ -105,10 +106,11 @@ function makeItem(input: {
     parameters?: Record<string, any>;
 }): GenericExtractedLineItem {
     const itemName = cleanText(input.itemName);
+    const description = input.description ? cleanText(input.description) : itemName;
 
     return {
         item_name: itemName,
-        description: itemName,
+        description: description,
         quantity: input.quantity,
         unit: normalizeUnit(input.unit, itemName),
         amount: input.amount,
@@ -168,7 +170,8 @@ function extractStandardEightCellRows(rawText: string): GenericExtractedLineItem
 
         items.push(
             makeItem({
-                itemName: `${itemName} (${size})`,
+                itemName: itemName,
+                description: `${itemName} (${size})`,
                 quantity,
                 unit,
                 amount,
