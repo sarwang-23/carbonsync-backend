@@ -5,6 +5,7 @@ import { normalizeUnit } from "./UnitConversion.service.js";
 import { pool } from "../db.js";
 import { smartRailLookup } from "./IndiaRailwayRouteDB.js";
 import { fallbackLookup } from "./fallback/fallback.service.js";
+import { detectCategoryFromText } from "./CategoryDetection.service.js";
 
 type InvoiceEmissionItem = {
   item_name: string;
@@ -538,7 +539,16 @@ export async function processInvoiceEmissions(
         item.description ||
         "Unknown item";
 
-      const category = item.category || "unknown";
+      // Re-detect category from item name if it is missing or 'unknown'
+      // This is the permanent fix for OCR-extracted items that lack category
+      let category = item.category || "unknown";
+      if (category === "unknown" || !category) {
+        const detected = detectCategoryFromText(itemName);
+        if (detected && detected !== "unknown") {
+          console.log(`[CategoryRescue] "${itemName}" → "${detected}" (was unknown)`);
+          category = detected;
+        }
+      }
       const value = Number(item.value || item.quantity);
       const unit = item.unit;
       const nameLower = itemName.toLowerCase();
@@ -687,6 +697,44 @@ export async function processInvoiceEmissions(
       }
 
       if (category === "unknown") {
+        // For India: even unknown category items should try India fallback
+        // before giving up — many raw materials aren't pre-categorized by Mistral
+        if (input.region === "IN") {
+          const rescuedCategory = detectCategoryFromText(itemName);
+          if (rescuedCategory && rescuedCategory !== "unknown") {
+            console.log(`[IN CategoryRescue] Retrying "${itemName}" with category "${rescuedCategory}"`);
+            // Re-assign and fall through to India route below
+            (item as any).category = rescuedCategory;
+            // Jump to India route directly
+            const indiaResult = await calculateIndiaEmission({
+              category: rescuedCategory,
+              itemName,
+              value,
+              unit,
+            });
+            if (indiaResult.success) {
+              calculatedCount++;
+              totalCo2e += (indiaResult as any).co2e;
+              results.push({
+                line_index: i,
+                item_name: itemName,
+                category: rescuedCategory,
+                value, unit,
+                status: "calculated",
+                source_engine: (indiaResult as any).source_engine || "india_hybrid",
+                preferred_source: (indiaResult as any).preferred_source,
+                region: "IN",
+                country_name: "India",
+                factor_name: (indiaResult as any).factor_name,
+                activity_id: (indiaResult as any).activity_id,
+                converted: (indiaResult as any).converted,
+                co2e: (indiaResult as any).co2e,
+                co2e_unit: (indiaResult as any).co2e_unit,
+              });
+              continue;
+            }
+          }
+        }
         reviewCount++;
         results.push({
           line_index: i,
