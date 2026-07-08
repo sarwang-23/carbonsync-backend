@@ -765,7 +765,12 @@ export function detectCategoryFromText(text: string): string {
     lower.includes("ldpe") ||
     lower.includes("polymer") ||
     lower.includes("pvc") ||
-    lower.includes("pet resin")
+    lower.includes("pet resin") ||
+    lower.includes("safety net") ||
+    lower.includes("shade net") ||
+    lower.includes("fishing net") ||
+    lower.includes("nylon") ||
+    lower.includes("monofilament")
   ) {
     return "plastic";
   }

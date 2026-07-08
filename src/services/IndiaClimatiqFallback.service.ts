@@ -522,6 +522,19 @@ function convertForClimatiq(input: {
     }
   }
 
+  // ── Area-based categories ───────────────────────────────────────────────
+  if (
+    input.expectedParameterName === "area" ||
+    unit === "m2" || unit === "sqm" || unit === "sq.mtr." || unit === "sq mtr" || unit === "sq. mtr." || unit === "square meter" || unit === "sq meter"
+  ) {
+    return {
+      value: input.value,
+      parameterName: "area",
+      parameterUnit: "m2",
+      converted: false,
+    };
+  }
+
   // ── Money/spend-based categories ────────────────────────────────────────
   if (
     input.expectedParameterName === "money" ||

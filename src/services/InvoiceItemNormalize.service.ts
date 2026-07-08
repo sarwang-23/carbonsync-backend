@@ -164,6 +164,7 @@ export function normalizeItemName(raw: string, vendorName?: string): string {
   s = s.replace(/\b(?:size\s*:?\s*)?\d+(?:\.\d+)?\s*(?:mm|cm|inch|mtr|m|ft|sqm|sq mtr)\b/gi, " ");
   s = s.replace(/\b\d+(?:\.\d+)?\s*[xX*]\s*\d+(?:\.\d+)?(?:\s*[xX*]\s*\d+(?:\.\d+)?)?\b/g, " ");
   s = s.replace(/\b(?:size\s*)\b/gi, " ");
+  s = s.replace(/\b[xX]\b/g, " "); // Strip standalone 'x' left from dimensions
 
   // ── Step 5: Collapse extra whitespace ─────────────────────────────────────
   s = s.replace(/\s+/g, " ").trim();
@@ -173,9 +174,9 @@ export function normalizeItemName(raw: string, vendorName?: string): string {
   const n = s.toLowerCase();
 
   // Timber intelligence
-  if (v.includes("timber") || v.includes("wood") || v.includes("ply")) {
-      if (!/\b(plywood|door|board|timber|wood|mdf|veneer|laminate)\b/.test(n)) {
-          return s.length < 3 ? "Plywood" : "Plywood"; // Default
+  if (v.includes("timber") || v.includes("wood") || v.includes("ply") || v.includes("realtek")) {
+      if (!/\b(plywood|door|board|timber|wood|mdf|veneer|laminate|net)\b/.test(n)) {
+          return s.length <= 3 ? "Plywood" : "Plywood"; // Default
       }
   }
 
@@ -196,6 +197,10 @@ export function normalizeItemName(raw: string, vendorName?: string): string {
       if (n.includes("flush door")) return "Flush Door";
       if (n.includes("plywood")) return "Commercial Plywood";
       if (n.includes("mdf")) return "MDF Board";
+  }
+
+  if (n.includes("safety net") || n.includes("shade net") || n.includes("fishing net")) {
+      return "Safety Net";
   }
 
   if (n === "m s tmt bars") return "MS TMT Bars";
