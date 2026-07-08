@@ -767,7 +767,17 @@ export async function calculateIndiaClimatiqFallback(
         searchQuery = `steel ${cleanItemName}`;
       }
     } else {
-      searchQuery = `${searchCategory} ${cleanItemName} India`;
+      const nameLower = input.itemName.toLowerCase();
+      // Similar Product Matching
+      if (nameLower.includes("door shutter")) {
+          searchQuery = "wood door flush door timber products";
+      } else if (nameLower.includes("aluminium scrap")) {
+          searchQuery = "aluminium secondary scrap recycled";
+      } else if (nameLower.includes("coke breeze")) {
+          searchQuery = "coke coal breeze solid fuel";
+      } else {
+          searchQuery = `${searchCategory} ${cleanItemName} India`;
+      }
     }
     // ─────────────────────────────────────────────────────────────────────
 

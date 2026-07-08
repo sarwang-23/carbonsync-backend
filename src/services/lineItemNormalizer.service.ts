@@ -227,8 +227,67 @@ export function normalizeCurrency(value: any): string | null {
     return value ? String(value).toUpperCase() : null;
 }
 
+export function cleanItemName(rawName: string, vendor?: string): string {
+    let name = String(rawName || "").replace(/\s+/g, " ").trim();
+    if (!name) return "Unknown item";
+
+    // 1. Remove Dates (e.g. 11/06/17, 12-05-2017)
+    name = name.replace(/\b\d{1,4}[/-]\d{1,2}[/-]\d{1,4}\b/g, " ");
+
+    // 2. Remove Measurements & Dimensions
+    name = name.replace(/\b(?:size\s*:?\s*)?\d+(?:\.\d+)?\s*(?:mm|cm|inch|mtr|m|ft|sqm|sq mtr)\b/gi, " ");
+    name = name.replace(/\b\d+(?:\.\d+)?\s*[xX*]\s*\d+(?:\.\d+)?(?:\s*[xX*]\s*\d+(?:\.\d+)?)?\b/g, " ");
+    name = name.replace(/\b(?:size\s*)\b/gi, " ");
+
+    // 3. Remove Garbage Tokens
+    const garbageTokens = /\b(paying|rate|gst|cgst|sgst|igst|tax|discount|total|amount|po|inv|no\.?|ref)\b/gi;
+    name = name.replace(garbageTokens, " ");
+
+    // 4. Remove Random Codes / Invoice Numbers (like 38/1129, HE/24, SB17Y, F3011-011)
+    name = name.replace(/\b[A-Z0-9]+[/-][A-Z0-9]+\b/gi, " ");
+
+    // Clean up multiple spaces
+    name = name.replace(/\s+/g, " ").trim();
+
+    // 5. Vendor Based Intelligence & Industry Dictionary
+    const v = String(vendor || "").toLowerCase();
+    const n = name.toLowerCase();
+
+    // Timber intelligence
+    if (v.includes("timber") || v.includes("wood") || v.includes("ply")) {
+        if (!/\b(plywood|door|board|timber|wood|mdf|veneer|laminate)\b/.test(n)) {
+            return name.length < 3 ? "Plywood" : "Plywood"; // Default
+        }
+    }
+
+    // Steel intelligence
+    if (v.includes("steel") || v.includes("iron") || v.includes("metal")) {
+        if (!/\b(tmt|bar|rod|coil|pipe|beam|angle|channel|scrap)\b/.test(n)) {
+             return name.length < 3 ? "TMT Bar" : "TMT Bar"; // Default
+        }
+    }
+
+    // Industry Dictionary / Similar matching
+    if (/\b(?:tmt|ms|ss|gi|bars?|rods?|coils?|pipes?|beams?|angles?|channels?)\b/.test(n) && !n.includes("steel") && !n.includes("iron")) {
+        if (n.includes("tmt")) return "MS TMT Bar";
+    }
+
+    if (/\b(door|door shutter|flush door|plywood|blockboard|mdf|board|wood|timber)\b/.test(n)) {
+        if (n.includes("door shutter")) return "Door Shutter";
+        if (n.includes("flush door")) return "Flush Door";
+        if (n.includes("plywood")) return "Commercial Plywood";
+        if (n.includes("mdf")) return "MDF Board";
+    }
+
+    if (n === "m s tmt bars") return "MS TMT Bars";
+    if (n.includes("tmt bars 12 mm")) return "MS TMT Bars";
+
+    return name || "Unknown item";
+}
+
 export function normalizeLineItem(item: any): NormalizedLineItem {
-    const itemName = String(item?.item_name || item?.name || item?.description || "Unknown item");
+    const rawItemName = String(item?.item_name || item?.name || item?.description || "Unknown item");
+    const itemName = cleanItemName(rawItemName, item?.vendor || item?.parameters?.vendor);
     const description = String(item?.description || item?.item_description || "");
     const unitLower = String(item?.unit || item?.uom || "").toLowerCase().trim();
 
