@@ -136,8 +136,9 @@ IMPORTANT RULES:
 - For natural gas or heating gas: category = "fuel", unit = "kWh" or "m3".
 - For liquid fuels (diesel, petrol, lpg): category = "fuel", unit = "l" or "litre".
 - For water bills: category = "water", unit = "m3".
-- For materials (timber, steel, cement, etc): use item_name = the material name.
-- category must be one of: electricity_bill, fuel, water, purchased_goods, transport_logistics, flight, rail, hotel, waste, unknown.
+- For materials (timber, steel, cement, plastic, wood, glass, etc): use item_name = the short material name.
+- category must be one of: electricity_bill, fuel, water, purchased_goods, transport_logistics, flight, rail, hotel, waste, steel, wood, plastic, glass, cement, paper, unknown.
+- Keep "item_name" concise (max 3-5 words), summarizing the core product. Put long specifications (sizes, meshes, "Bordering with Rope") into "description". Do not extract ONLY a size (like "Size: 10 Mtr x 5 Mtr") as an item name.
 - country: Extract the strict 2-letter ISO code (e.g., DE, FR, GB, AU, IN, MY, US) based on vendor address, VAT ID, or explicit region codes. DO NOT default to US.
 - currency: Extract the exact currency (e.g., EUR, GBP, AUD, MYR, INR, USD). DO NOT default to USD.
 - RAILWAY TICKETS: If you detect a train/railway ticket (IRCTC, Indian Railways, PNR, train number), extract these additional fields at the TOP LEVEL of the JSON:

@@ -697,42 +697,21 @@ export async function calculateIndiaClimatiqFallback(
       console.log(`[IN Multi-Fallback] ✗ ${actId} — no region worked`);
     }
 
-    // All activity IDs exhausted — mark for review
-    return {
-      success: false,
-      status: "review",
-      source_engine: "climatiq",
-      region: "IN",
-      country_name: "India",
-      category: input.category,
-      reason: "NO_INDIA_CLIMATIQ_MAPPING",
-      message: `No Climatiq factor found for category "${input.category}" across ${priorityActivityIds.length} activity IDs and ${REGION_FALLBACK_ORDER.length} regions`,
-    };
+    // All activity IDs exhausted — fall through to search fallback
+    console.log(`[IN Multi-Fallback] ✗ All ${priorityActivityIds.length} IDs failed for ${input.category}, falling back to smart search`);
   }
 
   // ── 2. Database mapped logic (for legacy mappings) ─────────
   const mapping = await getIndiaFallbackMapping(input.category);
   
-  if (!mapping) {
-      return {
-          success: false,
-          status: "review",
-          source_engine: "climatiq",
-          region: "IN",
-          country_name: "India",
-          category: input.category,
-          reason: "NO_INDIA_CLIMATIQ_MAPPING",
-          message: `No predefined fallback logic or database mapping for ${input.category}`,
-      };
-  }
   // ─────────────────────────────────────────────────────────────────────────
 
   const converted = convertForClimatiq({
     category: input.category,
     value: input.value,
     unit: input.unit,
-    expectedParameterName: mapping.parameter_name,
-    expectedParameterUnit: mapping.parameter_unit,
+    expectedParameterName: mapping?.parameter_name || null,
+    expectedParameterUnit: mapping?.parameter_unit || null,
   });
 
   if ((converted as any).review_required) {
@@ -750,7 +729,7 @@ export async function calculateIndiaClimatiqFallback(
     };
   }
 
-  let activityId = mapping.activity_id;
+  let activityId = mapping?.activity_id;
   let targetRegion: string | undefined = "IN";
 
   if (!activityId) {
@@ -795,11 +774,11 @@ export async function calculateIndiaClimatiqFallback(
     let searchedFactor = await searchClimatiqFactor({
       query: searchQuery,
       region: "IN",
-      dataVersion: mapping.data_version || "^6",
+      dataVersion: mapping?.data_version || "^6",
       resultsPerPage: 10,
     });
     if (!searchedFactor?.activity_id) {
-        searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "IN", dataVersion: mapping.data_version || "^6", resultsPerPage: 1 });
+        searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "IN", dataVersion: mapping?.data_version || "^6", resultsPerPage: 1 });
     }
 
     if (!searchedFactor?.activity_id) {
@@ -808,11 +787,11 @@ export async function calculateIndiaClimatiqFallback(
       searchedFactor = await searchClimatiqFactor({
         query: globalSearchQuery,
         region: "GLO",
-        dataVersion: mapping.data_version || "^6",
+        dataVersion: mapping?.data_version || "^6",
         resultsPerPage: 10,
       });
       if (!searchedFactor?.activity_id) {
-          searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "GLO", dataVersion: mapping.data_version || "^6", resultsPerPage: 1 });
+          searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "GLO", dataVersion: mapping?.data_version || "^6", resultsPerPage: 1 });
       }
       if (searchedFactor?.activity_id) targetRegion = "GLO";
     }
@@ -823,11 +802,11 @@ export async function calculateIndiaClimatiqFallback(
       searchedFactor = await searchClimatiqFactor({
         query: rowSearchQuery,
         region: "RoW",
-        dataVersion: mapping.data_version || "^6",
+        dataVersion: mapping?.data_version || "^6",
         resultsPerPage: 10,
       });
       if (!searchedFactor?.activity_id) {
-          searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "RoW", dataVersion: mapping.data_version || "^6", resultsPerPage: 1 });
+          searchedFactor = await searchClimatiqFactor({ query: genericQuery, region: "RoW", dataVersion: mapping?.data_version || "^6", resultsPerPage: 1 });
       }
       if (searchedFactor?.activity_id) targetRegion = "RoW";
     }
