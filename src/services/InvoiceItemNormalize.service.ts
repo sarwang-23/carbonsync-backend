@@ -125,25 +125,19 @@ function resolveCategory(
  *  3. Remove payment-related keywords and trailing text  (paying, paid, balance …)
  *  4. Collapse multiple spaces
  */
-export function normalizeItemName(raw: string): string {
+export function normalizeItemName(raw: string, vendorName?: string): string {
   let s = raw.trim();
 
   // ── Step 1: Remove date patterns ─────────────────────────────────────────
-  // DD/MM/YY(YY) and DD-MM-YY(YY)
   s = s.replace(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/g, "");
-  // YYYY/MM/DD or YYYY-MM-DD
   s = s.replace(/\b\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}\b/g, "");
 
   // ── Step 2: Remove invoice / reference number patterns ───────────────────
-  // Labeled refs: INV-12345, SB17Y-02827, HE/24-25/1632, PO-2024/001
   s = s.replace(
     /\b(?:inv|sb|he|gst|bill|ref|no|sr|so|po|dc|del|note|dn|cn)[\/\-]?[\w\-\/]{2,20}\b/gi,
     ""
   );
-  // Pure numeric slash refs: 38/1129, 2024/1234 (2–6 digits on each side)
   s = s.replace(/\b\d{2,6}\/\d{2,6}\b/g, "");
-  // Alphanumeric invoice codes (letters then digits, 5-15 chars) like SB17Y02827
-  // Preserve known product specs: Fe500, IS2062, TMT, HRC, etc.
   s = s.replace(/\b[A-Z]{1,4}\d{2,}[A-Z0-9]{0,10}\b/g, (match) => {
     const preserve =
       /^(Fe|IS|HR|CR|GP|GI|MS|TMT|HRC|CRC|DRI|HBI|PCI|OPC|PPC|LPG|CNG|PNG|LNG)/i.test(
@@ -152,31 +146,12 @@ export function normalizeItemName(raw: string): string {
     return preserve ? match : "";
   });
 
-  // ── Step 3: Remove payment-related keywords (and trailing text on same token) ──
+  // ── Step 3: Remove payment & garbage tokens ──────────────────────────────
   const PAYMENT_WORDS = [
-    "paying",
-    "payment",
-    "paid",
-    "balance",
-    "due",
-    "outstanding",
-    "receipt",
-    "invoice",
-    "bill no",
-    "vide",
-    "against",
-    "advance",
-    "deposit",
-    "clearing",
-    "settlement",
-    "remittance",
-    "cheque",
-    "neft",
-    "rtgs",
-    "imps",
-    "upi",
-    "tds",
-    "gst",
+    "paying", "payment", "paid", "balance", "due", "outstanding", "receipt",
+    "invoice", "bill no", "vide", "against", "advance", "deposit", "clearing",
+    "settlement", "remittance", "cheque", "neft", "rtgs", "imps", "upi", "tds",
+    "gst", "cgst", "sgst", "igst", "tax", "discount", "total", "amount", "rate"
   ];
   const paymentPattern = new RegExp(
     `\\b(${PAYMENT_WORDS.join("|")})\\b[^\\n]*`,
@@ -184,10 +159,48 @@ export function normalizeItemName(raw: string): string {
   );
   s = s.replace(paymentPattern, "");
 
-  // ── Step 4: Collapse extra whitespace ─────────────────────────────────────
+  // ── Step 4: Remove Measurements & Dimensions ─────────────────────────────
+  // 10 x 5, 12 mm, 38 mm, 5 mtr, 2.5 inch, Size 10 Mtr x 5 Mtr
+  s = s.replace(/\b(?:size\s*:?\s*)?\d+(?:\.\d+)?\s*(?:mm|cm|inch|mtr|m|ft|sqm|sq mtr)\b/gi, " ");
+  s = s.replace(/\b\d+(?:\.\d+)?\s*[xX*]\s*\d+(?:\.\d+)?(?:\s*[xX*]\s*\d+(?:\.\d+)?)?\b/g, " ");
+  s = s.replace(/\b(?:size\s*)\b/gi, " ");
+
+  // ── Step 5: Collapse extra whitespace ─────────────────────────────────────
   s = s.replace(/\s+/g, " ").trim();
 
-  // Sanity-check: if cleaning wiped the whole string, return original
+  // ── Step 6: Vendor Based Intelligence & Industry Dictionary ───────────────
+  const v = String(vendorName || "").toLowerCase();
+  const n = s.toLowerCase();
+
+  // Timber intelligence
+  if (v.includes("timber") || v.includes("wood") || v.includes("ply")) {
+      if (!/\b(plywood|door|board|timber|wood|mdf|veneer|laminate)\b/.test(n)) {
+          return s.length < 3 ? "Plywood" : "Plywood"; // Default
+      }
+  }
+
+  // Steel intelligence
+  if (v.includes("steel") || v.includes("iron") || v.includes("metal")) {
+      if (!/\b(tmt|bar|rod|coil|pipe|beam|angle|channel|scrap)\b/.test(n)) {
+           return s.length < 3 ? "TMT Bar" : "TMT Bar"; // Default
+      }
+  }
+
+  // Industry Dictionary
+  if (/\b(?:tmt|ms|ss|gi|bars?|rods?|coils?|pipes?|beams?|angles?|channels?)\b/.test(n) && !n.includes("steel") && !n.includes("iron")) {
+      if (n.includes("tmt")) return "MS TMT Bar";
+  }
+
+  if (/\b(door|door shutter|flush door|plywood|blockboard|mdf|board|wood|timber)\b/.test(n)) {
+      if (n.includes("door shutter")) return "Door Shutter";
+      if (n.includes("flush door")) return "Flush Door";
+      if (n.includes("plywood")) return "Commercial Plywood";
+      if (n.includes("mdf")) return "MDF Board";
+  }
+
+  if (n === "m s tmt bars") return "MS TMT Bars";
+  if (n.includes("tmt bars 12 mm") || n.includes("tmt bar 12mm")) return "MS TMT Bars";
+
   if (!s) {
     console.warn(
       `[normalizeItemName] Full string removed after cleaning — keeping original: "${raw}"`
@@ -227,7 +240,7 @@ export function normalizeInvoiceItems(
     // ── OCR Noise Cleaning ──────────────────────────────────────────────────
     // Strip dates, invoice numbers, and payment keywords before anything else.
     // e.g. "11/06/17 M S TMT Bars 12 mm 38/1129 paying 12/5/17" → "M S TMT Bars 12 mm"
-    const itemName = normalizeItemName(rawItemName);
+    const itemName = normalizeItemName(rawItemName, vendorName);
 
     const detectedCategory = detectCategoryFromText(itemName);
 
