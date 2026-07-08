@@ -74,6 +74,19 @@ export function normalizeUnit(unit?: string | null): string {
     "kgco2e/kwh": "kgco2e/kwh",
     "kg/kwh": "kgco2e/kwh",
 
+    // area
+    "sqm": "m2",
+    "sqmtr": "m2",
+    "sqmeter": "m2",
+    "sqmetre": "m2",
+    "sq.mtr.": "m2",
+    "sq.mtr": "m2",
+    "sqft": "sqft",
+    "squaremeter": "m2",
+    "squaremetre": "m2",
+    "squarefoot": "sqft",
+    "squarefeet": "sqft",
+
     // quantity
     "piece": "pcs",
     "pieces": "pcs",

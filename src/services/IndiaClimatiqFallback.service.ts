@@ -625,7 +625,12 @@ export async function calculateIndiaClimatiqFallback(
     // Infer unit conversion defaults based on category type
     let inferredParameterName = "weight";
     let inferredParameterUnit = "kg";
-    if (ENERGY_CATEGORIES.includes(input.category)) {
+    const unitNorm = normalizeUnit(input.unit);
+    // If unit is area-based (m2 / sqft), override to area parameter
+    if (unitNorm === "m2" || unitNorm === "sqft") {
+      inferredParameterName = "area";
+      inferredParameterUnit = unitNorm === "sqft" ? "ft2" : "m2";
+    } else if (ENERGY_CATEGORIES.includes(input.category)) {
       inferredParameterName = "energy";
       inferredParameterUnit = "kWh";
     } else if (VOLUME_CATEGORIES.includes(input.category)) {
