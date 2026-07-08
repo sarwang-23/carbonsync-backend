@@ -6,6 +6,8 @@ type IndiaEmissionInput = {
   itemName: string;
   value: number;
   unit: string;
+  amount?: number;
+  currency?: string;
 };
 
 const INDIA_FIXED_CATEGORIES = ["electricity", "railway", "flight"];
@@ -26,5 +28,7 @@ export async function calculateIndiaEmission(input: IndiaEmissionInput) {
     itemName: input.itemName,
     value: input.value,
     unit: input.unit,
+    amount: input.amount,
+    currency: input.currency,
   });
 }

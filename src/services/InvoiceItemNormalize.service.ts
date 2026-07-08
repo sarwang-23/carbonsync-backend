@@ -17,6 +17,7 @@ export type NormalizedInvoiceItem = {
   value: number;
   unit: string;
   description?: string;
+  amount?: number;
 };
 
 // Units that are ONLY used for gas/thermal energy — never for electricity billing
@@ -174,9 +175,17 @@ export function normalizeItemName(raw: string, vendorName?: string): string {
   const n = s.toLowerCase();
 
   // Timber intelligence
-  if (v.includes("timber") || v.includes("wood") || v.includes("ply") || v.includes("realtek")) {
+  if (v.includes("timber") || v.includes("wood") || v.includes("ply")) {
       if (!/\b(plywood|door|board|timber|wood|mdf|veneer|laminate|net)\b/.test(n)) {
           return s.length <= 3 ? "Plywood" : "Plywood"; // Default
+      }
+  }
+
+  // Safety Net vendor intelligence (Realtek = safety net manufacturer)
+  if (v.includes("realtek") || v.includes("safety net") || v.includes("garware")) {
+      // If the cleaned name is gibberish/too short, default to Safety Net
+      if (!n || n.length <= 3 || !/\b(safety|net|shade|nylon|rope|mesh|fishing)\b/.test(n)) {
+          return "Safety Net";
       }
   }
 
@@ -272,6 +281,7 @@ export function normalizeInvoiceItems(
       value: value ? Number(value) : 0,
       unit: unit || "",
       description: item.description,
+      amount: item.amount || item.total,
     };
   });
 }

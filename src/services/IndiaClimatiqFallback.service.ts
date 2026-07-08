@@ -8,6 +8,8 @@ type IndiaClimatiqFallbackInput = {
   itemName: string;
   value: number;
   unit: string;
+  amount?: number;   // invoice line total (for spend-based categories)
+  currency?: string; // e.g. "inr"
 };
 
 const CLIMATIQ_CATEGORY_MAPPING: Record<string, string> = {
@@ -38,6 +40,10 @@ const CLIMATIQ_CATEGORY_MAPPING: Record<string, string> = {
   "cast_iron": "cast iron",
   "aluminium": "aluminium",
   "chemicals": "chemicals",
+  "plastic": "plastic material",
+  "glass": "glass",
+  "paper": "paper",
+  "wood": "timber wood",
 };
 
 
@@ -71,7 +77,6 @@ const WEIGHT_CATEGORIES = [
   "cement",
   "concrete",
   "glass",
-  "plastic",
   "paper",
   "wood",
   "food",
@@ -95,6 +100,7 @@ const MONEY_CATEGORIES = [
   "services",
   "electrical",
   "electronics",
+  "plastic",        // Climatiq plastic EF is spend-based (Money unit)
 ];
 
 /**
@@ -417,10 +423,28 @@ function convertForClimatiq(input: {
   category: string;
   value: number;
   unit: string;
+  amount?: number;
+  currency?: string;
   expectedParameterName: string | null;
   expectedParameterUnit: string | null;
 }) {
   const unit = normalizeUnit(input.unit);
+
+  // ── Money/spend-based categories (HIGHEST PRIORITY) ─────────────────────────
+  if (
+    input.expectedParameterName === "money" ||
+    MONEY_CATEGORIES.includes(input.category)
+  ) {
+    const val = input.amount !== undefined ? input.amount : input.value;
+    const fallbackUnit = input.currency ? input.currency.toLowerCase() : "inr";
+    return {
+      value: val,
+      parameterName: "money",
+      parameterUnit: input.expectedParameterUnit || fallbackUnit,
+      converted: input.amount !== undefined,
+      conversion_note: input.amount !== undefined ? "Used invoice line amount for spend-based emission calculation" : undefined,
+    };
+  }
 
   // ── Weight-based categories ─────────────────────────────────────────────
   if (
@@ -525,25 +549,12 @@ function convertForClimatiq(input: {
   // ── Area-based categories ───────────────────────────────────────────────
   if (
     input.expectedParameterName === "area" ||
-    unit === "m2" || unit === "sqm" || unit === "sq.mtr." || unit === "sq mtr" || unit === "sq. mtr." || unit === "square meter" || unit === "sq meter"
+    unit === "m2" || unit === "sqm" || unit === "sq.mtr." || unit === "sq mtr" || unit === "sq. mtr." || unit === "square meter" || unit === "sq meter" || unit === "sqft" || unit === "squarefoot"
   ) {
     return {
       value: input.value,
       parameterName: "area",
-      parameterUnit: "m2",
-      converted: false,
-    };
-  }
-
-  // ── Money/spend-based categories ────────────────────────────────────────
-  if (
-    input.expectedParameterName === "money" ||
-    MONEY_CATEGORIES.includes(input.category)
-  ) {
-    return {
-      value: input.value,
-      parameterName: "money",
-      parameterUnit: input.expectedParameterUnit || "usd",
+      parameterUnit: unit === "sqft" || unit === "squarefoot" ? "ft2" : "m2",
       converted: false,
     };
   }
@@ -570,6 +581,25 @@ function convertForClimatiq(input: {
         }
       };
     }
+  }
+
+  // ── Area → Weight conversion for plastic/textile items (safety nets, shade nets) ─────────
+  // Typical nylon / polypropylene safety net density: ~60 g/m²
+  // This allows Sq.Mtr. invoices to pass through as kg to Climatiq
+  const AREA_TO_WEIGHT_CATEGORIES = ["plastic", "textile", "purchased_goods"];
+  if (
+    (unit === "m2" || unit === "sqm" || unit === "sqft") &&
+    AREA_TO_WEIGHT_CATEGORIES.includes(input.category)
+  ) {
+    const densityKgPerM2 = 0.06; // ~60 g/m² for nylon safety net / shade net
+    const areaM2 = unit === "sqft" ? input.value * 0.0929 : input.value;
+    return {
+      value: Number((areaM2 * densityKgPerM2).toFixed(4)),
+      parameterName: "weight",
+      parameterUnit: "kg",
+      converted: true,
+      conversion_note: `Converted ${input.value} ${unit} → weight using density 60 g/m² (nylon/polypropylene net)`,
+    };
   }
 
   return {
@@ -626,8 +656,11 @@ export async function calculateIndiaClimatiqFallback(
     let inferredParameterName = "weight";
     let inferredParameterUnit = "kg";
     const unitNorm = normalizeUnit(input.unit);
-    // If unit is area-based (m2 / sqft), override to area parameter
-    if (unitNorm === "m2" || unitNorm === "sqft") {
+    // Check spend first
+    if (MONEY_CATEGORIES.includes(input.category)) {
+      inferredParameterName = "money";
+      inferredParameterUnit = "inr";
+    } else if (unitNorm === "m2" || unitNorm === "sqft" || unitNorm === "sqm") {
       inferredParameterName = "area";
       inferredParameterUnit = unitNorm === "sqft" ? "ft2" : "m2";
     } else if (ENERGY_CATEGORIES.includes(input.category)) {
@@ -639,15 +672,14 @@ export async function calculateIndiaClimatiqFallback(
     } else if (DISTANCE_CATEGORIES.includes(input.category)) {
       inferredParameterName = "distance";
       inferredParameterUnit = "km";
-    } else if (MONEY_CATEGORIES.includes(input.category)) {
-      inferredParameterName = "money";
-      inferredParameterUnit = "inr";
     }
 
-    const converted = convertForClimatiq({
+    const finalConverted = convertForClimatiq({
       category: input.category,
       value: input.value,
       unit: input.unit,
+      amount: input.amount,
+      currency: input.currency,
       expectedParameterName: inferredParameterName,
       expectedParameterUnit: inferredParameterUnit,
     });
@@ -657,12 +689,12 @@ export async function calculateIndiaClimatiqFallback(
       for (const region of REGION_FALLBACK_ORDER) {
         // Try both kg and tonne variants for weight-based categories
         const paramVariants = [
-          { parameterName: converted.parameterName, value: converted.value, parameterUnit: converted.parameterUnit },
-          ...(converted.parameterName === "weight" && converted.parameterUnit === "kg"
-            ? [{ parameterName: "weight", value: Number((converted.value / 1000).toFixed(6)), parameterUnit: "t" }]
+          { parameterName: finalConverted.parameterName, value: finalConverted.value, parameterUnit: finalConverted.parameterUnit },
+          ...(finalConverted.parameterName === "weight" && finalConverted.parameterUnit === "kg"
+            ? [{ parameterName: "weight", value: Number((finalConverted.value / 1000).toFixed(6)), parameterUnit: "t" }]
             : []),
-          ...(converted.parameterName === "weight" && (converted.parameterUnit === "t" || converted.parameterUnit === "tonne")
-            ? [{ parameterName: "weight", value: converted.value * 1000, parameterUnit: "kg" }]
+          ...(finalConverted.parameterName === "weight" && (finalConverted.parameterUnit === "t" || finalConverted.parameterUnit === "tonne")
+            ? [{ parameterName: "weight", value: finalConverted.value * 1000, parameterUnit: "kg" }]
             : []),
         ];
 
@@ -728,6 +760,8 @@ export async function calculateIndiaClimatiqFallback(
     category: input.category,
     value: input.value,
     unit: input.unit,
+    amount: input.amount,
+    currency: input.currency,
     expectedParameterName: mapping?.parameter_name || null,
     expectedParameterUnit: mapping?.parameter_unit || null,
   });

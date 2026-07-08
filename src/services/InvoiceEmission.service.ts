@@ -12,6 +12,7 @@ type InvoiceEmissionItem = {
   category: string;
   value: number;
   unit: string;
+  amount?: number;
 };
 
 type ProcessInvoiceEmissionInput = {
@@ -19,6 +20,7 @@ type ProcessInvoiceEmissionInput = {
   country_name: string;
   invoice_year?: number | null;
   invoice_text?: string;   // full raw PDF text — used for AU state detection
+  currency?: string;
   items: InvoiceEmissionItem[];
 };
 
@@ -551,6 +553,8 @@ export async function processInvoiceEmissions(
       }
       const value = Number(item.value || item.quantity);
       const unit = item.unit;
+      const amount = item.amount ? Number(item.amount) : undefined;
+      const currency = input.currency || "inr";
       const nameLower = itemName.toLowerCase();
 
       // ── Non-emission item check (tax, duty, discount, etc.) ───────────────
@@ -711,6 +715,8 @@ export async function processInvoiceEmissions(
               itemName,
               value,
               unit,
+              amount,
+              currency,
             });
             if (indiaResult.success) {
               calculatedCount++;
@@ -779,6 +785,8 @@ export async function processInvoiceEmissions(
             itemName,
             value,
             unit,
+            amount,
+            currency,
           });
         } catch (error: any) {
           console.error(`[India Route Error] ${error?.message}`);
