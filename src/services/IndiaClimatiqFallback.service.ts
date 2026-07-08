@@ -495,11 +495,13 @@ async function getIndiaFallbackMapping(category: string) {
 export async function calculateIndiaClimatiqFallback(
   input: IndiaClimatiqFallbackInput
 ) {
-  const mapping = await getIndiaFallbackMapping(input.category);
+  const priorityActivityIds: string[] = [
+    ...(CATEGORY_ACTIVITY_MAP[input.category] || []),
+  ];
 
-  // ── No DB mapping → multi-activity + multi-region fallback engine ─────────
-  if (!mapping) {
-    console.log(`[IN] No DB mapping for "${input.category}" — starting multi-activity fallback engine`);
+  // ── 1. Hardcoded priority mappings → multi-activity + multi-region fallback engine ─────────
+  if (priorityActivityIds.length > 0) {
+    console.log(`[IN] Using multi-activity fallback engine for "${input.category}" with ${priorityActivityIds.length} IDs`);
 
     // Infer unit conversion defaults based on category type
     let inferredParameterName = "weight";
@@ -522,13 +524,6 @@ export async function calculateIndiaClimatiqFallback(
       expectedParameterName: inferredParameterName,
       expectedParameterUnit: inferredParameterUnit,
     });
-
-    // Build ordered activity ID list:
-    // 1. DB-seeded mappings (from CATEGORY_ACTIVITY_MAP)
-    // 2. Climatiq search as last resort
-    const priorityActivityIds: string[] = [
-      ...(CATEGORY_ACTIVITY_MAP[input.category] || []),
-    ];
 
     // Try each activity_id × each region
     for (const actId of priorityActivityIds) {
@@ -579,8 +574,14 @@ export async function calculateIndiaClimatiqFallback(
               factor_region: result.factor_region ?? region ?? "GLOBAL",
               raw: result.raw,
             };
-          } catch (_) {
-            // Silent: try next variant / region / activity
+          } catch (err: any) {
+            const errMsg = String(err?.message || "");
+            console.log(`[IN Multi-Fallback] ❌ ${actId} | region=${region ?? "GLOBAL"} | error=${errMsg.substring(0, 50)}`);
+            // If the factor doesn't exist for this region, don't waste time trying other unit variants
+            if (errMsg.includes("No emission factors could be found") || errMsg.includes("region")) {
+                break; // Break inner paramVariants loop, move to next region
+            }
+            // If it's a unit error or something else, continue trying next param variant
           }
         }
       }
@@ -598,6 +599,22 @@ export async function calculateIndiaClimatiqFallback(
       reason: "NO_INDIA_CLIMATIQ_MAPPING",
       message: `No Climatiq factor found for category "${input.category}" across ${priorityActivityIds.length} activity IDs and ${REGION_FALLBACK_ORDER.length} regions`,
     };
+  }
+
+  // ── 2. Database mapped logic (for legacy mappings) ─────────
+  const mapping = await getIndiaFallbackMapping(input.category);
+  
+  if (!mapping) {
+      return {
+          success: false,
+          status: "review",
+          source_engine: "climatiq",
+          region: "IN",
+          country_name: "India",
+          category: input.category,
+          reason: "NO_INDIA_CLIMATIQ_MAPPING",
+          message: `No predefined fallback logic or database mapping for ${input.category}`,
+      };
   }
   // ─────────────────────────────────────────────────────────────────────────
 

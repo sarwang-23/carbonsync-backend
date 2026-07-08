@@ -772,12 +772,24 @@ export async function processInvoiceEmissions(
       if (input.region === "IN") {
         console.log("USING INDIA FIXED/HYBRID ROUTE");
 
-        const indiaResult = await calculateIndiaEmission({
-          category,
-          itemName,
-          value,
-          unit,
-        });
+        let indiaResult: any;
+        try {
+          indiaResult = await calculateIndiaEmission({
+            category,
+            itemName,
+            value,
+            unit,
+          });
+        } catch (error: any) {
+          console.error(`[India Route Error] ${error?.message}`);
+          indiaResult = {
+            success: false,
+            status: "review",
+            source_engine: "india_hybrid",
+            reason: "CLIMATIQ_API_ERROR",
+            message: error?.message || "Failed to calculate India emissions",
+          };
+        }
 
         if (!indiaResult.success) {
           reviewCount++;
@@ -789,11 +801,11 @@ export async function processInvoiceEmissions(
             value,
             unit,
             status: "review",
-            source_engine: (indiaResult as any).source_engine || "india_hybrid",
+            source_engine: indiaResult.source_engine || "india_hybrid",
             region: "IN",
-            reason: (indiaResult as any).reason,
-            message: (indiaResult as any).message,
-            expected_factor_unit: (indiaResult as any).expected_factor_unit,
+            reason: indiaResult.reason,
+            message: indiaResult.message,
+            expected_factor_unit: indiaResult.expected_factor_unit,
           });
 
           continue;

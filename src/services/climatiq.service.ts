@@ -407,7 +407,7 @@ export async function estimateWithClimatiqDirect(
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data?.message || data?.error || `Climatiq API failed with status ${response.status}`);
+    throw new Error(`${data?.message || data?.error} | RAW_ERROR: ${JSON.stringify(data)}`);
   }
 
   return {

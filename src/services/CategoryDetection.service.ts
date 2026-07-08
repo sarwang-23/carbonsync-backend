@@ -894,5 +894,18 @@ export function detectCategoryFromText(text: string): string {
     return "exporter";
   }
 
+  // ── Chemicals ──────────────────────────────────────────────────────────────
+  if (
+    lower.includes("chemical") ||
+    lower.includes("acid") ||
+    lower.includes("alkali") ||
+    lower.includes("solvent") ||
+    lower.includes("caustic") ||
+    lower.includes("caustic soda") ||
+    lower.includes("sodium hydroxide")
+  ) {
+    return "chemicals";
+  }
+
   return "unknown";
 }
