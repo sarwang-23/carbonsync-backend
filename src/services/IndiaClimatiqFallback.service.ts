@@ -48,6 +48,11 @@ const WEIGHT_CATEGORIES = [
   "raw_material_steel",
   "stainless_steel",
   "alloy_steel",
+  "steel_sheet",
+  "steel_plate",
+  "steel_coil",
+  "steel_pipe",
+  "structural_steel",
   "aluminium",
   "textile",
   "lpg",
@@ -141,6 +146,60 @@ const CATEGORY_ACTIVITY_MAP: Record<string, string[]> = {
     "metals-type_hot_rolled_coil",
     "metals-type_iron_non_alloy_steel",
   ],
+
+  // ── Steel Sheet ────────────────────────────────────────────────────────────
+  steel_sheet: [
+    "metals-type_steel_sheet_galvanized",
+    "metals-type_stainless_steel_sheet",
+    "metal_products-type_stainless_steel_sheet",
+    "metals-type_iron_steel_sheet_piling",
+    "metals-type_iron_non_alloy_steel_flat_rolled_products",
+    "metals-type_iron_non_alloy_steel_cold_rolled_sheet",
+    "metals-type_iron_non_alloy_steel_hot_rolled_sheet",
+    "metals-type_iron_non_alloy_steel_galvanised_sheet",
+    "metals-type_iron_non_alloy_steel_coated_sheet",
+    "metals-type_hot_rolled_coil",
+  ],
+
+  // ── Steel Plate ────────────────────────────────────────────────────────────
+  steel_plate: [
+    "metals-type_steel_plate",
+    "metals-type_heavy_plate_steel_sheets",
+    "metal_products-type_structural_steel_heavy_plates",
+    "metal_products-type_heavy_plates_steel_sheets",
+    "metal_products-type_structural_steel_sections_and_plates",
+    "metals-type_iron_non_alloy_steel_flat_rolled_products",
+    "metals-type_iron_non_alloy_steel_heavy_plate",
+    "metals-type_iron_non_alloy_steel_plate",
+  ],
+
+  // ── Steel Coil ─────────────────────────────────────────────────────────────
+  steel_coil: [
+    "metals-type_steel_cold_rolled_coil",
+    "metals-type_steel_hot_rolled_coil",
+    "metal_products-type_hot_rolled_steel_coil",
+    "metals-type_steel_finished_cold_rolled_coil",
+    "metals-type_steel_pickled_hot_rolled_coil",
+    "metals-type_iron_non_alloy_steel_flat_rolled_products",
+    "metals-type_iron_non_alloy_steel_cold_rolled_coil",
+  ],
+
+  // ── Steel Pipe ─────────────────────────────────────────────────────────────
+  steel_pipe: [
+    "metals-type_iron_non_alloy_steel_hollow_sections",
+    "metals-type_iron_non_alloy_steel_tubes_pipes",
+    "metals-type_iron_non_alloy_steel_seamless_tube",
+    "metals-type_iron_non_alloy_steel",
+  ],
+
+  // ── Structural Steel ───────────────────────────────────────────────────────
+  structural_steel: [
+    "metals-type_iron_non_alloy_steel_sections",
+    "metals-type_iron_non_alloy_steel_h_sections",
+    "metals-type_iron_non_alloy_steel_bars_rods_nec",
+    "metals-type_iron_non_alloy_steel",
+  ],
+
 
   // ── Semi-finished steel ────────────────────────────────────────────────────
   semi_finished_steel: [

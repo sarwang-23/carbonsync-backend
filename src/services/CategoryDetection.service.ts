@@ -572,6 +572,14 @@ export function detectCategoryFromText(text: string): string {
   }
 
   // ── Steel Sheet ──────────────────────────────────────────────────────────
+  // Guard: aluminium/aluminum sheets must NOT match steel_sheet
+  if (
+    (lower.includes("aluminium") || lower.includes("aluminum")) &&
+    lower.includes("sheet")
+  ) {
+    return "aluminium";
+  }
+
   if (
     lower.includes("sheet") ||
     lower.includes("steel sheet") ||
@@ -631,6 +639,24 @@ export function detectCategoryFromText(text: string): string {
   }
 
   // ── Aluminium ────────────────────────────────────────────────────────────
+  // Aluminium cables & conductors → electrical (not raw aluminium metal)
+  if (
+    (lower.includes("aluminium") || lower.includes("aluminum")) &&
+    (
+      lower.includes("cable") ||
+      lower.includes("conductor") ||
+      lower.includes("ht cable") ||
+      lower.includes("lt cable") ||
+      lower.includes("armoured cable") ||
+      lower.includes("xlpe") ||
+      lower.includes("pvc insulated") ||
+      lower.includes("avocab") ||
+      lower.includes("submersible cable")
+    )
+  ) {
+    return "electrical";
+  }
+
   if (
     lower.includes("aluminium") ||
     lower.includes("aluminum") ||
