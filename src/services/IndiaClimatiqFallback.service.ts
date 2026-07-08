@@ -437,10 +437,14 @@ function convertForClimatiq(input: {
   ) {
     const val = input.amount !== undefined ? input.amount : input.value;
     const fallbackUnit = input.currency ? input.currency.toLowerCase() : "inr";
+    let paramUnit = fallbackUnit;
+    if (input.expectedParameterUnit && ["usd","eur","gbp","inr","aud"].includes(input.expectedParameterUnit.toLowerCase())) {
+      paramUnit = input.expectedParameterUnit.toLowerCase();
+    }
     return {
       value: val,
       parameterName: "money",
-      parameterUnit: input.expectedParameterUnit || fallbackUnit,
+      parameterUnit: paramUnit,
       converted: input.amount !== undefined,
       conversion_note: input.amount !== undefined ? "Used invoice line amount for spend-based emission calculation" : undefined,
     };
