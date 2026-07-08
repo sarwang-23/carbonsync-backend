@@ -15,6 +15,7 @@ import {
 import {
     calculateGermanyEmission,
 } from "./GermanyEmission.service.js";
+import { calculateIndiaEmission } from "./IndiaEmission.service.js";
 import {
     calculateWithClimatiqFallback,
 } from "./ClimatiqFallback.service.js";
@@ -1072,6 +1073,60 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
             fileName,
             validation,
         });
+    }
+
+    if (region === "IN") {
+        const value = Number(normalizedInputItem.quantity || item.quantity || 0);
+        const unit = String(normalizedInputItem.unit !== "unknown" ? normalizedInputItem.unit : item.unit || "");
+
+        console.log(`[IN dynamic] Routing "${category}" to India Emission fallback...`);
+        
+        try {
+            const fallbackResult = await calculateIndiaEmission({
+                category,
+                itemName: originalItemName,
+                value,
+                unit
+            });
+
+            if (fallbackResult.success) {
+                return {
+                    success: true,
+                    source_engine: fallbackResult.source_engine,
+                    preferred_source: fallbackResult.preferred_source,
+                    region: fallbackResult.region,
+                    country_name: fallbackResult.country_name,
+                    category: fallbackResult.category,
+                    value,
+                    unit,
+                    co2e: fallbackResult.co2e,
+                    co2e_unit: fallbackResult.co2e_unit,
+                    activity_id: (fallbackResult as any).activity_id,
+                    factor_name: fallbackResult.factor_name,
+                    factor_source: (fallbackResult as any).factor_source,
+                    result: {
+                        co2e: fallbackResult.co2e,
+                        total_tco2e: (fallbackResult.co2e || 0) / 1000,
+                        factor_name: fallbackResult.factor_name,
+                        activity_id: (fallbackResult as any).activity_id,
+                        source: (fallbackResult as any).factor_source,
+                        factor_year: 2024,
+                        factor_region: (fallbackResult as any).factor_region,
+                        category
+                    }
+                } as any;
+            }
+        } catch (error: any) {
+             return {
+                success: false,
+                needs_review: true,
+                error_type: "INDIA_EMISSION_FAILED",
+                message: error.message || "Failed to calculate India emission",
+                item_name: originalItemName,
+                country: region,
+                category,
+            };
+        }
     }
 
     if (category === "unknown") {
