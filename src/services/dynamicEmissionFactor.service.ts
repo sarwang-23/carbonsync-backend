@@ -43,6 +43,7 @@ import {
 } from "./auditTrail.service.js";
 import axios from "axios";
 import { convertQuantity } from "./unit.service.js";
+import { detectCategoryFromText } from "./CategoryDetection.service.js";
 
 
 type DetectedCategory =
@@ -845,7 +846,12 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
     });
 
     const region = classification.country as SupportedCountry;
-    const category = classification.category as DetectedCategory;
+    let category = classification.category as string;
+
+    const specificCategory = detectCategoryFromText(originalItemName);
+    if (specificCategory && specificCategory !== "unknown") {
+        category = specificCategory;
+    }
 
     if (!hasValidNormalizedQuantity(normalizedInputItem) && category !== "electricity_bill") {
         return {
@@ -1187,7 +1193,7 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
     }
 
     const itemName = String(normalizedItemData.item_name || normalizedItemData.description || normalizedItem);
-    const query = buildClimatiqSearchQuery(category, itemName);
+    const query = buildClimatiqSearchQuery(category as any, itemName);
 
     // Do not pass internal category names like "electricity_bill" to Climatiq Search.
     // Climatiq categories are different, for example "Electricity".
@@ -1223,7 +1229,7 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
 
     const best = selectBestEmissionFactor(candidates, {
         region,
-        category,
+        category: category as any,
         unit: normalizedItemData.unit,
         itemName,
     });
@@ -1322,7 +1328,7 @@ export async function calculateDynamicCountryEmission(item: any, invoiceText: st
     const estimateAttempt = await estimateWithCompatibleCandidates({
         candidates,
         best,
-        category,
+        category: category as any,
         normalizedItemData,
         normalizedInputItem,
         item,
