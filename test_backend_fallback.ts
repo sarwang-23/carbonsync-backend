@@ -3,6 +3,7 @@ import { calculateIndiaClimatiqFallback } from "./src/services/IndiaClimatiqFall
 
 const REGIONS = ["IN", "AU", "US", "GB", "EU"];
 const CATEGORIES = [
+  // Core / General
   { name: "steel", value: 1, unit: "tonne" },
   { name: "aluminium", value: 1, unit: "tonne" },
   { name: "chemicals", value: 1000, unit: "inr" },
@@ -14,7 +15,39 @@ const CATEGORIES = [
   { name: "electronics", value: 1000, unit: "inr" },
   { name: "automotive", value: 1000, unit: "inr" },
   { name: "construction", value: 1, unit: "tonne" },
-  { name: "textile", value: 1000, unit: "inr" }
+  { name: "textile", value: 1000, unit: "inr" },
+  { name: "wood", value: 1, unit: "tonne" },
+  // Newly Added Materials
+  { name: "lime", value: 1, unit: "tonne" },
+  { name: "refractory", value: 1, unit: "tonne" },
+  { name: "industrial_gas", value: 1, unit: "tonne" },
+  { name: "bauxite", value: 1, unit: "tonne" },
+  { name: "aggregates", value: 1, unit: "tonne" },
+  { name: "cast_iron", value: 1, unit: "tonne" },
+  { name: "cement", value: 1, unit: "tonne" },
+  { name: "coal", value: 1, unit: "tonne" },
+  { name: "coke", value: 1, unit: "tonne" },
+  { name: "limestone", value: 1, unit: "tonne" },
+  { name: "dolomite", value: 1, unit: "tonne" },
+  // Steel & Metal Variants
+  { name: "iron_ore", value: 1, unit: "tonne" },
+  { name: "pig_iron", value: 1, unit: "tonne" },
+  { name: "dri", value: 1, unit: "tonne" },
+  { name: "billet", value: 1, unit: "tonne" },
+  { name: "bloom", value: 1, unit: "tonne" },
+  { name: "slab", value: 1, unit: "tonne" },
+  { name: "steel_scrap", value: 1, unit: "tonne" },
+  { name: "ferro_alloy", value: 1, unit: "tonne" },
+  { name: "stainless_steel", value: 1, unit: "tonne" },
+  { name: "alloy_steel", value: 1, unit: "tonne" },
+  { name: "finished_steel", value: 1, unit: "tonne" },
+  { name: "semi_finished_steel", value: 1, unit: "tonne" },
+  { name: "raw_material_steel", value: 1, unit: "tonne" },
+  { name: "steel_sheet", value: 1, unit: "tonne" },
+  { name: "steel_plate", value: 1, unit: "tonne" },
+  { name: "steel_coil", value: 1, unit: "tonne" },
+  { name: "steel_pipe", value: 1, unit: "tonne" },
+  { name: "structural_steel", value: 1, unit: "tonne" }
 ];
 
 async function main() {

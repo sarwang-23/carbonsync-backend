@@ -88,6 +88,12 @@ const WEIGHT_CATEGORIES = [
   "agriculture",   // weight-based (kg/tonne)
   "refrigerant",
   "waste",
+  "lime",
+  "refractory",
+  "industrial_gas",
+  "bauxite",
+  "aggregates",
+  "cast_iron",
 ];
 
 const ENERGY_CATEGORIES = ["diesel", "petrol", "natural_gas"];
@@ -524,10 +530,41 @@ const CATEGORY_ACTIVITY_MAP: Record<string, string[]> = {
     "building_materials-type_group_sliding_door_scandinavian_wooden-scenario_standard",
   ],
 
-  
+  // ── Lime ───────────────────────────────────────────────────────────────────
+  lime: [
+    "manufacturing-type_lime_production",
+    "manufacturing-type_magnesian_lime_production",
+    "manufacturing-type_dolomitic_lime_production",
+  ],
 
-  
+  // ── Refractory ─────────────────────────────────────────────────────────────
+  refractory: [
+    "ceramics-type_clay_and_ceramic_products_and_refractories",
+  ],
 
+  // ── Industrial Gas ─────────────────────────────────────────────────────────
+  industrial_gas: [
+    "chemicals-type_industrial_gas",
+  ],
+
+  // ── Bauxite ────────────────────────────────────────────────────────────────
+  bauxite: [
+    "mining-type_bauxite_mining",
+  ],
+
+  // ── Aggregates ─────────────────────────────────────────────────────────────
+  aggregates: [
+    "building_materials-type_concrete_paving_stone_stonecycle_with_over_40_percent_recycled_aggregates_ready_mixed",
+    "building_materials-type_aggregates_primary_material_production",
+    "building_materials-type_aggregate",
+    "building_materials-type_sand_and_gravel",
+  ],
+
+  // ── Cast Iron ──────────────────────────────────────────────────────────────
+  cast_iron: [
+    "metals-type_grey_cast_iron_part_cast_or_forged_steel_and_iron_items",
+    "metals-type_cast_iron",
+  ],
 
 };
 
