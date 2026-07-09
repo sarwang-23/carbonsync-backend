@@ -716,9 +716,17 @@ async function getIndiaFallbackMapping(category: string) {
 export async function calculateIndiaClimatiqFallback(
   input: IndiaClimatiqFallbackInput
 ) {
-  const priorityActivityIds: string[] = [
+  const mapping = await getIndiaFallbackMapping(input.category);
+
+  let priorityActivityIds: string[] = [
     ...(CATEGORY_ACTIVITY_MAP[input.category] || []),
   ];
+
+  if (mapping?.activity_id) {
+    // DB overrides go to the very front so they are tried first
+    priorityActivityIds = [mapping.activity_id, ...priorityActivityIds.filter(id => id !== mapping.activity_id)];
+    console.log(`[IN] Injected DB mapping activity ID to top priority: ${mapping.activity_id}`);
+  }
 
   // ── 1. Hardcoded priority mappings → multi-activity + multi-region fallback engine ─────────
   if (priorityActivityIds.length > 0) {
@@ -824,7 +832,6 @@ export async function calculateIndiaClimatiqFallback(
   }
 
   // ── 2. Database mapped logic (for legacy mappings) ─────────
-  const mapping = await getIndiaFallbackMapping(input.category);
   
   // ─────────────────────────────────────────────────────────────────────────
 
