@@ -44,6 +44,7 @@ const CLIMATIQ_CATEGORY_MAPPING: Record<string, string> = {
   "glass": "glass",
   "paper": "paper",
   "wood": "timber wood",
+  "textile": "textile material",
 };
 
 
@@ -101,6 +102,7 @@ const MONEY_CATEGORIES = [
   "electrical",
   "electronics",
   "plastic",        // Climatiq plastic EF is spend-based (Money unit)
+  "textile",
 ];
 
 /**
@@ -117,6 +119,16 @@ const REGION_FALLBACK_ORDER: (string | undefined)[] = [
  * Add new IDs at the top of each array (highest priority first).
  */
 const CATEGORY_ACTIVITY_MAP: Record<string, string[]> = {
+
+  // ── Textiles ─────────────────────────────────────────────────────────────
+  textile: [
+    "textiles-type_fabric_mills",
+    "textiles-type_textile_and_fabric_finishing_and_fabric_coating_mills",
+    "textiles-type_textiles",
+    "textiles-type_fiber_yarn_and_thread_mills",
+    "consumer_goods-type_apparel_manufacturing",
+    "textiles-type_other_textile_product_mills",
+  ],
 
   // ── Aluminium ──────────────────────────────────────────────────────────────
   aluminium: [
@@ -417,6 +429,8 @@ const CATEGORY_ACTIVITY_MAP: Record<string, string[]> = {
     "manufactured_goods-type_manufactured_goods",
     "manufactured_goods-type_capital_goods",
   ],
+
+
 };
 
 function convertForClimatiq(input: {

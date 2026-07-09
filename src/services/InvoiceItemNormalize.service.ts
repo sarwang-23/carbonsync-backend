@@ -256,7 +256,7 @@ export function normalizeInvoiceItems(
     // e.g. "11/06/17 M S TMT Bars 12 mm 38/1129 paying 12/5/17" → "M S TMT Bars 12 mm"
     const itemName = normalizeItemName(rawItemName, vendorName);
 
-    const detectedCategory = detectCategoryFromText(itemName);
+    const detectedCategory = detectCategoryFromText(itemName, vendorName, item.unit);
 
     // Prioritize regex-extracted quantity/unit since Mistral often defaults to "1 each"
     const extracted = extractQuantityFromText(itemName);

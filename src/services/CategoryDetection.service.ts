@@ -1,10 +1,19 @@
-export function detectCategoryFromText(text: string): string {
+export function detectCategoryFromText(text: string, vendorName?: string, unit?: string): string {
   const lower = text.toLowerCase();
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PRIORITY 0: Industry-specific raw materials & intermediates
   // Must run BEFORE generic steel/coal to prevent misclassification
   // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── Vendor Intelligence ──────────────────────────────────────────────────
+  let vendorIsTextile = false;
+  if (vendorName) {
+    const v = vendorName.toLowerCase();
+    if (v.includes("textile") || v.includes("fabric") || v.includes("yarn") || v.includes("weaving") || v.includes("knitting") || v.includes("garment")) {
+      vendorIsTextile = true;
+    }
+  }
 
   // 1. Iron Ore
   if (
@@ -715,19 +724,6 @@ export function detectCategoryFromText(text: string): string {
     return "chemicals";
   }
 
-  // ── Textile ──────────────────────────────────────────────────────────────
-  if (
-    lower.includes("textile") ||
-    lower.includes("fabric") ||
-    lower.includes("cloth") ||
-    lower.includes("cotton") ||
-    lower.includes("polyester") ||
-    lower.includes("garment") ||
-    lower.includes("apparel") ||
-    lower.includes("yarn")
-  ) {
-    return "textile";
-  }
 
   // ── Electrical Goods ─────────────────────────────────────────────────────
   if (
@@ -784,7 +780,7 @@ export function detectCategoryFromText(text: string): string {
     return "paper";
   }
 
-  // ── Wood ─────────────────────────────────────────────────────────────────
+  // ── Wood / Timber ────────────────────────────────────────────────────────
   if (
     lower.includes("wood") ||
     lower.includes("timber") ||
@@ -795,7 +791,40 @@ export function detectCategoryFromText(text: string): string {
     return "wood";
   }
 
-  // ── Food ─────────────────────────────────────────────────────────────────
+  // ── Textile & Garments (MASTER MAPPING) ──────────────────────────────────
+  if (
+    vendorIsTextile ||
+    lower.includes("textile") || lower.includes("fabric") || lower.includes("cloth") ||
+    lower.includes("cotton") || lower.includes("polyester") || lower.includes("garment") ||
+    lower.includes("apparel") || lower.includes("yarn") ||
+    lower.includes("nylon") || lower.includes("acrylic") || lower.includes("wool") ||
+    lower.includes("merino wool") || lower.includes("silk") || lower.includes("viscose") ||
+    lower.includes("rayon") || lower.includes("linen") || lower.includes("hemp") ||
+    lower.includes("jute") || lower.includes("bamboo fibre") || lower.includes("modal") ||
+    lower.includes("lyocell") || lower.includes("spandex") || lower.includes("elastane") ||
+    lower.includes("cashmere") || lower.includes("denim") || lower.includes("canvas") ||
+    lower.includes("jersey") || lower.includes("fleece") || lower.includes("satin") ||
+    lower.includes("t shirt") || lower.includes("shirt") || lower.includes("jeans") ||
+    lower.includes("pant") || lower.includes("trouser") || lower.includes("shorts") ||
+    lower.includes("hoodie") || lower.includes("jacket") || lower.includes("coat") ||
+    lower.includes("dress") || lower.includes("kurta") || lower.includes("saree") ||
+    lower.includes("uniform") || lower.includes("apron") || lower.includes("gloves") ||
+    lower.includes("cap") || lower.includes("bedsheet") || lower.includes("pillow cover") ||
+    lower.includes("curtain") || lower.includes("blanket") || lower.includes("quilt") ||
+    lower.includes("towel") || lower.includes("carpet") || lower.includes("rug") ||
+    lower.includes("cushion") || lower.includes("mattress cover") || lower.includes("zipper") ||
+    lower.includes("button") || lower.includes("thread") || lower.includes("elastic") ||
+    lower.includes("lace") || lower.includes("label") || lower.includes("tape") ||
+    lower.includes("interlining") || lower.includes("shoe") || lower.includes("boot") ||
+    lower.includes("slipper") || lower.includes("belt") || lower.includes("wallet") ||
+    lower.includes("handbag") || lower.includes("leather") || lower.includes("geotextile") ||
+    lower.includes("filter cloth") || lower.includes("rope") || lower.includes("woven sack") ||
+    lower.includes("knitted") || lower.includes("woven")
+  ) {
+    return "textile";
+  }
+
+  // ── Food & Agriculture ───────────────────────────────────────────────────
   if (
     lower.includes("food") ||
     lower.includes("rice") ||
@@ -1094,6 +1123,14 @@ export function detectCategoryFromText(text: string): string {
     lower.includes("paper pulp")
   ) {
     return "wood";
+  }
+
+  // Fallback for textile vendor with specific units
+  if (vendorIsTextile && unit) {
+    const u = unit.toLowerCase();
+    if (u.includes("pcs") || u.includes("mtr") || u.includes("meter") || u.includes("roll") || u.includes("kg")) {
+      return "textile";
+    }
   }
 
   return "unknown";
