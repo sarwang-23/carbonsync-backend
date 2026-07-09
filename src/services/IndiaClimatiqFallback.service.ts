@@ -45,6 +45,11 @@ const CLIMATIQ_CATEGORY_MAPPING: Record<string, string> = {
   "paper": "paper",
   "wood": "timber wood",
   "textile": "textile material",
+  "food": "food product",
+  "agriculture": "agricultural product",
+  "electronics": "electronics",
+  "automotive": "automotive parts",
+  "construction": "construction material",
 };
 
 
@@ -128,6 +133,84 @@ const CATEGORY_ACTIVITY_MAP: Record<string, string[]> = {
     "textiles-type_fiber_yarn_and_thread_mills",
     "consumer_goods-type_apparel_manufacturing",
     "textiles-type_other_textile_product_mills",
+  ],
+
+  
+  
+
+  // ── Paper & Packaging ─────────────────────────────────────────────────────
+  paper: [
+    "paper_products-type_express_package_box", // confirmed working
+    "paper_products-type_paper",
+    "paper_products-type_paper_and_paperboard",
+    "paper_products-type_corrugated_paper_and_paperboard",
+    "paper_products-type_kraft_paper",
+    "paper_products-type_recycled_paper",
+    "paper_products-type_tissue_paper",
+    "consumer_goods-type_paper_packaging",
+    "manufactured_goods-type_paper_products",
+  ],
+
+  
+
+  
+
+  // ── Food & Beverage ───────────────────────────────────────────────────────
+  food: [
+    "food-type_processed_onions-origin_region_uk", // confirmed working
+    "food_and_drink-type_food_and_drink",
+    "food_and_drink-type_food",
+    "food_and_drink-type_beverage",
+    "food_and_drink-type_grain_crops",
+    "food_and_drink-type_sugar",
+    "food_and_drink-type_edible_oils",
+    "food_and_drink-type_dairy",
+    "manufactured_goods-type_food_products",
+  ],
+
+  // ── Agriculture ───────────────────────────────────────────────────────────
+  agriculture: [
+    "land_use-type_crop_residues", // confirmed working
+    "agriculture-type_fertiliser",
+    "agriculture-type_fertilizers",
+    "agriculture-type_pesticide",
+    "agriculture-type_seeds",
+    "agriculture-type_crop_production",
+    "agriculture-type_animal_feed",
+    "agriculture-type_agriculture",
+    "manufactured_goods-type_manufactured_goods",
+  ],
+
+  // ── Electronics ───────────────────────────────────────────────────────────
+  
+
+  // ── Automotive ────────────────────────────────────────────────────────────
+  automotive: [
+    "vehicle_parts-type_other_motor_vehicle_parts_manufacturing", // confirmed working
+    "manufactured_goods-type_motor_vehicles",
+    "manufactured_goods-type_automotive_parts",
+    "manufactured_goods-type_vehicle_parts",
+    "manufactured_goods-type_tyres",
+    "manufactured_goods-type_capital_goods",
+    "manufactured_goods-type_manufactured_goods",
+  ],
+
+  // ── Construction Materials ────────────────────────────────────────────────
+  construction: [
+    "building_materials-type_average_construction_primary_material_production", // confirmed working
+    "building_materials-type_bricks",
+    "building_materials-type_ceramic_tiles",
+    "building_materials-type_stone",
+    "building_materials-type_sand_and_gravel",
+    "building_materials-type_construction_materials",
+    "manufactured_goods-type_construction_materials",
+    "manufactured_goods-type_manufactured_goods",
+  ],
+
+  // ── Steel (generic) ───────────────────────────────────────────────────────
+  steel: [
+    "metals-type_steel_engineering_steel", // confirmed working
+    "metals-type_iron_non_alloy_steel",
   ],
 
   // ── Aluminium ──────────────────────────────────────────────────────────────
@@ -357,31 +440,19 @@ const CATEGORY_ACTIVITY_MAP: Record<string, string[]> = {
     "metals-type_nickel",
   ],
 
-  // ── Chemicals ──────────────────────────────────────────────────────────────
-  chemicals: [
-    "chemicals-type_sodium_hydroxide",
-    "chemicals-type_hydrochloric_acid",
-    "chemicals-type_sulphuric_acid",
-    "chemicals-type_ammonia",
-    "chemicals-type_industrial_chemicals",
-    "chemicals-type_chemicals",
-  ],
+  
 
-  // ── Plastic ────────────────────────────────────────────────────────────────
-  plastic: [
-    "materials-type_plastics_general",
-    "materials-type_hdpe",
-    "materials-type_ldpe",
-    "materials-type_pvc",
-    "materials-type_plastic",
-  ],
+  
 
-  // ── Glass ──────────────────────────────────────────────────────────────────
-  glass: [
-    "building_materials-type_glass_float",
-    "building_materials-type_glass_toughened",
-    "building_materials-type_glass_general",
-    "materials-type_glass",
+  
+
+  // ── Electrical ─────────────────────────────────────────────────────────────
+  electrical: [
+    "electrical_equipment-type_electrical_equipment",
+    "electrical_equipment-type_lighting",
+    "electrical_equipment-type_motors",
+    "manufactured_goods-type_electrical_equipment",
+    "manufactured_goods-type_capital_goods",
   ],
 
   // ── Wood & Timber ──────────────────────────────────────────────────────────
@@ -409,26 +480,9 @@ const CATEGORY_ACTIVITY_MAP: Record<string, string[]> = {
     "building_materials-type_group_sliding_door_scandinavian_wooden-scenario_standard",
   ],
 
-  // ── Electrical equipment / electronics ─────────────────────────────────────
-  electrical: [
-    "electrical_equipment-type_electrical_equipment",
-    "electrical_equipment-type_lighting",
-    "electrical_equipment-type_motors",
-    "manufactured_goods-type_electrical_equipment",
-    "electronics-type_electronics",
-    "manufactured_goods-type_electronics",
-    "manufactured_goods-type_manufactured_goods",
-    "manufactured_goods-type_capital_goods",
-  ],
+  
 
-  electronics: [
-    "electronics-type_electronics",
-    "electrical_equipment-type_electrical_equipment",
-    "manufactured_goods-type_electronics",
-    "manufactured_goods-type_electrical_equipment",
-    "manufactured_goods-type_manufactured_goods",
-    "manufactured_goods-type_capital_goods",
-  ],
+  
 
 
 };

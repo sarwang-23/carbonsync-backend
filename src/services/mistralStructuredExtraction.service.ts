@@ -121,7 +121,9 @@ Rules:
 - Prefer actual quantity columns such as Pcs/Kgs/Quantity/Usage/kWh/MT/kg/litre/m3.
 - For electricity bills, extract total kWh consumption, not the first slab.
 - For timber/door invoices: "item_name" MUST be strictly one of: timber, wood, plywood, flush door, door shutter, veneer, laminate, mdf, particle board, block board, wooden door. Put all other details (sizes, dimensions, grades, thickness like 18mm, 12mm) into "description".
-- Keep "item_name" concise (max 3-5 words), summarizing the core product. Put long specifications (sizes, meshes, "Bordering with Rope") into "description". Do not extract ONLY a size (like "Size: 10 Mtr x 5 Mtr") as an item name.
+- For electrical/cable invoices: "item_name" MUST be a short canonical name (max 4 words). Examples: "Aluminium HT Cable", "Copper Cable", "Submersible Cable", "Aluminium Conductor". NEVER put the full product specification (voltages, insulation types, brand names like 'AVOCAB', 'Finolex', 'Polycab') in "item_name". Put those into "description".
+- For pipe/fitting invoices: "item_name" MUST be one of: MS Pipe, GI Pipe, HDPE Pipe, uPVC Pipe, Industrial Pipe, Steel Fitting. Not the full spec.
+- Keep "item_name" concise (max 3-5 words), summarizing the core product. Put long specifications (sizes, meshes, grades, brand names, insulation types) into "description". Do not extract ONLY a size (like "Size: 10 Mtr x 5 Mtr") as an item name.
 - For amount, use line item amount only.
 - Currency should be INR for Indian invoices, MYR for Malaysia invoices.
 - Country should be IN or MY where possible.

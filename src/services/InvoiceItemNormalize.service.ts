@@ -129,6 +129,69 @@ function resolveCategory(
 export function normalizeItemName(raw: string, vendorName?: string): string {
   let s = raw.trim();
 
+  // ── Step 0: Condense long technical specification strings ──────────────────
+  // Triggered when the raw string looks like a full-blown product specification
+  // e.g. "1100 Volts Grade, PVC/XLPE Insulated, Armoured/UnArmoured. Overall
+  //        PVC /FRLS Sheathed, Aluminium/Copper ... 'AVOCAB' Brand."
+  // → returns a short canonical name like "Aluminium HT Cable"
+  if (s.length > 80) {
+    const spec = s.toLowerCase();
+
+    // ── Electrical cable / wire ───────────────────────────────────────────
+    const isCable =
+      /\b(conductor|cable|wire|xlpe|pvc|frls|armoured|armored|submersible|ht\s*cable|lv\s*cable|mv\s*cable|kv\s*grade|insulated|sheathed)\b/.test(spec);
+    if (isCable) {
+      const isAluminium = /\b(aluminium|aluminum|alu\b)/.test(spec);
+      const isCopper    = /\b(copper|cu\b)/.test(spec);
+      const isHT        = /\b(11\s*kv|33\s*kv|ht\s*cable|high\s*tension)/.test(spec);
+      const isSubmersible = /submersible/.test(spec);
+      const base = isAluminium ? "Aluminium" : isCopper ? "Copper" : "";
+      const suffix = isSubmersible ? "Submersible Cable" : isHT ? "HT Cable" : "Cable";
+      return [base, suffix].filter(Boolean).join(" ");
+    }
+
+    // ── Pipes / fittings ─────────────────────────────────────────────────
+    if (/\b(pipe|fitting|flanges?|valve|hdpe|ppr|upvc|cpvc|gi\s*pipe|ms\s*pipe)\b/.test(spec)) {
+      if (/\b(ms|mild\s*steel|galvanized|gi\b)/.test(spec)) return "MS GI Pipe";
+      if (/\bhdpe\b/.test(spec)) return "HDPE Pipe";
+      if (/\bupvc\b/.test(spec)) return "uPVC Pipe";
+      return "Industrial Pipe";
+    }
+
+    // ── Steel sections ───────────────────────────────────────────────────
+    if (/\b(tmt|deformed\s*bar|reinforcement\s*bar|rebar|ms\s*bar|channel|angle|beam|h-?beam|i-?beam)\b/.test(spec)) {
+      if (/\btmt\b/.test(spec)) return "MS TMT Bar";
+      if (/\b(angle|l-?section)\b/.test(spec)) return "MS Angle";
+      if (/\b(channel|c-?section)\b/.test(spec)) return "MS Channel";
+      if (/\b(beam|h-?section|i-?section)\b/.test(spec)) return "MS Beam";
+      return "Steel Section";
+    }
+
+    // ── Timber / boards ──────────────────────────────────────────────────
+    if (/\b(plywood|ply|blockboard|mdf|particleboard|timber|wood)\b/.test(spec)) {
+      if (/\bplywood\b/.test(spec)) return "Commercial Plywood";
+      if (/\bmdf\b/.test(spec)) return "MDF Board";
+      if (/\bblockboard\b/.test(spec)) return "Block Board";
+      return "Timber";
+    }
+
+    // ── Net / mesh ───────────────────────────────────────────────────────
+    if (/\b(safety\s*net|shade\s*net|fishing\s*net|hdpe\s*net|nylon\s*net|mesh)\b/.test(spec)) {
+      return "Safety Net";
+    }
+
+    // ── Generic: if still very long (>120 chars), truncate at first comma/period ──
+    if (s.length > 120) {
+      const firstBreak = s.search(/[,\.;]/);
+      if (firstBreak > 8 && firstBreak < 60) {
+        s = s.slice(0, firstBreak).trim();
+      } else {
+        // Hard truncate at 60 chars at a word boundary
+        s = s.slice(0, 60).replace(/\s+\S*$/, "").trim();
+      }
+    }
+  }
+
   // ── Step 1: Remove date patterns ─────────────────────────────────────────
   s = s.replace(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/g, "");
   s = s.replace(/\b\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}\b/g, "");
@@ -173,6 +236,17 @@ export function normalizeItemName(raw: string, vendorName?: string): string {
   // ── Step 6: Vendor Based Intelligence & Industry Dictionary ───────────────
   const v = String(vendorName || "").toLowerCase();
   const n = s.toLowerCase();
+
+  // Electrical / cable vendor intelligence
+  const isElectricalVendor =
+    /\b(cable|wire|conductor|electric|electrical|power|energy|volt)\b/.test(v);
+  if (isElectricalVendor) {
+    if (/\b(aluminium|aluminum)\b/.test(n)) return "Aluminium Cable";
+    if (/\bcopper\b/.test(n)) return "Copper Cable";
+    if (!/\b(cable|wire|conductor|motor|switch|panel|breaker|transformer)\b/.test(n)) {
+      return "Electrical Cable";
+    }
+  }
 
   // Timber intelligence
   if (v.includes("timber") || v.includes("wood") || v.includes("ply")) {

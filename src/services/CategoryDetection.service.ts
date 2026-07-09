@@ -10,7 +10,18 @@ export function detectCategoryFromText(text: string, vendorName?: string, unit?:
   let vendorIsTextile = false;
   if (vendorName) {
     const v = vendorName.toLowerCase();
-    if (v.includes("textile") || v.includes("fabric") || v.includes("yarn") || v.includes("weaving") || v.includes("knitting") || v.includes("garment")) {
+    if (
+      v.includes("textile") || v.includes("fabric") || v.includes("yarn") ||
+      v.includes("weaving") || v.includes("knitting") || v.includes("garment") ||
+      v.includes("cotton") || v.includes("apparel") || v.includes("hosiery") ||
+      v.includes("dyeing") || v.includes("spinning") || v.includes("mills") ||
+      v.includes("loom") || v.includes("embroidery") || v.includes("silk") ||
+      v.includes("woolen") || v.includes("denim") || v.includes("linen") ||
+      v.includes("thread") || v.includes("fibre") || v.includes("fiber") ||
+      v.includes("suiting") || v.includes("shirting") || v.includes("dress material") ||
+      v.includes("saree") || v.includes("kurta") || v.includes("uniform") ||
+      v.includes("export house") || v.includes("readymade") || v.includes("fashion")
+    ) {
       vendorIsTextile = true;
     }
   }
@@ -701,25 +712,30 @@ export function detectCategoryFromText(text: string, vendorName?: string, unit?:
     return "concrete";
   }
 
-  // ── Industrial Chemicals ─────────────────────────────────────────────────
+  // ── Industrial Chemicals (MASTER MAPPING) ────────────────────────────────
   if (
-    lower.includes("chemical") ||
-    lower.includes("paint") ||
-    lower.includes("solvent") ||
-    lower.includes("resin") ||
-    lower.includes("adhesive") ||
-    lower.includes("sulphuric acid") ||
-    lower.includes("sulfuric acid") ||
-    lower.includes("hydrochloric acid") ||
-    lower.includes("caustic soda") ||
-    lower.includes("soda ash") ||
-    lower.includes("ammonia") ||
-    lower.includes("sodium hydroxide") ||
-    lower.includes("ferric chloride") ||
-    lower.includes("carbon powder") ||
-    lower.includes("binder") ||
-    lower.includes("lubricant") ||
-    lower.includes("flux oil")
+    lower.includes("chemical") || lower.includes("chemicals") ||
+    lower.includes("caustic") || lower.includes("caustic soda") ||
+    lower.includes("sodium hydroxide") || lower.includes("potassium hydroxide") ||
+    lower.includes("hydrochloric acid") || lower.includes("sulphuric acid") ||
+    lower.includes("sulfuric acid") || lower.includes("nitric acid") ||
+    lower.includes("phosphoric acid") || lower.includes("acetic acid") ||
+    lower.includes("citric acid") || lower.includes("hydrogen peroxide") ||
+    lower.includes("ammonia") || lower.includes("urea solution") ||
+    lower.includes("methanol") || lower.includes("ethanol") ||
+    lower.includes("isopropyl alcohol") || lower.includes("ipa") ||
+    lower.includes("acetone") || lower.includes("benzene") ||
+    lower.includes("toluene") || lower.includes("xylene") ||
+    lower.includes("phenol") || lower.includes("formaldehyde") ||
+    lower.includes("chlorine") || lower.includes("bleaching powder") ||
+    lower.includes("soda ash") || lower.includes("sodium carbonate") ||
+    lower.includes("epoxy resin") || lower.includes("resin") ||
+    lower.includes("adhesive") || lower.includes("solvent") ||
+    lower.includes("lubricant") || lower.includes("grease") ||
+    lower.includes("coolant") || lower.includes("flux") ||
+    lower.includes("detergent") || lower.includes("surfactant") ||
+    lower.includes("binder") || lower.includes("paint thinner") ||
+    lower.includes("ferric chloride") || lower.includes("carbon powder")
   ) {
     return "chemicals";
   }
@@ -745,37 +761,58 @@ export function detectCategoryFromText(text: string, vendorName?: string, unit?:
     return "electrical";
   }
 
-  // ── Glass ────────────────────────────────────────────────────────────────
+  // ── Glass (MASTER MAPPING) ────────────────────────────────────────────────
   if (
-    lower.includes("glass") ||
-    lower.includes("glass sheet") ||
-    lower.includes("float glass")
+    lower.includes("glass") || lower.includes("flat glass") ||
+    lower.includes("float glass") || lower.includes("toughened glass") ||
+    lower.includes("tempered glass") || lower.includes("laminated glass") ||
+    lower.includes("glass sheet") || lower.includes("glass panel") ||
+    lower.includes("glass bottle") || lower.includes("glass jar") ||
+    lower.includes("glass container") || lower.includes("windshield glass") ||
+    lower.includes("mirror") || lower.includes("fiberglass") ||
+    lower.includes("fibreglass") || lower.includes("glass wool") ||
+    lower.includes("borosilicate") || lower.includes("optical glass") ||
+    lower.includes("safety glass") || lower.includes("architectural glass")
   ) {
     return "glass";
   }
 
-  // ── Plastic ──────────────────────────────────────────────────────────────
+  // ── Plastic (MASTER MAPPING) ──────────────────────────────────────────────
   if (
-    lower.includes("plastic") ||
-    lower.includes("hdpe") ||
-    lower.includes("ldpe") ||
-    lower.includes("polymer") ||
-    lower.includes("pvc") ||
-    lower.includes("pet resin") ||
-    lower.includes("safety net") ||
-    lower.includes("shade net") ||
-    lower.includes("fishing net") ||
-    lower.includes("nylon") ||
-    lower.includes("monofilament")
+    lower.includes("plastic") || lower.includes("polymer") ||
+    lower.includes("hdpe") || lower.includes("ldpe") ||
+    lower.includes("lldpe") || lower.includes("pp") && lower.includes("resin") ||
+    lower.includes("pvc") || lower.includes("abs resin") ||
+    lower.includes("polycarbonate") || lower.includes("polypropylene") ||
+    lower.includes("polyethylene") || lower.includes("pet resin") ||
+    lower.includes("pet bottle") || lower.includes("pet preform") ||
+    lower.includes("plastic sheet") || lower.includes("plastic bag") ||
+    lower.includes("plastic bottle") || lower.includes("plastic container") ||
+    lower.includes("plastic pipe") || lower.includes("plastic film") ||
+    lower.includes("plastic cap") || lower.includes("plastic crate") ||
+    lower.includes("plastic box") || lower.includes("plastic drum") ||
+    lower.includes("plastic pallet") || lower.includes("plastic bucket") ||
+    lower.includes("safety net") || lower.includes("shade net") ||
+    lower.includes("fishing net") || lower.includes("monofilament") ||
+    lower.includes("nylon rope") || lower.includes("foam") && lower.includes("plastic")
   ) {
     return "plastic";
   }
 
-  // ── Paper ────────────────────────────────────────────────────────────────
+  // ── Paper & Packaging (MASTER MAPPING) ───────────────────────────────────
   if (
-    lower.includes("paper") ||
-    lower.includes("cardboard") ||
-    lower.includes("corrugated")
+    lower.includes("paper") || lower.includes("kraft paper") ||
+    lower.includes("copy paper") || lower.includes("office paper") ||
+    lower.includes("recycled paper") || lower.includes("corrugated paper") ||
+    lower.includes("corrugated") || lower.includes("corrugated box") ||
+    lower.includes("cardboard") || lower.includes("carton") ||
+    lower.includes("paperboard") || lower.includes("paper bag") ||
+    lower.includes("paper cup") || lower.includes("paper plate") ||
+    lower.includes("paper roll") || lower.includes("paper tube") ||
+    lower.includes("tissue") || lower.includes("newsprint") ||
+    lower.includes("packaging board") || lower.includes("duplex board") ||
+    lower.includes("greyboard") || lower.includes("paper packaging") ||
+    lower.includes("paper label") || lower.includes("paper sticker")
   ) {
     return "paper";
   }
@@ -791,48 +828,202 @@ export function detectCategoryFromText(text: string, vendorName?: string, unit?:
     return "wood";
   }
 
-  // ── Textile & Garments (MASTER MAPPING) ──────────────────────────────────
+  // ── Textile & Garments (MASTER MAPPING — 300+ keywords) ──────────────────
+  // ── 1. Natural Fibres ────────────────────────────────────────────────────
   if (
-    vendorIsTextile ||
-    lower.includes("textile") || lower.includes("fabric") || lower.includes("cloth") ||
-    lower.includes("cotton") || lower.includes("polyester") || lower.includes("garment") ||
-    lower.includes("apparel") || lower.includes("yarn") ||
-    lower.includes("nylon") || lower.includes("acrylic") || lower.includes("wool") ||
-    lower.includes("merino wool") || lower.includes("silk") || lower.includes("viscose") ||
-    lower.includes("rayon") || lower.includes("linen") || lower.includes("hemp") ||
-    lower.includes("jute") || lower.includes("bamboo fibre") || lower.includes("modal") ||
-    lower.includes("lyocell") || lower.includes("spandex") || lower.includes("elastane") ||
-    lower.includes("cashmere") || lower.includes("denim") || lower.includes("canvas") ||
-    lower.includes("jersey") || lower.includes("fleece") || lower.includes("satin") ||
-    lower.includes("t shirt") || lower.includes("shirt") || lower.includes("jeans") ||
-    lower.includes("pant") || lower.includes("trouser") || lower.includes("shorts") ||
-    lower.includes("hoodie") || lower.includes("jacket") || lower.includes("coat") ||
-    lower.includes("dress") || lower.includes("kurta") || lower.includes("saree") ||
-    lower.includes("uniform") || lower.includes("apron") || lower.includes("gloves") ||
-    lower.includes("cap") || lower.includes("bedsheet") || lower.includes("pillow cover") ||
-    lower.includes("curtain") || lower.includes("blanket") || lower.includes("quilt") ||
-    lower.includes("towel") || lower.includes("carpet") || lower.includes("rug") ||
-    lower.includes("cushion") || lower.includes("mattress cover") || lower.includes("zipper") ||
-    lower.includes("button") || lower.includes("thread") || lower.includes("elastic") ||
-    lower.includes("lace") || lower.includes("label") || lower.includes("tape") ||
-    lower.includes("interlining") || lower.includes("shoe") || lower.includes("boot") ||
-    lower.includes("slipper") || lower.includes("belt") || lower.includes("wallet") ||
-    lower.includes("handbag") || lower.includes("leather") || lower.includes("geotextile") ||
-    lower.includes("filter cloth") || lower.includes("rope") || lower.includes("woven sack") ||
-    lower.includes("knitted") || lower.includes("woven")
+    lower.includes("cotton") || lower.includes("organic cotton") || lower.includes("recycled cotton") ||
+    lower.includes("linen") || lower.includes("flax") || lower.includes("hemp fibre") ||
+    lower.includes("jute") || lower.includes("ramie") || lower.includes("bamboo fibre") ||
+    lower.includes("silk") || lower.includes("raw silk") || lower.includes("silk thread") ||
+    lower.includes("wool") || lower.includes("merino wool") || lower.includes("cashmere") ||
+    lower.includes("alpaca") || lower.includes("mohair") || lower.includes("angora") ||
+    lower.includes("natural fibre") || lower.includes("natural fiber")
   ) {
     return "textile";
   }
 
-  // ── Food & Agriculture ───────────────────────────────────────────────────
+  // ── 2. Synthetic Fibres ─────────────────────────────────────────────────
   if (
-    lower.includes("food") ||
-    lower.includes("rice") ||
-    lower.includes("wheat") ||
-    lower.includes("milk") ||
-    lower.includes("processed food")
+    lower.includes("polyester fibre") || lower.includes("polyester fiber") ||
+    lower.includes("recycled polyester") || lower.includes("pet fibre") ||
+    lower.includes("polyamide") || lower.includes("acrylic fibre") ||
+    lower.includes("polypropylene fibre") || lower.includes("polyethylene fibre") ||
+    lower.includes("elastane") || lower.includes("spandex") || lower.includes("lycra") ||
+    lower.includes("viscose fibre") || lower.includes("rayon fibre") ||
+    lower.includes("modal fibre") || lower.includes("lyocell") || lower.includes("tencel") ||
+    lower.includes("acetate fibre") || lower.includes("synthetic fibre") ||
+    lower.includes("synthetic fiber") || lower.includes("man-made fibre")
+  ) {
+    return "textile";
+  }
+
+  // ── 3. Yarn ─────────────────────────────────────────────────────────────
+  if (
+    lower.includes("yarn") ||
+    lower.includes("cotton yarn") || lower.includes("polyester yarn") ||
+    lower.includes("blended yarn") || lower.includes("rayon yarn") ||
+    lower.includes("viscose yarn") || lower.includes("nylon yarn") ||
+    lower.includes("filament yarn") || lower.includes("textured yarn") ||
+    lower.includes("spun yarn") || lower.includes("wool yarn") ||
+    lower.includes("silk yarn") || lower.includes("melange yarn") ||
+    lower.includes("fancy yarn") || lower.includes("dyed yarn") ||
+    lower.includes("ring spun") || lower.includes("open end") || lower.includes("air jet yarn") ||
+    lower.includes("count yarn") || lower.includes("dtex") || lower.includes("denier")
+  ) {
+    return "textile";
+  }
+
+  // ── 4. Fabrics ──────────────────────────────────────────────────────────
+  if (
+    lower.includes("fabric") || lower.includes("textile") || lower.includes("cloth") ||
+    lower.includes("woven fabric") || lower.includes("knitted fabric") ||
+    lower.includes("cotton fabric") || lower.includes("polyester fabric") ||
+    lower.includes("blended fabric") || lower.includes("jersey") ||
+    lower.includes("rib fabric") || lower.includes("interlock") ||
+    lower.includes("fleece fabric") || lower.includes("canvas") || lower.includes("denim") ||
+    lower.includes("twill") || lower.includes("poplin") || lower.includes("oxford fabric") ||
+    lower.includes("linen fabric") || lower.includes("rayon fabric") ||
+    lower.includes("viscose fabric") || lower.includes("satin") ||
+    lower.includes("georgette") || lower.includes("crepe") || lower.includes("chiffon") ||
+    lower.includes("velvet") || lower.includes("corduroy") || lower.includes("mesh fabric") ||
+    lower.includes("lace fabric") || lower.includes("nonwoven") || lower.includes("non woven") ||
+    lower.includes("technical textile") || lower.includes("stretch fabric") ||
+    lower.includes("dobby") || lower.includes("jacquard") || lower.includes("flannel") ||
+    lower.includes("muslin") || lower.includes("lawn") || lower.includes("voile") ||
+    lower.includes("terry") || lower.includes("knit") || lower.includes("woven")
+  ) {
+    return "textile";
+  }
+
+  // ── 5. Garments ─────────────────────────────────────────────────────────
+  if (
+    lower.includes("garment") || lower.includes("apparel") || lower.includes("clothing") ||
+    lower.includes("shirt") || lower.includes("tshirt") || lower.includes("t-shirt") ||
+    lower.includes("t shirt") || lower.includes("jeans") || lower.includes("pant") ||
+    lower.includes("trouser") || lower.includes("shorts") || lower.includes("hoodie") ||
+    lower.includes("jacket") || lower.includes("coat") || lower.includes("dress") ||
+    lower.includes("kurta") || lower.includes("salwar") || lower.includes("legging") ||
+    lower.includes("tracksuit") || lower.includes("uniform") || lower.includes("overall") ||
+    lower.includes("apron") || lower.includes("saree") || lower.includes("sari") ||
+    lower.includes("blouse") || lower.includes("dupatta") || lower.includes("readymade") ||
+    lower.includes("ready-made") || lower.includes("stitched") || lower.includes("cut and sew")
+  ) {
+    return "textile";
+  }
+
+  // ── 6. Home Textile ─────────────────────────────────────────────────────
+  if (
+    lower.includes("bedsheet") || lower.includes("bed sheet") || lower.includes("bed linen") ||
+    lower.includes("blanket") || lower.includes("quilt") || lower.includes("comforter") ||
+    lower.includes("curtain") || lower.includes("pillow cover") || lower.includes("pillow case") ||
+    lower.includes("cushion cover") || lower.includes("towel") || lower.includes("bath towel") ||
+    lower.includes("table cloth") || lower.includes("tablecloth") || lower.includes("napkin") ||
+    lower.includes("kitchen towel") || lower.includes("mattress cover") ||
+    lower.includes("duvet") || lower.includes("bed cover") ||
+    lower.includes("home textile") || lower.includes("furnishing fabric")
+  ) {
+    return "textile";
+  }
+
+  // ── 7. Textile Accessories ─────────────────────────────────────────────
+  if (
+    lower.includes("sewing thread") || lower.includes("embroidery thread") ||
+    lower.includes("zipper") || lower.includes("zip") || lower.includes("button") ||
+    lower.includes("elastic tape") || lower.includes("elastic band") ||
+    lower.includes("label") || lower.includes("hang tag") || lower.includes("price tag") ||
+    lower.includes("velcro") || lower.includes("hook and eye") ||
+    lower.includes("interlining") || lower.includes("interlinings") ||
+    lower.includes("fusing") || lower.includes("shoulder pad") ||
+    lower.includes("bias tape") || lower.includes("ribbon") || lower.includes("tassel")
+  ) {
+    return "textile";
+  }
+
+  // ── 8. Industrial Textile ──────────────────────────────────────────────
+  if (
+    lower.includes("geotextile") || lower.includes("geo textile") ||
+    lower.includes("filter cloth") || lower.includes("filter fabric") ||
+    lower.includes("woven sack") || lower.includes("pp bag") || lower.includes("pp woven") ||
+    lower.includes("fiberglass fabric") || lower.includes("industrial fabric") ||
+    lower.includes("agrotextile") || lower.includes("medical textile") ||
+    lower.includes("tarpaulin") || lower.includes("tarp") ||
+    lower.includes("shade cloth") || lower.includes("crop cover") ||
+    lower.includes("conveyor belt fabric") || lower.includes("belting fabric")
+  ) {
+    return "textile";
+  }
+
+  // ── 9. Textile Chemicals ───────────────────────────────────────────────
+  // Note: checked here BEFORE generic chemicals to avoid misclassification
+  if (
+    lower.includes("textile dye") || lower.includes("reactive dye") || lower.includes("disperse dye") ||
+    lower.includes("vat dye") || lower.includes("pigment dye") || lower.includes("acid dye") ||
+    lower.includes("fabric softener") || lower.includes("textile softener") ||
+    lower.includes("bleaching agent") || lower.includes("optical brightener") ||
+    lower.includes("textile finishing") || lower.includes("finishing agent") ||
+    lower.includes("textile enzyme") || lower.includes("desizing agent") ||
+    lower.includes("sizing agent") || lower.includes("starch size")
+  ) {
+    return "textile";
+  }
+
+  // ── 10. Footwear & Leather ────────────────────────────────────────────
+  if (
+    lower.includes("shoe") || lower.includes("footwear") ||
+    lower.includes("slipper") || lower.includes("sandal") || lower.includes("boot") ||
+    lower.includes("sports shoe") || lower.includes("leather shoe") ||
+    lower.includes("synthetic leather") || lower.includes("pu leather") ||
+    lower.includes("shoe sole") || lower.includes("insole") || lower.includes("upper") ||
+    lower.includes("handbag") || lower.includes("wallet") || lower.includes("belt") ||
+    lower.includes("leather goods") || lower.includes("leather product") ||
+    lower.includes("genuine leather") || lower.includes("faux leather")
+  ) {
+    return "textile";
+  }
+
+  // ── Vendor Intelligence Final Fallback ────────────────────────────────
+  // If vendor is identified as textile and item still unresolved,
+  // classify as textile regardless of item name (handles SKU/design names)
+  if (vendorIsTextile) {
+    return "textile";
+  }
+
+  // ── Food & Beverage (MASTER MAPPING) ─────────────────────────────────────
+  if (
+    lower.includes("food") || lower.includes("beverage") ||
+    lower.includes("flour") || lower.includes("atta") ||
+    lower.includes("sugar") || lower.includes("salt") ||
+    lower.includes("tea") || lower.includes("coffee") ||
+    lower.includes("milk") || lower.includes("cheese") ||
+    lower.includes("butter") || lower.includes("edible oil") ||
+    lower.includes("mustard oil") || lower.includes("soybean oil") ||
+    lower.includes("sunflower oil") || lower.includes("palm oil") ||
+    lower.includes("chocolate") || lower.includes("cocoa") ||
+    lower.includes("fruit juice") || lower.includes("soft drink") ||
+    lower.includes("biscuit") || lower.includes("bread") ||
+    lower.includes("bakery") || lower.includes("snacks") ||
+    lower.includes("spice") || lower.includes("masala") ||
+    lower.includes("processed food") || lower.includes("packaged food")
   ) {
     return "food";
+  }
+
+  // ── Agriculture (MASTER MAPPING) ──────────────────────────────────────────
+  if (
+    lower.includes("fertilizer") || lower.includes("fertiliser") ||
+    lower.includes(" urea") || lower.includes("dap") || lower.includes("mop") ||
+    lower.includes("npk") || lower.includes("potash") ||
+    lower.includes("seed") || lower.includes("seeds") ||
+    lower.includes("pesticide") || lower.includes("insecticide") ||
+    lower.includes("fungicide") || lower.includes("herbicide") ||
+    lower.includes("grain") || lower.includes("corn") ||
+    lower.includes("maize") || lower.includes("soybean") ||
+    lower.includes("sugarcane") || lower.includes("fodder") ||
+    lower.includes("animal feed") || lower.includes("compost") ||
+    lower.includes("crop") || lower.includes("harvest") ||
+    lower.includes("irrigation") || lower.includes("agri")
+  ) {
+    return "agriculture";
   }
 
   // ── Refrigerant ──────────────────────────────────────────────────────────
@@ -955,17 +1146,55 @@ export function detectCategoryFromText(text: string, vendorName?: string, unit?:
   }
 
 
-  // ── Chemicals ──────────────────────────────────────────────────────────────
+  // ── Electronics (MASTER MAPPING) ──────────────────────────────────────────
   if (
-    lower.includes("chemical") ||
-    lower.includes("acid") ||
-    lower.includes("alkali") ||
-    lower.includes("solvent") ||
-    lower.includes("caustic") ||
-    lower.includes("caustic soda") ||
-    lower.includes("sodium hydroxide")
+    lower.includes("pcb") || lower.includes("printed circuit") ||
+    lower.includes("semiconductor") || lower.includes("microchip") ||
+    lower.includes("sensor") || lower.includes("display") ||
+    lower.includes("monitor") || lower.includes("television") ||
+    lower.includes("laptop") || lower.includes("computer") ||
+    lower.includes("printer") || lower.includes("server") ||
+    lower.includes("router") || lower.includes("network switch") ||
+    lower.includes("mobile phone") || lower.includes("smartphone") ||
+    lower.includes("tablet") || lower.includes("hard disk") ||
+    lower.includes("memory card") || lower.includes("ram") ||
+    lower.includes("electronic component") || lower.includes("ic chip")
   ) {
-    return "chemicals";
+    return "electronics";
+  }
+
+  // ── Automotive (MASTER MAPPING) ────────────────────────────────────────────
+  if (
+    lower.includes("engine") && (lower.includes("auto") || lower.includes("car") || lower.includes("truck") || lower.includes("vehicle")) ||
+    lower.includes("gearbox") || lower.includes("clutch plate") ||
+    lower.includes("brake pad") || lower.includes("brake disc") ||
+    lower.includes("tyre") || lower.includes("tire") ||
+    lower.includes("tube tyre") || lower.includes("auto part") ||
+    lower.includes("radiator") || lower.includes("alternator") ||
+    lower.includes("starter motor") || lower.includes("vehicle bearing") ||
+    lower.includes("axle") || lower.includes("suspension") ||
+    lower.includes("bumper") || lower.includes("windshield") ||
+    lower.includes("vehicle seat") || lower.includes("car battery") ||
+    lower.includes("engine oil") || lower.includes("gear oil")
+  ) {
+    return "automotive";
+  }
+
+  // ── Construction Materials (MASTER MAPPING) ────────────────────────────────
+  if (
+    lower.includes("brick") || lower.includes("fly ash brick") ||
+    lower.includes("aac block") || lower.includes("concrete block") ||
+    lower.includes("stone") || lower.includes("granite") ||
+    lower.includes("marble") || lower.includes("tiles") ||
+    lower.includes("ceramic tile") || lower.includes("vitrified tile") ||
+    lower.includes("sand") || lower.includes("river sand") ||
+    lower.includes("aggregate") || lower.includes("gravel") ||
+    lower.includes("scaffolding") || lower.includes("roofing sheet") ||
+    lower.includes("roofing tile") || lower.includes("putty") ||
+    lower.includes("primer") || lower.includes("paint") ||
+    lower.includes("wall putty") || lower.includes("plaster")
+  ) {
+    return "construction";
   }
 
   // ── Electrical equipment ──────────────────────────────────────────────────
