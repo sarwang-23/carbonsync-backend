@@ -66,7 +66,6 @@ const WEIGHT_CATEGORIES = [
   "steel_pipe",
   "structural_steel",
   "aluminium",
-  "textile",
   "lpg",
   "coal",
   "coke",
@@ -86,7 +85,7 @@ const WEIGHT_CATEGORIES = [
   "paper",
   "wood",
   "food",
-  "chemicals",
+  "agriculture",   // weight-based (kg/tonne)
   "refrigerant",
   "waste",
 ];
@@ -105,8 +104,10 @@ const MONEY_CATEGORIES = [
   "manufacturing",
   "services",
   "electrical",
-  "electronics",
-  "plastic",        // Climatiq plastic EF is spend-based (Money unit)
+  "electronics",    // spend-based EEIO
+  "automotive",     // spend-based EEIO
+  "chemicals",      // spend-based EEIO
+  "plastic",        // spend-based EEIO
   "textile",
 ];
 
@@ -115,7 +116,14 @@ const MONEY_CATEGORIES = [
  * India first, then major global regions, finally undefined (GLOBAL).
  */
 const REGION_FALLBACK_ORDER: (string | undefined)[] = [
-  "IN", "AU", "US", "EU", "GLO", "RoW", undefined,
+  // Primary: India + major markets
+  "IN", "AU", "US", "EU",
+  // MRIO country codes (chemicals, electronics, automotive, plastic datasets)
+  "GB", "DE", "FR",
+  // Ecoinvent regional groupings (glass, timber)
+  "ECOINVENT_EUROPE",
+  // Final fallbacks
+  "GLO", "RoW", undefined,
 ];
 
 /**
@@ -124,6 +132,37 @@ const REGION_FALLBACK_ORDER: (string | undefined)[] = [
  * Add new IDs at the top of each array (highest priority first).
  */
 const CATEGORY_ACTIVITY_MAP: Record<string, string[]> = {
+
+  // ── Chemicals ─────────────────────────────────────────────────────────────
+  chemicals: [
+    // Verified from Climatiq search API — MRIO spend-based (money unit)
+    "chemicals-type_all_other_chemical_product_and_preparation_manufacturing",
+    "chemicals-type_soap_cleaning_compound_and_toilet_preparation_manufacturing",
+    "chemicals-type_pharmaceutical_and_medicine_manufacturing",
+    "chemicals-type_basic_chemical_manufacturing",
+    "chemicals-type_resin_and_synthetic_rubber_and_artificial_synthetic_fibers_and_filaments_manufacturing",
+  ],
+
+  // ── Plastic ───────────────────────────────────────────────────────────────
+  plastic: [
+    // Verified from Climatiq search API — MRIO spend-based (money unit)
+    "plastics_rubber-type_rubber_plastic_products",
+    "plastics_rubber-type_plastics_in_primary_forms",
+    "plastics_rubber-type_plastic_packaging",
+    "plastics_rubber-type_plastic_products",
+    "plastics_rubber-type_rubber_products",
+  ],
+
+  // ── Glass ─────────────────────────────────────────────────────────────────
+  glass: [
+    // Verified from Climatiq search API — weight-based (kg unit), region DE/ECOINVENT_EUROPE
+    "glass_products-type_flat_glass",
+    "glass_products-type_glass_container_flat",
+    "glass_products-type_flat_glass_press_glass_holding_sa_float_glass_transparent_infill",
+    "glass_products-type_flat_glass_press_glass_holding_sa_laminated_safety_glass_transparent_infill",
+    "glass_products-type_flat_glass_press_glass_holding_sa_thermally_toughened_safety_glass_transparent_infill",
+    "building_materials-type_glass",
+  ],
 
   // ── Textiles ─────────────────────────────────────────────────────────────
   textile: [
@@ -157,42 +196,47 @@ const CATEGORY_ACTIVITY_MAP: Record<string, string[]> = {
 
   // ── Food & Beverage ───────────────────────────────────────────────────────
   food: [
-    "food-type_processed_onions-origin_region_uk", // confirmed working
-    "food_and_drink-type_food_and_drink",
-    "food_and_drink-type_food",
-    "food_and_drink-type_beverage",
-    "food_and_drink-type_grain_crops",
-    "food_and_drink-type_sugar",
-    "food_and_drink-type_edible_oils",
-    "food_and_drink-type_dairy",
+    // Verified from Climatiq search API — weight-based (kg), GLOBAL region
+    "food-type_pork-origin_region_world_average",
+    "food-type_beef-origin_region_world_average",
+    "food-type_lamb-origin_region_world_average",
+    "food-type_milk-origin_region_world_average",
+    "food-type_chicken-origin_region_world_average",
+    "food-type_processed_onions-origin_region_uk",          // confirmed working at GLO region
     "manufactured_goods-type_food_products",
   ],
 
   // ── Agriculture ───────────────────────────────────────────────────────────
   agriculture: [
-    "land_use-type_crop_residues", // confirmed working
-    "agriculture-type_fertiliser",
-    "agriculture-type_fertilizers",
-    "agriculture-type_pesticide",
-    "agriculture-type_seeds",
-    "agriculture-type_crop_production",
-    "agriculture-type_animal_feed",
-    "agriculture-type_agriculture",
-    "manufactured_goods-type_manufactured_goods",
+    "land_use-type_crop_residues",                          // confirmed working in past tests
+    // Verified from Climatiq search API — weight-based (kg), FR/GLOBAL region
+    "food-type_rapeseed_average_from_7_optimized_case_study_protein_crop_scenario_at_farm_gate-origin_region_france",
+    "food-type_sunflower_grain_average_from_2_optimized_case_study_protein_crop_scenario_at_farm_gate-origin_region_france",
+    "food-type_grain_maize_average_from_6_optimized_case_study_scenario_protein_crop_at_farm_gate-origin_region_france",
+    "food-type_pork-origin_region_world_average",           // fallback to food/weight
+    "food-type_beef-origin_region_world_average",
   ],
 
   // ── Electronics ───────────────────────────────────────────────────────────
-  
+  electronics: [
+    // Verified from Climatiq search API — MRIO spend-based (money unit)
+    "electronics-type_electronic_computer",
+    "electronics-type_other_electronic_component",
+    "electronics-type_electronic_connectors_and_other_electronic_components",
+    "electronics-type_audio_and_video_equipment",
+    "electrical_equipment-type_electrical_equipment",
+    "electrical_equipment-type_motors",
+    "electrical_equipment-type_lighting",
+  ],
 
   // ── Automotive ────────────────────────────────────────────────────────────
   automotive: [
-    "vehicle_parts-type_other_motor_vehicle_parts_manufacturing", // confirmed working
-    "manufactured_goods-type_motor_vehicles",
-    "manufactured_goods-type_automotive_parts",
-    "manufactured_goods-type_vehicle_parts",
-    "manufactured_goods-type_tyres",
-    "manufactured_goods-type_capital_goods",
-    "manufactured_goods-type_manufactured_goods",
+    // Verified from Climatiq search API — MRIO spend-based (money unit)
+    "vehicle_parts-type_other_motor_vehicle_parts_manufacturing",
+    "vehicle_parts-type_motor_vehicle_seating_and_interior_trim_manufacturing",
+    "vehicle_parts-type_motor_vehicle_electrical_and_electronic_equipment_manufacturing",
+    "vehicle_parts-type_motor_vehicle_body_manufacturing",
+    "vehicle_parts-type_motor_vehicle_parts_and_accessories",
   ],
 
   // ── Construction Materials ────────────────────────────────────────────────

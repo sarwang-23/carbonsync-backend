@@ -1,6 +1,6 @@
-import { pool } from './src/db.js';
-import { processInvoiceEmissions } from './src/services/InvoiceEmission.service.js';
-import { detectCategoryFromText } from './src/services/CategoryDetection.service.js';
+import "dotenv/config";
+import { processInvoiceEmissions } from './src/services/InvoiceEmission.service';
+import { detectCategoryFromText } from './src/services/CategoryDetection.service';
 
 async function run() {
     try {
@@ -10,7 +10,7 @@ async function run() {
             console.log(`${item.padEnd(20)} -> ${detectCategoryFromText(item)}`);
         }
 
-        console.log('\n=== Test: Emission Pipeline for Door Shutter ===');
+        console.log('\n=== Test: Emission Pipeline for Timber Items ===');
         const res = await processInvoiceEmissions({
             region: 'IN',
             country_name: 'India',
@@ -27,7 +27,6 @@ async function run() {
     } catch (e) {
         console.error('Fatal:', e);
     }
-    await pool.end();
     process.exit(0);
 }
 run();
