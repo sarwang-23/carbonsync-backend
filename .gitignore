@@ -20,7 +20,7 @@ build/
 
 # generated runtime folders
 uploads/
-reports/
+/reports/
 temp-gemini-vision/
 temp-ocr/
 
