@@ -76,27 +76,30 @@ export async function generateUKReport(commonData?: any) {
     type: "nodebuffer",
   });
 
-  // Ensure generated/ folder exists
-  const generatedDir = path.join(process.cwd(), "generated");
-  if (!fs.existsSync(generatedDir)) {
-    fs.mkdirSync(generatedDir, { recursive: true });
+  // Ensure reports/ folder exists (Express serves this statically)
+  const reportsDir = path.join(process.cwd(), "reports");
+  if (!fs.existsSync(reportsDir)) {
+    fs.mkdirSync(reportsDir, { recursive: true });
   }
 
-  const outputPath = path.join(generatedDir, "UK_Report.docx");
+  const timestamp = Date.now();
+  const docxFilename = `UK_Report_${timestamp}.docx`;
+  const outputPath = path.join(reportsDir, docxFilename);
   fs.writeFileSync(outputPath, buffer);
 
   console.log("✅ UK Report DOCX generated:", outputPath);
 
   // Convert to PDF
-  const pdfOutputPath = path.join(generatedDir, "UK_Report.pdf");
+  const pdfFilename = `UK_Report_${timestamp}.pdf`;
+  const pdfOutputPath = path.join(reportsDir, pdfFilename);
   try {
     const pdfBuf = await convertAsync(buffer, ".pdf", undefined);
     fs.writeFileSync(pdfOutputPath, pdfBuf);
     console.log("✅ UK Report PDF generated:", pdfOutputPath);
-    return pdfOutputPath;
+    return `/reports/${pdfFilename}`;
   } catch (err) {
     console.error("❌ Failed to convert DOCX to PDF. Returning DOCX instead:", err);
-    return outputPath;
+    return `/reports/${docxFilename}`;
   }
 }
 
