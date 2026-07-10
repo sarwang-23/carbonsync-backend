@@ -15,6 +15,8 @@ import { calculateGermanyEmission } from "./services/GermanyEmission.service.js"
 import { calculateIndiaFixedEmission } from "./services/IndiaFixedEmission.service.js";
 import { calculateIndiaEmission } from "./services/IndiaEmission.service.js";
 import { processInvoiceEmissions } from "./services/InvoiceEmission.service.js";
+import reportRoutes from "./routes/report.routes.js";
+
 
 const app = express();
 
@@ -24,12 +26,14 @@ app.use(cors());
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
+app.use("/api/report", reportRoutes);
 app.use("/api/erp", erpRoutes);
 app.use("/api/affinda", affindaTestRoutes);
+
 import path from "path";
 app.use("/reports", express.static(path.join(process.cwd(), "reports")));
 import { generateInvoiceEmissionReports } from "./services/Report.service.js";
-import { testTemplateRead } from "./services/reports/uk/generator.js";
+
 
 app.post("/api/generate-invoice-report", async (req, res) => {
   try {
@@ -173,22 +177,8 @@ app.post("/api/test/country-emission", async (req, res) => {
   }
 });
 
-// ─── Phase 1: Template Read Test Route ─────────────────────────────────────
-app.get("/api/report/test-uk-template", async (_req, res) => {
-  try {
-    const result = await testTemplateRead();
-    return res.json({
-      success: true,
-      message: "✅ UK Template found and readable",
-      template: result,
-    });
-  } catch (err: any) {
-    return res.status(500).json({
-      success: false,
-      message: err.message,
-    });
-  }
-});
+
+
 
 app.get("/", (_req, res) => {
   res.json({
