@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import puppeteer from "puppeteer";
-import { generateLocalReportHtml } from "./reports/router.js";
+import { generateLocalReport } from "./reports/router.js";
 
 function formatNumber(value: any, digits = 2) {
   return Number(value || 0).toFixed(digits);
