@@ -2039,11 +2039,11 @@ export async function generateInvoiceEmissionReports(payload: any) {
   });
 
   try {
-    const commonData = buildCommonData(safePayload);
+    const indiaHtml = buildCommonData(safePayload);
     const region = safePayload.region || safePayload.calculationResults?.[0]?.region || "IN";
 
     // NEW ARCHITECTURE: DocxTemplater + LibreOffice
-    const localReportResult = await generateLocalReport(region, commonData);
+    const localReportResult = await generateLocalReport(region, safePayload, indiaHtml);
     const cbamHtml = buildCBAMHtml(safePayload);
 
     let brsrReport = { reportUrl: "" };

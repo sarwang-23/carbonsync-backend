@@ -6,13 +6,13 @@ import { generateReport as generateFRReport } from './france/generator.js';
 import { generateReport as generateUSReport } from './usa/generator.js';
 import { generateReport as generateMYReport } from './malaysia/generator.js';
 
-export async function generateLocalReport(region: string, commonData: any): Promise<any> {
+export async function generateLocalReport(region: string, safePayload: any, indiaHtml: string): Promise<any> {
   const normalizedRegion = (region || 'IN').toUpperCase();
 
   switch (normalizedRegion) {
     case 'GB':
     case 'UK': 
-      return await generateUKReport(commonData);
+      return await generateUKReport(safePayload);
     
     // For now, all other countries default to India's BRSR HTML report
     // until their specific templates are ready.
@@ -23,6 +23,6 @@ export async function generateLocalReport(region: string, commonData: any): Prom
     case 'MY': 
     case 'US': 
     default: 
-      return { html: generateINReport(commonData) };
+      return { html: indiaHtml };
   }
 }
