@@ -27,11 +27,14 @@ router.get("/generate-uk-report", async (_req, res) => {
   try {
     const file = await generateUKReport();
     return res.download(file);
-  } catch (error: any) {
-    console.error("UK Report generation failed:", error);
+  } catch (err: any) {
+    console.error("=== UK REPORT ERROR ===");
+    console.error(err);
+    console.error(err.stack);
     return res.status(500).json({
       success: false,
-      message: error.message,
+      error: err.message,
+      stack: err.stack,
     });
   }
 });
