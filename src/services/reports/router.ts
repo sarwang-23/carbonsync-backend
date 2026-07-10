@@ -10,14 +10,19 @@ export async function generateLocalReport(region: string, commonData: any): Prom
   const normalizedRegion = (region || 'IN').toUpperCase();
 
   switch (normalizedRegion) {
-    case 'IN': return { html: generateINReport(commonData) };
     case 'GB':
-    case 'UK': return await generateUKReport(commonData);
-    case 'AU': return await generateAUReport(commonData);
-    case 'DE': return await generateDEReport(commonData);
-    case 'FR': return await generateFRReport(commonData);
-    case 'MY': return await generateMYReport(commonData);
-    case 'US': return await generateUSReport(commonData);
-    default: return { html: generateINReport(commonData) };
+    case 'UK': 
+      return await generateUKReport(commonData);
+    
+    // For now, all other countries default to India's BRSR HTML report
+    // until their specific templates are ready.
+    case 'IN':
+    case 'AU': 
+    case 'DE': 
+    case 'FR': 
+    case 'MY': 
+    case 'US': 
+    default: 
+      return { html: generateINReport(commonData) };
   }
 }
