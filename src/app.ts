@@ -29,6 +29,7 @@ app.use("/api/affinda", affindaTestRoutes);
 import path from "path";
 app.use("/reports", express.static(path.join(process.cwd(), "reports")));
 import { generateInvoiceEmissionReports } from "./services/Report.service.js";
+import { testTemplateRead } from "./services/reports/uk/generator.js";
 
 app.post("/api/generate-invoice-report", async (req, res) => {
   try {
@@ -168,6 +169,23 @@ app.post("/api/test/country-emission", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Country emission test failed",
+    });
+  }
+});
+
+// ─── Phase 1: Template Read Test Route ─────────────────────────────────────
+app.get("/api/report/test-uk-template", async (_req, res) => {
+  try {
+    const result = await testTemplateRead();
+    return res.json({
+      success: true,
+      message: "✅ UK Template found and readable",
+      template: result,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      message: err.message,
     });
   }
 });

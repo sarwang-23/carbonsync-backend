@@ -2041,20 +2041,27 @@ export async function generateInvoiceEmissionReports(payload: any) {
   try {
     const commonData = buildCommonData(safePayload);
     const region = safePayload.region || safePayload.calculationResults?.[0]?.region || "IN";
-    const brsrHtml = generateLocalReportHtml(region, commonData);
+
+    // NEW ARCHITECTURE: DocxTemplater + LibreOffice
+    const localReportResult = await generateLocalReport(region, commonData);
     const cbamHtml = buildCBAMHtml(safePayload);
 
-    // IMPORTANT SPEED FIX:
-    // Earlier code launched Puppeteer twice: once for BRSR and once for CBAM.
-    // That is very slow on Render. Now both PDFs share one browser instance.
-    // Execute sequentially to avoid Puppeteer Target closed errors
-    const startBrsr = Date.now();
     let brsrReport = { reportUrl: "" };
-    try {
-      brsrReport = await generatePdfFromHtml(brsrHtml, "CS-BRSR", browser);
-      console.log(`[Timing] BRSR report generation time: ${Date.now() - startBrsr}ms`);
-    } catch (err) {
-      console.error("BRSR report generation failed:", err);
+
+    if (localReportResult?.reportUrl || localReportResult?.docxPath) {
+      // DOCX/PDF generation successful (non-India countries)
+      const finalPath = localReportResult.reportUrl || localReportResult.docxPath;
+      console.log("[Timing] Local DOCX report generation complete:", finalPath);
+      brsrReport = { reportUrl: finalPath };
+    } else if (localReportResult?.html) {
+      // Fallback: India BRSR — HTML → Puppeteer → PDF
+      const startBrsr = Date.now();
+      try {
+        brsrReport = await generatePdfFromHtml(localReportResult.html, "CS-BRSR", browser);
+        console.log(`[Timing] BRSR HTML report generation time: ${Date.now() - startBrsr}ms`);
+      } catch (err) {
+        console.error("BRSR report generation failed:", err);
+      }
     }
 
     const startCbam = Date.now();
