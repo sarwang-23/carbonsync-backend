@@ -17,7 +17,7 @@
     "node_modules",
     "dist",
     "uploads",
-    "reports",
+    "./reports",
     "temp-gemini-vision",
     "temp-ocr",
     "drizzle.config.ts",
