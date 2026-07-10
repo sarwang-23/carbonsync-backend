@@ -4,6 +4,10 @@ import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import { buildReportData } from "./mapper.js";
 import { fileURLToPath } from 'url';
+import util from "util";
+import libre from "libreoffice-convert";
+
+const convertAsync = util.promisify(libre.convert);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,7 +32,7 @@ export async function generateReport(commonData: any) {
 
   doc.render(reportData);
 
-  const buf = doc.getZip().generate({
+  const docxBuf = doc.getZip().generate({
     type: "nodebuffer",
   });
 
@@ -37,8 +41,19 @@ export async function generateReport(commonData: any) {
     fs.mkdirSync(generatedDir, { recursive: true });
   }
 
-  const outputPath = path.join(generatedDir, "GERMANY_Report_" + Date.now() + ".docx");
-  fs.writeFileSync(outputPath, buf);
+  const timestamp = Date.now();
+  const docxPath = path.join(generatedDir, `GERMANY_Report_${timestamp}.docx`);
+  fs.writeFileSync(docxPath, docxBuf);
 
-  return { docxPath: outputPath };
+  let pdfPath = null;
+  try {
+    const pdfBuf = await convertAsync(docxBuf, ".pdf", undefined);
+    pdfPath = path.join(generatedDir, `GERMANY_Report_${timestamp}.pdf`);
+    fs.writeFileSync(pdfPath, pdfBuf);
+    console.log("[Timing] Successfully converted DOCX to PDF:", pdfPath);
+    return { docxPath, pdfPath, reportUrl: pdfPath };
+  } catch (err) {
+    console.error("Failed to convert DOCX to PDF (is LibreOffice installed?):", err);
+    return { docxPath, reportUrl: docxPath }; 
+  }
 }

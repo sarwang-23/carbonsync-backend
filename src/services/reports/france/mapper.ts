@@ -1,8 +1,8 @@
 export function buildReportData(data: any) {
   return {
-    COMPANY_NAME: "CarbonSynq Demo Client",
+    COMPANY_NAME: data.company?.name || "CarbonSynq Demo Client",
     REPORT_YEAR: new Date().getFullYear(),
-    REPORTING_PERIOD: "Invoice Based",
+    REPORT_DATE: new Date().toLocaleDateString(),
     SCOPE1: data.scope1 || 0,
     SCOPE2: data.scope2 || 0,
     SCOPE3: data.scope3 || 0,
@@ -10,7 +10,8 @@ export function buildReportData(data: any) {
     TOTAL_TCO2E: data.totalTCO2e || 0,
     ELECTRICITY: data.extractedItems?.find((x: any) => String(x.item_name).toLowerCase().includes("electricity"))?.quantity || 0,
     NATURAL_GAS: data.extractedItems?.find((x: any) => String(x.item_name).toLowerCase().includes("natural gas"))?.quantity || 0,
-    BUSINESS_TRAVEL: 0,
+    DIESEL: data.extractedItems?.find((x: any) => String(x.item_name).toLowerCase().includes("diesel"))?.quantity || 0,
+    COUNTRY: "France",
     RECOMMENDATION: "Optimize energy consumption",
     CEO_NAME: "CEO Name"
   };
