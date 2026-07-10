@@ -48,19 +48,19 @@ export function buildUKReportData(commonData?: any) {
   const formatNum = (val: any, digits = 2) => Number(val || 0).toFixed(digits);
 
   return {
-    COMPANY_NAME: safeData.companyName || "CarbonSynq Demo Client",
-    REPORT_YEAR: new Date().getFullYear().toString(),
-    REPORT_DATE: safeData.currentDate || new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
-    TOTAL_CO2E: formatNum(totalKg, 2),
-    TOTAL_TCO2E: formatNum(totalTco2e, 4),
-    SCOPE1: formatNum(scope1, 2),
-    SCOPE2: formatNum(scope2, 4),
-    SCOPE3: formatNum(scope3, 4),
-    ELECTRICITY: formatNum(electricity, 2),
-    NATURAL_GAS: formatNum(naturalGas, 2),
-    DIESEL: formatNum(diesel, 2),
-    COUNTRY: "United Kingdom",
-    RECOMMENDATION: "Optimize energy consumption and switch to renewable sources.",
-    CEO_NAME: "CEO Name"
+    company_name: safeData.companyName || "CarbonSynq Demo Client",
+    invoice_number: safeData.invoiceNumber || "INV-" + Date.now().toString().slice(-6),
+    invoice_date: safeData.currentDate || new Date().toLocaleDateString("en-GB"),
+    reporting_period: "Invoice Based Report",
+    total_emissions: formatNum(totalTco2e, 4),
+    scope1: formatNum(scope1, 2),
+    scope2: formatNum(scope2, 4),
+    scope3: formatNum(scope3, 4),
+    electricity: formatNum(electricity, 2),
+    natural_gas: formatNum(naturalGas, 2),
+    diesel: formatNum(diesel, 2),
+    country: "United Kingdom",
+    recommendation: "Optimize energy consumption and switch to renewable sources.",
+    ceo_name: "CEO Name"
   };
 }
