@@ -2,17 +2,13 @@ import fs from "fs";
 import path from "path";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
-import { buildReportData } from "./mapper.js";
-import { fileURLToPath } from 'url';
-import util from "util";
-import libre from "libreoffice-convert";
-
-const convertAsync = util.promisify(libre.convert);
+import { buildUKReportData } from "./mapper.js";
+import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ─── Phase 1: Template Read Test ────────────────────────────────────────────
+// ─── Phase 1: Template existence check ──────────────────────────────────────
 export async function testTemplateRead() {
   const templatePath = path.join(__dirname, "template.docx");
 
@@ -31,49 +27,51 @@ export async function testTemplateRead() {
   };
 }
 
-// ─── Phase 2-5: Full Report Generation ──────────────────────────────────────
-export async function generateReport(commonData: any) {
-  const reportData = buildReportData(commonData);
-  
-  const templatePath = path.join(__dirname, "template.docx");
-  
+// ─── Phase 2: Generate UK Report DOCX ───────────────────────────────────────
+export async function generateUKReport() {
+  const templatePath = path.join(
+    process.cwd(),
+    "src",
+    "services",
+    "reports",
+    "uk",
+    "template.docx"
+  );
+
   if (!fs.existsSync(templatePath)) {
-    console.warn("Template not found for uk:", templatePath);
-    return null; 
+    throw new Error(`UK template not found at: ${templatePath}`);
   }
 
   const content = fs.readFileSync(templatePath, "binary");
   const zip = new PizZip(content);
-  
+
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
     linebreaks: true,
   });
 
+  const reportData = buildUKReportData();
   doc.render(reportData);
 
-  const docxBuf = doc.getZip().generate({
+  const buffer = doc.getZip().generate({
     type: "nodebuffer",
   });
 
-  const generatedDir = path.join(process.cwd(), "reports");
+  // Ensure generated/ folder exists
+  const generatedDir = path.join(process.cwd(), "generated");
   if (!fs.existsSync(generatedDir)) {
     fs.mkdirSync(generatedDir, { recursive: true });
   }
 
-  const timestamp = Date.now();
-  const docxPath = path.join(generatedDir, `UK_Report_${timestamp}.docx`);
-  fs.writeFileSync(docxPath, docxBuf);
+  const outputPath = path.join(generatedDir, "UK_Report.docx");
+  fs.writeFileSync(outputPath, buffer);
 
-  let pdfPath = null;
-  try {
-    const pdfBuf = await convertAsync(docxBuf, ".pdf", undefined);
-    pdfPath = path.join(generatedDir, `UK_Report_${timestamp}.pdf`);
-    fs.writeFileSync(pdfPath, pdfBuf);
-    console.log("[Timing] Successfully converted DOCX to PDF:", pdfPath);
-    return { docxPath, pdfPath, reportUrl: pdfPath };
-  } catch (err) {
-    console.error("Failed to convert DOCX to PDF (is LibreOffice installed?):", err);
-    return { docxPath, reportUrl: docxPath }; 
-  }
+  console.log("✅ UK Report generated:", outputPath);
+  return outputPath;
+}
+
+// ─── Full generation with real emission data (used by main pipeline) ─────────
+export async function generateReport(commonData: any) {
+  // In Phase 2 we use dummy data; later mapper will use commonData
+  return generateUKReport();
 }

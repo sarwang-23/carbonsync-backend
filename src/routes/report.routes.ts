@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { testTemplateRead, generateReport } from "../services/reports/uk/generator.js";
+import { testTemplateRead, generateUKReport } from "../services/reports/uk/generator.js";
 
 const router = Router();
 
@@ -21,27 +21,14 @@ router.get("/test-uk-template", async (_req, res) => {
   }
 });
 
-// ─── Phase 2+: Full UK Report Generation ────────────────────────────────────
-// POST /api/report/generate-uk
-// Body: any commonData / emission result object
-router.post("/generate-uk", async (req, res) => {
+// ─── Phase 2: Generate UK Report ────────────────────────────────────────────
+// GET /api/report/generate-uk-report
+router.get("/generate-uk-report", async (_req, res) => {
   try {
-    const commonData = req.body;
-    const result = await generateReport(commonData);
-
-    if (!result) {
-      return res.status(500).json({
-        success: false,
-        message: "Report generation returned null. Check if template.docx exists.",
-      });
-    }
-
-    return res.json({
-      success: true,
-      message: "✅ UK Report generated",
-      report: result,
-    });
+    const file = await generateUKReport();
+    return res.download(file);
   } catch (error: any) {
+    console.error("UK Report generation failed:", error);
     return res.status(500).json({
       success: false,
       message: error.message,

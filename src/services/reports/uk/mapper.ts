@@ -1,18 +1,18 @@
-export function buildReportData(data: any) {
+export function buildUKReportData() {
   return {
-    COMPANY_NAME: data.company?.name || "CarbonSynq Demo Client",
-    REPORT_YEAR: new Date().getFullYear(),
-    REPORT_DATE: new Date().toLocaleDateString(),
-    SCOPE1: data.scope1 || 0,
-    SCOPE2: data.scope2 || 0,
-    SCOPE3: data.scope3 || 0,
-    TOTAL_CO2E: data.totalKgCO2e || 0,
-    TOTAL_TCO2E: data.totalTCO2e || 0,
-    ELECTRICITY: data.extractedItems?.find((x: any) => String(x.item_name).toLowerCase().includes("electricity"))?.quantity || 0,
-    NATURAL_GAS: data.extractedItems?.find((x: any) => String(x.item_name).toLowerCase().includes("natural gas"))?.quantity || 0,
-    DIESEL: data.extractedItems?.find((x: any) => String(x.item_name).toLowerCase().includes("diesel"))?.quantity || 0,
+    COMPANY_NAME: "CarbonSyncEarth Pvt Ltd",
+    REPORT_YEAR: "2025",
+    REPORT_DATE: "10 July 2026",
+    TOTAL_CO2E: "156.45",
+    TOTAL_TCO2E: "0.156",
+    SCOPE1: "40",
+    SCOPE2: "60",
+    SCOPE3: "56",
+    ELECTRICITY: "2000",
+    NATURAL_GAS: "500",
+    DIESEL: "200",
     COUNTRY: "United Kingdom",
-    RECOMMENDATION: "Optimize energy consumption",
+    RECOMMENDATION: "Optimize energy consumption and switch to renewable sources.",
     CEO_NAME: "CEO Name"
   };
 }
