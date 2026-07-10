@@ -4,6 +4,10 @@ import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import { buildUKReportData } from "./mapper.js";
 import { fileURLToPath } from "url";
+import util from "util";
+import libre from "libreoffice-convert";
+
+const convertAsync = util.promisify(libre.convert);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,15 +49,30 @@ export async function generateUKReport() {
   const content = fs.readFileSync(templatePath, "binary");
   const zip = new PizZip(content);
 
-  const doc = new Docxtemplater(zip, {
-    paragraphLoop: true,
-    linebreaks: true,
-  });
+  let doc: Docxtemplater;
+  try {
+    doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+    });
 
-  const reportData = buildUKReportData();
-  doc.render(reportData);
+    const reportData = buildUKReportData();
+    doc.render(reportData);
 
-  const buffer = doc.getZip().generate({
+  } catch (error: any) {
+    console.error("=== DOCXTEMPLATER ERROR ===");
+    if (error.properties?.errors) {
+      error.properties.errors.forEach((e: any, i: number) => {
+        console.error(`[${i}]`, JSON.stringify(e.properties, null, 2));
+      });
+    } else {
+      console.error(JSON.stringify(error.properties, null, 2));
+    }
+    console.error("===========================");
+    throw error;
+  }
+
+  const buffer = doc!.getZip().generate({
     type: "nodebuffer",
   });
 
@@ -66,8 +85,19 @@ export async function generateUKReport() {
   const outputPath = path.join(generatedDir, "UK_Report.docx");
   fs.writeFileSync(outputPath, buffer);
 
-  console.log("✅ UK Report generated:", outputPath);
-  return outputPath;
+  console.log("✅ UK Report DOCX generated:", outputPath);
+
+  // Convert to PDF
+  const pdfOutputPath = path.join(generatedDir, "UK_Report.pdf");
+  try {
+    const pdfBuf = await convertAsync(buffer, ".pdf", undefined);
+    fs.writeFileSync(pdfOutputPath, pdfBuf);
+    console.log("✅ UK Report PDF generated:", pdfOutputPath);
+    return pdfOutputPath;
+  } catch (err) {
+    console.error("❌ Failed to convert DOCX to PDF. Returning DOCX instead:", err);
+    return outputPath;
+  }
 }
 
 // ─── Full generation with real emission data (used by main pipeline) ─────────
