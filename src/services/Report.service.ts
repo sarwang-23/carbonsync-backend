@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import puppeteer from "puppeteer";
+import { generateLocalReportHtml } from "./reports/router.js";
 
 function formatNumber(value: any, digits = 2) {
   return Number(value || 0).toFixed(digits);
@@ -498,7 +499,7 @@ function inferCbamContext(payload: any) {
   };
 }
 
-function buildBRSRHtml(payload: any) {
+export function buildCommonData(payload: any) {
   const {
     file,
     extractedItems,
@@ -2038,7 +2039,9 @@ export async function generateInvoiceEmissionReports(payload: any) {
   });
 
   try {
-    const brsrHtml = buildBRSRHtml(safePayload);
+    const commonData = buildCommonData(safePayload);
+    const region = safePayload.region || safePayload.calculationResults?.[0]?.region || "IN";
+    const brsrHtml = generateLocalReportHtml(region, commonData);
     const cbamHtml = buildCBAMHtml(safePayload);
 
     // IMPORTANT SPEED FIX:
