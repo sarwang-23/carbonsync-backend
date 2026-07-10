@@ -32,7 +32,7 @@ export async function testTemplateRead() {
 }
 
 // ─── Phase 2: Generate UK Report DOCX ───────────────────────────────────────
-export async function generateUKReport() {
+export async function generateUKReport(commonData?: any) {
   const templatePath = path.join(
     process.cwd(),
     "src",
@@ -56,7 +56,7 @@ export async function generateUKReport() {
       linebreaks: true,
     });
 
-    const reportData = buildUKReportData();
+    const reportData = buildUKReportData(commonData);
     doc.render(reportData);
 
   } catch (error: any) {
@@ -102,6 +102,6 @@ export async function generateUKReport() {
 
 // ─── Full generation with real emission data (used by main pipeline) ─────────
 export async function generateReport(commonData: any) {
-  // In Phase 2 we use dummy data; later mapper will use commonData
-  return generateUKReport();
+  const resultPath = await generateUKReport(commonData);
+  return { reportUrl: resultPath };
 }
