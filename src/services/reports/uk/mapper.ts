@@ -30,8 +30,9 @@ export function buildUKReportData(commonData?: any) {
   const scope3Rows: any[] = [];
 
   for (const item of successful) {
-    const tco2e = Number(item.result?.total_tco2e || 0);
     const kgco2e = Number(item.result?.co2e || 0);
+    // total_tco2e is sometimes 0 or missing — fallback to co2e/1000
+    const tco2e = Number(item.result?.total_tco2e) || (kgco2e / 1000);
     const category = String(item.result?.category || "").toLowerCase();
     const itemName = String(item.item_name || item.result?.item_name || "N/A");
     const activityId = String(item.result?.activity_id || "N/A");
@@ -48,7 +49,7 @@ export function buildUKReportData(commonData?: any) {
       quantity: qty,
       unit,
       kgco2e: formatNum(kgco2e, 3),
-      tco2e: formatNum(tco2e, 4),
+      tco2e: formatNum(tco2e, 6),  // already computed with co2e/1000 fallback
       emission_factor: typeof ef === "number" ? formatNum(ef, 5) : ef,
       ef_unit: efUnit,
       activity_id: activityId,
@@ -81,7 +82,11 @@ export function buildUKReportData(commonData?: any) {
     }
   }
 
-  const totalTco2e = safeData.totalTCO2e || successful.reduce((s: number, r: any) => s + Number(r.result?.total_tco2e || 0), 0);
+  const totalTco2e = safeData.totalTCO2e ||
+    successful.reduce((s: number, r: any) => {
+      const t = Number(r.result?.total_tco2e);
+      return s + (t || Number(r.result?.co2e || 0) / 1000);
+    }, 0);
   const totalKgCO2e = safeData.totalKgCO2e || successful.reduce((s: number, r: any) => s + Number(r.result?.co2e || 0), 0);
 
   const total = results.length;
