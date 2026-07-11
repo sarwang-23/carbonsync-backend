@@ -1362,7 +1362,17 @@ function buildCBAMHtml(payload: any) {
     totalTCO2e,
   } = payload;
 
-  const successful = calculationResults.filter((r: any) => r.success);
+  // Support both the old extractedItems-based flow and the new flat calculationResults flow
+  const extractedItems = (payload?.extractedItems?.length > 0)
+    ? payload.extractedItems
+    : calculationResults.map((r: any) => ({
+        item_name: r.item_name || r.result?.item_name || "Invoice Item",
+        unit: r.unit || r.converted?.unit || r.result?.unit || "",
+        quantity: r.value ?? r.quantity ?? r.result?.quantity ?? "",
+        category: r.category || r.result?.category || "",
+      }));
+
+  const successful = calculationResults.filter((r: any) => r.success === true || r.status === "calculated");
   const cbamContext = inferCbamContext(payload);
   const dataQuality = cbamContext.dataQuality;
 
@@ -1384,13 +1394,19 @@ function buildCBAMHtml(payload: any) {
       const activityUnit = (origUnit !== undefined && origUnit !== null && origUnit !== "") ? origUnit : (item.converted?.unit || "-");
 
       const efValue = isElectricity
-        ? item.result?.emission_factor_kwh || item.result?.emission_factor || 0.710
-        : item.result?.emission_factor || "N/A";
+        ? item.result?.emission_factor_kwh || item.result?.emission_factor || item.factor_value || 0.710
+        : item.result?.emission_factor || item.factor_value || "N/A";
 
       const efUnit = getEmissionFactorUnit(item, isElectricity);
 
-      const kgCO2e = Number(item.result?.co2e || 0);
-      const tCO2e = Number(item.result?.total_tco2e || 0);
+      const kgCO2e = Number(item.result?.co2e || item.co2e || 0);
+      const tCO2e = (() => {
+        const flat = Number(item.total_tco2e || 0);
+        if (flat > 0) return flat;
+        const nested = Number(item.result?.total_tco2e || 0);
+        if (nested > 0) return nested;
+        return kgCO2e / 1000;
+      })();
 
       const formula = isElectricity
         ? `${activityValue} kWh × ${efValue} kgCO2e/kWh = ${truncateNumber(kgCO2e, 5)} kgCO2e`
