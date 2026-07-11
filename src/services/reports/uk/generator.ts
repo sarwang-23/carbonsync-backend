@@ -253,15 +253,7 @@ export function generateUKReport(commonData: any) {
     <p class="meta-value">${data.invoice_date}</p>
     <p class="meta-label">Format:</p>
     <p class="meta-value">Condensed 18-page client-ready PDF</p>
-    <h2>Quick Contents</h2>
-    <table class="toc">
-      <tr><td>1. Executive Summary</td><td>Page 3</td></tr>
-      <tr><td>2. Emissions Snapshot</td><td>Page 4</td></tr>
-      <tr><td>3. UK SECR Disclosure Pack</td><td>Page 5</td></tr>
-      <tr><td>4. Reporting Boundary and Context</td><td>Page 6</td></tr>
-      <tr><td>5. Methodology and Factor Control</td><td>Page 7</td></tr>
-      <tr><td>6. Data Quality and Audit Trail</td><td>Page 8</td></tr>
-    </table>
+
     <div class="footer">Strictly Confidential. Powered by CarbonSynq Earth AI Data Engine.</div>
   </section>
 
