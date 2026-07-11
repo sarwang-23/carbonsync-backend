@@ -626,6 +626,7 @@ export async function processInvoiceEmissions(
             factor_unit: "kg/passenger-km",
             co2e,
             co2e_unit: "kg",
+            total_tco2e: Number((co2e / 1000).toFixed(6)),
             distance_source: "text_extraction",
           });
           continue;
@@ -660,6 +661,7 @@ export async function processInvoiceEmissions(
               factor_unit: "kg/passenger-km",
               co2e,
               co2e_unit: "kg",
+              total_tco2e: Number((co2e / 1000).toFixed(6)),
               distance_source: dbResult.source,
               origin: origin.toUpperCase(),
               destination: destination.toUpperCase(),
@@ -737,6 +739,7 @@ export async function processInvoiceEmissions(
                 converted: (indiaResult as any).converted,
                 co2e: (indiaResult as any).co2e,
                 co2e_unit: (indiaResult as any).co2e_unit,
+                total_tco2e: Number(((indiaResult as any).co2e / 1000).toFixed(6)),
               });
               continue;
             }
@@ -845,6 +848,7 @@ export async function processInvoiceEmissions(
           converted: (indiaResult as any).converted,
           co2e: (indiaResult as any).co2e,
           co2e_unit: (indiaResult as any).co2e_unit,
+          total_tco2e: Number(((indiaResult as any).co2e / 1000).toFixed(6)),
         });
 
         continue;
@@ -878,6 +882,7 @@ export async function processInvoiceEmissions(
               parameter_unit: germanyResult.parameter_unit,
               co2e: germanyResult.co2e,
               co2e_unit: germanyResult.co2e_unit,
+              total_tco2e: Number((germanyResult.co2e / 1000).toFixed(6)),
               factor_name: germanyResult.factor_name,
               factor_source: germanyResult.factor_source,
               factor_region: germanyResult.factor_region,
@@ -934,6 +939,7 @@ export async function processInvoiceEmissions(
             converted: fallbackResult.converted,
             co2e: fallbackResult.co2e,
             co2e_unit: fallbackResult.co2e_unit,
+            total_tco2e: Number((fallbackResult.co2e / 1000).toFixed(6)),
             factor_name: fallbackResult.factor_name,
             factor_source: fallbackResult.factor_source,
             factor_region: fallbackResult.factor_region,
@@ -1012,6 +1018,7 @@ export async function processInvoiceEmissions(
           converted: fallbackResult.converted,
           co2e: fallbackResult.co2e,
           co2e_unit: fallbackResult.co2e_unit,
+          total_tco2e: Number((fallbackResult.co2e / 1000).toFixed(6)),
           factor_name: fallbackResult.factor_name,
           factor_source: fallbackResult.factor_source,
           factor_region: fallbackResult.factor_region,
