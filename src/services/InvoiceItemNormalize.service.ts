@@ -76,10 +76,13 @@ function resolveCategory(
   }
 
   // Rule 2: gas keyword in vendor name OR item name overrides electricity
+  // EXCEPT when the item explicitly states it is electricity (e.g. buying electricity from British Gas)
   const hasGasKeyword = (name.includes("gas") && !name.includes("gasoline")) || 
                         (vendor.includes("gas") && !vendor.includes("gasoline"));
                         
-  if (hasGasKeyword && detected === "electricity") {
+  const isExplicitlyElectricity = name.includes("electricity") || name.includes("power");
+
+  if (hasGasKeyword && detected === "electricity" && !isExplicitlyElectricity) {
     console.log(
       `[CategoryOverride] gas keyword found in vendor/item → overriding "electricity" → "natural_gas" | item: ${itemName}, vendor: ${vendor}`
     );
@@ -96,7 +99,7 @@ function resolveCategory(
   }
 
   // Rule 4: gas vendor/utility keyword override (only when wrongly detected as electricity)
-  if (detected === "electricity") {
+  if (detected === "electricity" && !isExplicitlyElectricity) {
     const hasGasVendor = GAS_VENDOR_KEYWORDS.some((kw) => name.includes(kw) || vendor.includes(kw));
     if (hasGasVendor) {
       console.log(

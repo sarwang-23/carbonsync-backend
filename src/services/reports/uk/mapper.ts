@@ -73,8 +73,8 @@ export function buildUKReportData(commonData?: any) {
     const tco2e = getTco2e(item);
     const kgco2e = Number(item.result?.co2e || item.co2e || 0);
     const itemName = String(item.item_name || item.result?.item_name || "N/A");
-    const qty = item.quantity ?? item.original_item?.quantity ?? item.converted?.value ?? "N/A";
-    const unit = item.unit ?? item.original_item?.unit ?? item.converted?.unit ?? "N/A";
+    const qty = item.value ?? item.result?.value ?? item.quantity ?? item.original_item?.quantity ?? item.converted?.value ?? "N/A";
+    const unit = item.unit ?? item.result?.unit ?? item.original_item?.unit ?? item.converted?.unit ?? "N/A";
     const ef = item.result?.emission_factor || item.result?.emission_factor_kwh || "N/A";
     const efUnit = item.result?.emission_factor_unit || "kgCO2e/unit";
     const source = item.result?.data_source || item.result?.dataset_name || "Climatiq";
