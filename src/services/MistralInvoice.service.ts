@@ -168,6 +168,8 @@ Return ONLY valid JSON with this structure:
 Rules:
 - Return JSON only.
 - Do not guess emission factors or calculate CO2.
+- Extract ONLY consumption/activity line items.
+- IGNORE non-consumption billing lines completely (e.g. Prompt Pay, discounts, VAT, balance brought forward, total payable, credits, payment instructions, account information).
 - MUST Extract complete line item description. Never return ONLY a product code. 
   * Correct: "TMT BAR FE500 10MM"
   * Correct: "Steel Billet"

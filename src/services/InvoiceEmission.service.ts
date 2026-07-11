@@ -525,6 +525,7 @@ export async function processInvoiceEmissions(
     "discount", "round off", "rounding",
     "insurance",
     "packing charges", "packing",
+    "prompt pay", "balance", "total", "credit", "amount due", "brought forward",
   ];
   // Keywords where we ignore only if there is no usable quantity/value
   const CONDITIONAL_IGNORE_KEYWORDS = [
