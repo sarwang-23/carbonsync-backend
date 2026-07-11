@@ -219,6 +219,7 @@ function getInvoiceScopeInfo(item: any) {
   ).toLowerCase();
   const category = String(item?.result?.category || item?.category || "").toLowerCase();
 
+  // ── Scope 2: Purchased Electricity ──
   if (
     itemName.includes("electricity") ||
     unit === "kwh" ||
@@ -231,6 +232,30 @@ function getInvoiceScopeInfo(item: any) {
       reportLabel: "Scope 2 GHG Emissions - Purchased Electricity",
       shortLabel: "Scope 2 - Purchased Electricity",
       description: "Indirect Energy Emissions",
+    };
+  }
+
+  // ── Scope 1: Direct combustion (gas, diesel, petrol, fuel) ──
+  if (
+    category.includes("natural_gas") ||
+    category.includes("natural gas") ||
+    category.includes("diesel") ||
+    category.includes("petrol") ||
+    category.includes("fuel") ||
+    itemName.includes("natural gas") ||
+    itemName.includes("diesel") ||
+    itemName.includes("petrol") ||
+    itemName.includes("lpg") ||
+    activityId.includes("natural_gas") ||
+    activityId.includes("diesel") ||
+    activityId.includes("gaseous_fuels")
+  ) {
+    return {
+      scope: "Scope 1",
+      category: "Direct Combustion",
+      reportLabel: "Scope 1 GHG Emissions - Direct Fuel Combustion",
+      shortLabel: "Scope 1 - Direct Emissions",
+      description: "Direct Emissions tCO2e",
     };
   }
 
@@ -514,17 +539,30 @@ export function buildCommonData(payload: any) {
   const dataQuality = getQualityRating(successful.length, extractedItems.length);
   const documentLabel = getDocumentLabel(file?.originalname);
 
+  // ── Normalise tCO2e — works for BOTH pipeline formats:
+  //    flat: { status: "calculated", total_tco2e: ... }
+  //    nested: { success: true, result: { total_tco2e: ... } }
+  function getTco2e(r: any): number {
+    const flat = Number(r.total_tco2e || 0);
+    if (flat > 0) return flat;
+    const nested = Number(r.result?.total_tco2e || 0);
+    if (nested > 0) return nested;
+    // ultimate fallback: derive from co2e
+    const co2e = Number(r.co2e || r.result?.co2e || 0);
+    return co2e / 1000;
+  }
+
   const scope1 = successful
     .filter((r: any) => getInvoiceScopeInfo(r).scope === "Scope 1")
-    .reduce((sum: number, r: any) => sum + Number(r.result?.total_tco2e || r.total_tco2e || 0), 0);
+    .reduce((sum: number, r: any) => sum + getTco2e(r), 0);
 
   const scope2 = successful
     .filter((r: any) => getInvoiceScopeInfo(r).scope === "Scope 2")
-    .reduce((sum: number, r: any) => sum + Number(r.result?.total_tco2e || r.total_tco2e || 0), 0);
+    .reduce((sum: number, r: any) => sum + getTco2e(r), 0);
 
   const scope3 = successful
     .filter((r: any) => getInvoiceScopeInfo(r).scope === "Scope 3")
-    .reduce((sum: number, r: any) => sum + Number(r.result?.total_tco2e || r.total_tco2e || 0), 0);
+    .reduce((sum: number, r: any) => sum + getTco2e(r), 0);
 
   const scope3ReportLabel = getScope3ReportLabel(successful);
   const scope3Description = getScope3Description(successful);
@@ -567,7 +605,7 @@ export function buildCommonData(payload: any) {
       const efUnit = getEmissionFactorUnit(item, isElectricity);
 
       const kgCO2e = Number(item.result?.co2e || item.co2e || 0);
-      const tCO2e = Number(item.result?.total_tco2e || item.total_tco2e || (kgCO2e / 1000) || 0);
+      const tCO2e = getTco2e(item);
 
       const formula = isElectricity
         ? `${activityValue} kWh × ${efValue} kgCO2e/kWh = ${truncateNumber(kgCO2e, 5)} kgCO2e`
