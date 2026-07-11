@@ -1200,6 +1200,7 @@ export async function processInvoiceEmissions(
           converted: fallbackResult.converted,
           co2e: fallbackResult.co2e,
           co2e_unit: fallbackResult.co2e_unit,
+          total_tco2e: Number((fallbackResult.co2e / 1000).toFixed(6)),
           factor_name: fallbackResult.factor_name,
           factor_source: fallbackResult.factor_source,
           factor_region: fallbackResult.factor_region,
@@ -1232,6 +1233,7 @@ export async function processInvoiceEmissions(
         scopes: factor.scopes,
         co2e: (localCalc as any).co2e,
         co2e_unit: "kg",
+        total_tco2e: Number(((localCalc as any).co2e / 1000).toFixed(6)),
         ...((localCalc as any).converted ? { 
           converted: { 
             value: (localCalc as any).converted_value, 
