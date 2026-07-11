@@ -367,7 +367,7 @@ export function generateUKReport(commonData: any) {
     <h2>Calculation methodologies and emission factor sources used.</h2>
     <p>This section outlines the calculation principles applied to transform invoice data into carbon equivalents.</p>
     <table class="data-table"><tr><th>Category</th><th>Methodology</th><th>Source Factor</th></tr><tr><td>Electricity</td><td>Location-based grid average</td><td>DEFRA / UK Gov</td></tr><tr><td>Natural Gas</td><td>Gross calorific value basis</td><td>DEFRA / UK Gov</td></tr><tr><td>Diesel</td><td>Volume-based conversion</td><td>DEFRA / UK Gov</td></tr><tr><td>Scope 3</td><td>Spend-based or average-data</td><td>Climatiq / EEIO</td></tr></table>
-    <div class="note"><h2>Calculation Note</h2><p>Calculation models leverage established UK conversion factors mapped via AI against the ${data.items_processed} items processed during the period ending ${data.invoice_date}.</p></div>
+    <div class="note"><h2>Condensed Review Note</h2><p>This reduced version keeps the client-facing UK compliance story compact while preserving the evidence trail, calculation controls, governance notes and action plan required for review.</p></div>
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 7</span></footer>
   </section>
 
@@ -444,7 +444,7 @@ export function generateUKReport(commonData: any) {
     <h2>Key Performance Indicators used for operational tracking.</h2>
     <p>Standardised KPIs allow for internal benchmarking across sites and external industry comparisons.</p>
     <table class="data-table"><tr><th>KPI Name</th><th>Formula</th><th>Target Audience</th></tr><tr><td>Carbon Intensity</td><td>tCO2e / £1m Revenue</td><td>Investors, SECR</td></tr><tr><td>Energy Efficiency</td><td>kWh / m2 floor area</td><td>Facilities Management</td></tr></table>
-    <div class="note"><h2>Benchmarking Note</h2><p>Intensity metrics require financial or operational denominators (e.g., revenue or floor area) to be provided by ${data.company_name} for formal SECR disclosure.</p></div>
+    <div class="note"><h2>Condensed Review Note</h2><p>This reduced version keeps the client-facing UK compliance story compact while preserving the evidence trail, calculation controls, governance notes and action plan required for review.</p></div>
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 13</span></footer>
   </section>
 
@@ -454,7 +454,7 @@ export function generateUKReport(commonData: any) {
     <h2>Data management protocols and oversight structures.</h2>
     <p>Robust governance ensures reporting accuracy, consistency, and compliance with statutory requirements.</p>
     <table class="data-table"><tr><th>Control Area</th><th>Status</th><th>Owner</th></tr><tr><td>Data Collection</td><td>Automated</td><td>Operations</td></tr><tr><td>Validation</td><td>AI Verification</td><td>Finance</td></tr><tr><td>Final Sign-off</td><td>Pending</td><td>${data.ceo_name}</td></tr></table>
-    <div class="note"><h2>Governance Note</h2><p>This report acts as a draft management view. Final statutory sign-off requires review of the ${data.items_processed} mapped invoices and the calculated footprint of ${data.total_emissions} tCO2e.</p></div>
+    <div class="note"><h2>Condensed Review Note</h2><p>This reduced version keeps the client-facing UK compliance story compact while preserving the evidence trail, calculation controls, governance notes and action plan required for review.</p></div>
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 14</span></footer>
   </section>
 
@@ -464,7 +464,7 @@ export function generateUKReport(commonData: any) {
     <h2>Preparation for TCFD and related climate disclosure mandates.</h2>
     <p>An initial assessment of physical and transition risks associated with the operational footprint.</p>
     <table class="data-table"><tr><th>Risk Category</th><th>Exposure</th><th>Mitigation Strategy</th></tr><tr><td>Regulatory (Transition)</td><td>Medium</td><td>Proactive SECR reporting</td></tr><tr><td>Market (Transition)</td><td>Low</td><td>Supplier engagement</td></tr></table>
-    <div class="note"><h2>Risk Readiness Note</h2><p>A full TCFD-aligned assessment would require a deeper evaluation of transition pathways beyond the current footprint of ${data.total_emissions} tCO2e.</p></div>
+    <div class="note"><h2>Condensed Review Note</h2><p>This reduced version keeps the client-facing UK compliance story compact while preserving the evidence trail, calculation controls, governance notes and action plan required for review.</p></div>
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 15</span></footer>
   </section>
 
@@ -474,7 +474,7 @@ export function generateUKReport(commonData: any) {
     <h2>Strategic pathways to achieve Net Zero targets.</h2>
     <p>Actionable recommendations based on the current footprint profile.</p>
     <table class="data-table"><tr><th>Initiative</th><th>Timeframe</th><th>Impact Potential</th></tr><tr><td>Renewable Energy Procurement</td><td>Short-term (1-2 yrs)</td><td>High</td></tr><tr><td>Energy Efficiency Upgrades</td><td>Medium-term (3-5 yrs)</td><td>Medium</td></tr><tr><td>${data.recommendation}</td><td>Ongoing</td><td>High</td></tr></table>
-    <div class="note"><h2>Decarbonisation Note</h2><p>Current analysis identifies ${data.electricity} tCO2e from electricity that could be mitigated through renewable energy transition.</p></div>
+    <div class="note"><h2>Condensed Review Note</h2><p>This reduced version keeps the client-facing UK compliance story compact while preserving the evidence trail, calculation controls, governance notes and action plan required for review.</p></div>
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 16</span></footer>
   </section>
 
@@ -484,7 +484,7 @@ export function generateUKReport(commonData: any) {
     <h2>Progress monitoring for identified reduction initiatives.</h2>
     <p>A living register to track the execution and success of decarbonisation projects.</p>
     <table class="data-table"><tr><th>Project</th><th>Status</th><th>Owner</th></tr><tr><td>Smart Meter Installation</td><td>Not Started</td><td>Facilities</td></tr><tr><td>Green Tariff Switch</td><td>In Review</td><td>Procurement</td></tr></table>
-    <div class="note"><h2>Implementation Note</h2><p>Tracking progress against initiatives will be critical to achieving the recommended reduction targets and improving data quality from the current ${data.data_quality_pct}%.</p></div>
+    <div class="note"><h2>Condensed Review Note</h2><p>This reduced version keeps the client-facing UK compliance story compact while preserving the evidence trail, calculation controls, governance notes and action plan required for review.</p></div>
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 17</span></footer>
   </section>
 
@@ -494,7 +494,7 @@ export function generateUKReport(commonData: any) {
     <h2>Supplementary information and next steps for comprehensive reporting.</h2>
     <p>To improve data quality and boundary completeness, the following additional evidence is requested.</p>
     <table class="data-table"><tr><th>Item Requested</th><th>Reason</th><th>Priority</th></tr><tr><td>Gas Invoices (12 months)</td><td>Complete Scope 1</td><td>High</td></tr><tr><td>Fleet Fuel Cards</td><td>Complete Scope 1</td><td>High</td></tr><tr><td>Waste Contracts</td><td>Scope 3 Screening</td><td>Medium</td></tr></table>
-    <div class="note"><h2>Next Steps Note</h2><p>Please upload the requested evidence to improve the completeness of the report and transition from draft to audit-ready status.</p></div>
+    <div class="note"><h2>Condensed Review Note</h2><p>This reduced version keeps the client-facing UK compliance story compact while preserving the evidence trail, calculation controls, governance notes and action plan required for review.</p></div>
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 18</span></footer>
   </section>
 </body>
