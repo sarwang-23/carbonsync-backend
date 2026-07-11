@@ -59,7 +59,8 @@ function resolveCategory(
   detected: string,
   itemName: string,
   unit: string | null | undefined,
-  vendorName?: string
+  vendorName?: string,
+  fullText?: string
 ): string {
   const u = (unit || "").toLowerCase().trim();
   const name = itemName.toLowerCase();
@@ -81,8 +82,11 @@ function resolveCategory(
                         (vendor.includes("gas") && !vendor.includes("gasoline"));
                         
   const isExplicitlyElectricity = name.includes("electricity") || name.includes("power");
+  
+  // If the invoice as a whole is clearly an electricity invoice, don't let British Gas force it to natural gas
+  const isElectricityInvoiceContext = fullText ? (fullText.toLowerCase().includes("electricity used") || fullText.toLowerCase().includes("electricity charges") || fullText.toLowerCase().includes("electricity supply")) : false;
 
-  if (hasGasKeyword && detected === "electricity" && !isExplicitlyElectricity) {
+  if (hasGasKeyword && detected === "electricity" && !isExplicitlyElectricity && !isElectricityInvoiceContext) {
     console.log(
       `[CategoryOverride] gas keyword found in vendor/item → overriding "electricity" → "natural_gas" | item: ${itemName}, vendor: ${vendor}`
     );
@@ -99,7 +103,7 @@ function resolveCategory(
   }
 
   // Rule 4: gas vendor/utility keyword override (only when wrongly detected as electricity)
-  if (detected === "electricity" && !isExplicitlyElectricity) {
+  if (detected === "electricity" && !isExplicitlyElectricity && !isElectricityInvoiceContext) {
     const hasGasVendor = GAS_VENDOR_KEYWORDS.some((kw) => name.includes(kw) || vendor.includes(kw));
     if (hasGasVendor) {
       console.log(
@@ -319,7 +323,8 @@ export function normalizeItemName(raw: string, vendorName?: string): string {
  */
 export function normalizeInvoiceItems(
   rawItems: RawInvoiceItem[],
-  vendorName?: string
+  vendorName?: string,
+  fullText?: string
 ): NormalizedInvoiceItem[] {
   return rawItems.map((item) => {
     const rawItemName =
@@ -341,7 +346,7 @@ export function normalizeInvoiceItems(
     const unit = extracted.unit ?? item.unit ?? null;
 
     // Apply override rules to catch extraction-induced misclassification
-    const category = resolveCategory(detectedCategory, itemName, unit, vendorName);
+    const category = resolveCategory(detectedCategory, itemName, unit, vendorName, fullText);
 
     console.log("[normalizeInvoiceItems]", {
       raw_item_name: rawItemName,
