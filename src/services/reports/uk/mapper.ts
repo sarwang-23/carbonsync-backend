@@ -1,6 +1,15 @@
 export function buildUKReportData(commonData?: any) {
   const safeData = commonData || {};
   
+  // ── DEBUG: Log what the UK report receives ─────────────────────────────────
+  console.log("🇬🇧 [UK Mapper] Keys received:", Object.keys(safeData));
+  console.log("🇬🇧 [UK Mapper] calculationResults count:", safeData.calculationResults?.length ?? "MISSING");
+  console.log("🇬🇧 [UK Mapper] totalKgCO2e:", safeData.totalKgCO2e, "totalTCO2e:", safeData.totalTCO2e);
+  if (safeData.calculationResults?.length > 0) {
+    console.log("🇬🇧 [UK Mapper] First result sample:", JSON.stringify(safeData.calculationResults[0], null, 2).substring(0, 500));
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   const results = safeData.calculationResults || [];
   const successful = results.filter((r: any) => r.success);
   const failed = results.filter((r: any) => !r.success);
