@@ -327,7 +327,7 @@ export function generateUKReport(commonData: any) {
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>UK SECR Disclosure Pack</h1>
     <h2>SECR-style energy, emissions, intensity and efficiency disclosure structure.</h2>
     <p>The report uses UK energy and greenhouse gas reporting language, with SECR-style tables and optional climate disclosure readiness. India-specific disclosure labels are deliberately excluded.</p>
@@ -339,13 +339,13 @@ export function generateUKReport(commonData: any) {
         <td><div class="metric-label">TOTAL</div><div class="metric-value">${data.total_emissions}</div><div class="metric-detail">Gross tCO2e</div></td>
       </tr>
     </table>
-    <table class="data-table"><tr><th>Area</th><th>Current Detail</th><th>Review Note</th></tr><tr><td>Total UK energy</td><td>${data.total_emissions} kWh</td><td>Uploaded invoice</td></tr><tr><td>Scope 1 emissions</td><td>${data.scope1} tCO2e</td><td>Pending fuel records</td></tr><tr><td>Scope 2 emissions</td><td>${data.scope2} tCO2e</td><td>Electricity calculation</td></tr><tr><td>Intensity ratio</td><td>${data.total_emissions} tCO2e / invoice</td><td>Draft management ratio</td></tr></table>
-    <div class="note"><h2>Condensed Review Note</h2><p>This reduced version keeps the client-facing UK compliance story compact while preserving the evidence trail, calculation controls, governance notes and action plan required for review.</p></div>
+    <table class="data-table"><tr><th>SECR Category</th><th>Consumption / Emissions</th><th>Methodology Note</th></tr><tr><td>Total UK Energy Use</td><td>${data.total_energy_kwh} kWh</td><td>Aggregated from invoices</td></tr><tr><td>Scope 1 (Direct)</td><td>${data.scope1} tCO2e</td><td>${Number(data.scope1) > 0 ? 'Calculated from direct fuel' : 'No direct emissions reported'}</td></tr><tr><td>Scope 2 (Indirect)</td><td>${data.scope2} tCO2e</td><td>${Number(data.scope2) > 0 ? 'Location-based grid average' : 'No purchased electricity'}</td></tr><tr><td>Scope 3 (Value Chain)</td><td>${data.scope3} tCO2e</td><td>${Number(data.scope3) > 0 ? 'Included voluntary Scope 3' : 'Pending value chain data'}</td></tr><tr><td>Total Gross Emissions</td><td>${data.total_emissions} tCO2e</td><td>Required SECR disclosure</td></tr></table>
+    <div class="note"><h2>SECR Compliance Note</h2><p>This section fulfills the Streamlined Energy and Carbon Reporting (SECR) requirements, presenting total energy use in kWh alongside Scope 1 and 2 emissions.</p></div>
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 5</span></footer>
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Reporting Boundary and Context</h1>
     <h2>UK reporting basis, organisational boundary and operational inclusion logic.</h2>
     <p>The report uses UK energy and greenhouse gas reporting language, with SECR-style tables and optional climate disclosure readiness. India-specific disclosure labels are deliberately excluded.</p>
@@ -357,8 +357,8 @@ export function generateUKReport(commonData: any) {
         <td><div class="metric-label">TOTAL</div><div class="metric-value">${data.total_emissions}</div><div class="metric-detail">Gross tCO2e</div></td>
       </tr>
     </table>
-    <table class="data-table"><tr><th>Area</th><th>Current Detail</th><th>Review Note</th></tr><tr><td>Owner</td><td>Finance / Operations / Sustainability</td><td>Named accountable function</td></tr><tr><td>Evidence</td><td>Invoices, meter logs and registers</td><td>Stored in review folder</td></tr><tr><td>Control</td><td>Monthly review and variance check</td><td>Prevents errors</td></tr><tr><td>Output</td><td>Management-ready disclosure table</td><td>Report page 6</td></tr></table>
-    <div class="note"><h2>Condensed Review Note</h2><p>This reduced version keeps the client-facing UK compliance story compact while preserving the evidence trail, calculation controls, governance notes and action plan required for review.</p></div>
+    <table class="data-table"><tr><th>Boundary Parameter</th><th>Defined Value</th><th>Review Note</th></tr><tr><td>Reporting Framework</td><td>GHG Protocol / UK SECR</td><td>Aligned with UK Govt guidance</td></tr><tr><td>Consolidation Approach</td><td>Operational Control</td><td>Covers all uploaded evidence</td></tr><tr><td>Geographic Boundary</td><td>${data.country}</td><td>Based on document metadata</td></tr><tr><td>Inclusions</td><td>${data.items_processed} processed invoice items</td><td>${data.electricity} tCO2e (Elec) | ${data.natural_gas} tCO2e (Gas)</td></tr><tr><td>Exclusions</td><td>${data.items_failed} unmapped items</td><td>To be reviewed in next cycle</td></tr></table>
+    <div class="note"><h2>Boundary Note</h2><p>Emissions are calculated for operations within the United Kingdom. Data quality rating for this boundary is ${data.data_quality} based on a ${data.data_quality_pct}% mapping success rate.</p></div>
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 6</span></footer>
   </section>
   <section class="page">
