@@ -47,15 +47,17 @@ export function buildUKReportData(commonData?: any) {
     );
   };
 
-  // Scope 2: electricity
+  // Scope 2: electricity, purchased steam, heating, cooling
   const isScope2 = (r: any) => {
     const name = String(r.item_name || r.result?.item_name || "").toLowerCase();
     const unit = String(r.unit || r.converted?.unit || "").toLowerCase();
     const cat = String(r.result?.category || "").toLowerCase();
     const act = String(r.result?.activity_id || "").toLowerCase();
     return (
-      name.includes("electricity") || unit === "kwh" ||
-      cat.includes("electricity") || act.includes("electricity")
+      name.includes("electricity") || name.includes("steam") || name.includes("district heating") || name.includes("cooling") ||
+      unit === "kwh" ||
+      cat.includes("electricity") || cat.includes("heat_and_steam") ||
+      act.includes("electricity") || act.includes("heat") || act.includes("steam") || act.includes("cooling")
     );
   };
 
