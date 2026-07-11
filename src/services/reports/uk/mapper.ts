@@ -7,8 +7,22 @@ export function buildUKReportData(commonData?: any) {
   // buildCommonData already correctly classifies Scope 1/2/3 using getInvoiceScopeInfo
   const results = safeData.calculationResults || [];
   const extractedItems = safeData.extractedItems || [];
-  const successful = results.filter((r: any) => r.success);
-  const failed = results.filter((r: any) => !r.success);
+  // Include items that have co2e data, regardless of success flag
+  const successful = results.filter((r: any) => 
+    r.success === true || 
+    Number(r.result?.co2e || r.co2e || 0) > 0 ||
+    Number(r.result?.total_tco2e || 0) > 0
+  );
+  const failed = results.filter((r: any) => 
+    r.success === false && 
+    Number(r.result?.co2e || r.co2e || 0) === 0
+  );
+
+  console.log(`🇬🇧 [UK Mapper] results:${results.length} successful:${successful.length} failed:${failed.length}`);
+  if (results.length > 0) {
+    const first = results[0];
+    console.log(`🇬🇧 [UK Mapper] first item - success:${first.success}, co2e:${first.result?.co2e ?? first.co2e}, item_name:${first.item_name}`);
+  }
 
   const formatNum = (val: any, digits = 4) => Number(val || 0).toFixed(digits);
 
