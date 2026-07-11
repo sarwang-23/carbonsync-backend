@@ -6,9 +6,18 @@ export function buildUKReportData(commonData?: any) {
   console.log("🇬🇧 [UK Mapper] calculationResults count:", safeData.calculationResults?.length ?? "MISSING");
   console.log("🇬🇧 [UK Mapper] totalKgCO2e:", safeData.totalKgCO2e, "totalTCO2e:", safeData.totalTCO2e);
   if (safeData.calculationResults?.length > 0) {
-    console.log("🇬🇧 [UK Mapper] First result sample:", JSON.stringify(safeData.calculationResults[0], null, 2).substring(0, 500));
+    const firstItem = safeData.calculationResults[0];
+    console.log("🇬🇧 [UK Mapper] First item TOP-LEVEL keys:", Object.keys(firstItem));
+    console.log("🇬🇧 [UK Mapper] First item.success:", firstItem.success);
+    console.log("🇬🇧 [UK Mapper] First item.co2e:", firstItem.co2e);
+    console.log("🇬🇧 [UK Mapper] First item.item_name:", firstItem.item_name);
+    console.log("🇬🇧 [UK Mapper] First item.result keys:", firstItem.result ? Object.keys(firstItem.result) : "NO result field");
+    console.log("🇬🇧 [UK Mapper] First item.result?.co2e:", firstItem.result?.co2e);
+    console.log("🇬🇧 [UK Mapper] First item.result?.total_tco2e:", firstItem.result?.total_tco2e);
+    console.log("🇬🇧 [UK Mapper] First item.result?.category:", firstItem.result?.category);
   }
   // ──────────────────────────────────────────────────────────────────────────
+
 
   const results = safeData.calculationResults || [];
   const successful = results.filter((r: any) => r.success);
