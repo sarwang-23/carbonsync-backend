@@ -266,7 +266,7 @@ export function generateUKReport(commonData: any) {
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Table of Contents</h1>
     <h2>Condensed section list for the 18-page UK report.</h2>
     <table class="toc">
@@ -291,7 +291,7 @@ export function generateUKReport(commonData: any) {
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Executive Summary</h1>
     <h2>Board-ready UK energy and carbon position, key findings and management actions.</h2>
     <p>This report converts uploaded invoice evidence into a UK-focused energy and carbon compliance pack. It is structured for management review, data validation and future statutory reporting readiness.</p>
@@ -309,7 +309,7 @@ export function generateUKReport(commonData: any) {
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Emissions Snapshot</h1>
     <h2>Total footprint, scope profile and current invoice-based calculation results.</h2>
     <p>The current calculated footprint is based on one electricity invoice. The values are suitable for draft review and should be reconciled against the final reporting boundary before external use.</p>
@@ -362,7 +362,7 @@ export function generateUKReport(commonData: any) {
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 6</span></footer>
   </section>
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Methodology and Factor Control</h1>
     <h2>Calculation methodologies and emission factor sources used.</h2>
     <p>This section outlines the calculation principles applied to transform invoice data into carbon equivalents.</p>
@@ -439,7 +439,7 @@ export function generateUKReport(commonData: any) {
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>KPI Definitions and Benchmarking</h1>
     <h2>Key Performance Indicators used for operational tracking.</h2>
     <p>Standardised KPIs allow for internal benchmarking across sites and external industry comparisons.</p>
@@ -449,7 +449,7 @@ export function generateUKReport(commonData: any) {
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Governance and Controls</h1>
     <h2>Data management protocols and oversight structures.</h2>
     <p>Robust governance ensures reporting accuracy, consistency, and compliance with statutory requirements.</p>
@@ -459,7 +459,7 @@ export function generateUKReport(commonData: any) {
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Climate Risk Readiness</h1>
     <h2>Preparation for TCFD and related climate disclosure mandates.</h2>
     <p>An initial assessment of physical and transition risks associated with the operational footprint.</p>
@@ -469,7 +469,7 @@ export function generateUKReport(commonData: any) {
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Decarbonisation Roadmap</h1>
     <h2>Strategic pathways to achieve Net Zero targets.</h2>
     <p>Actionable recommendations based on the current footprint profile.</p>
@@ -479,7 +479,7 @@ export function generateUKReport(commonData: any) {
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Implementation Tracker</h1>
     <h2>Progress monitoring for identified reduction initiatives.</h2>
     <p>A living register to track the execution and success of decarbonisation projects.</p>
@@ -489,7 +489,7 @@ export function generateUKReport(commonData: any) {
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Appendix and Data Request List</h1>
     <h2>Supplementary information and next steps for comprehensive reporting.</h2>
     <p>To improve data quality and boundary completeness, the following additional evidence is requested.</p>
