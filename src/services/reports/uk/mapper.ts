@@ -95,16 +95,17 @@ export function buildUKReportData(commonData?: any) {
 
     invoiceRows.push(row);
 
-    if (isScope2(item)) {
-      scope2 += tco2e;
-      electricity += tco2e;
-      if (String(unit).toLowerCase() === "kwh") totalEnergyKwh += Number(qty) || 0;
-      scope2Rows.push(row);
-    } else if (isScope1(item)) {
+    if (isScope1(item)) {
       scope1 += tco2e;
       if (String(itemName).toLowerCase().includes("gas")) naturalGas += tco2e;
       else if (String(itemName).toLowerCase().includes("diesel")) diesel += tco2e;
       scope1Rows.push(row);
+      if (String(unit).toLowerCase() === "kwh") totalEnergyKwh += Number(qty) || 0;
+    } else if (isScope2(item)) {
+      scope2 += tco2e;
+      electricity += tco2e;
+      if (String(unit).toLowerCase() === "kwh") totalEnergyKwh += Number(qty) || 0;
+      scope2Rows.push(row);
     } else {
       scope3 += tco2e;
       scope3Rows.push(row);
