@@ -93,11 +93,12 @@ function buildReportRowMetadata(item: any) {
   const itemName = String(item?.item_name || "").toLowerCase();
   const activityId =
     item?.result?.activity_id ||
+    item?.activity_id ||
     item?.climatiqBody?.emission_factor?.activity_id ||
     "N/A";
 
-  const source = String(item?.result?.source || "").trim();
-  const factorName = String(item?.result?.factor_name || "").trim();
+  const source = String(item?.result?.source || item?.source || item?.factor_source || "").trim();
+  const factorName = String(item?.result?.factor_name || item?.factor_name || "").trim();
 
   let fallback = {
     region: "IN / Global proxy",
@@ -199,11 +200,11 @@ function buildReportRowMetadata(item: any) {
   return {
     activityId,
     factorName: factorName || "Mapped emission factor",
-    region: item?.result?.factor_region || item?.result?.region || fallback.region,
-    year: item?.result?.factor_year || item?.result?.year || fallback.year,
-    category: item?.result?.category || fallback.category,
-    dataset: item?.result?.source_dataset || fallback.dataset,
-    lcaActivity: item?.result?.source_lca_activity || fallback.lcaActivity,
+    region: item?.result?.factor_region || item?.result?.region || item?.region || fallback.region,
+    year: item?.result?.factor_year || item?.result?.year || item?.year || fallback.year,
+    category: item?.result?.category || item?.category || fallback.category,
+    dataset: item?.result?.source_dataset || item?.dataset || fallback.dataset,
+    lcaActivity: item?.result?.source_lca_activity || item?.lca_activity || fallback.lcaActivity,
     source: source || fallback.source,
   };
 }
@@ -214,9 +215,9 @@ function getInvoiceScopeInfo(item: any) {
   const itemName = String(item?.item_name || "").toLowerCase();
   const unit = String(item?.converted?.unit || item?.unit || "").toLowerCase();
   const activityId = String(
-    item?.result?.activity_id || item?.climatiqBody?.emission_factor?.activity_id || ""
+    item?.result?.activity_id || item?.activity_id || item?.climatiqBody?.emission_factor?.activity_id || ""
   ).toLowerCase();
-  const category = String(item?.result?.category || "").toLowerCase();
+  const category = String(item?.result?.category || item?.category || "").toLowerCase();
 
   if (
     itemName.includes("electricity") ||
@@ -359,7 +360,7 @@ function inferCbamContext(payload: any) {
   const extractedItems = payload?.extractedItems || [];
   const calculationResults = payload?.calculationResults || [];
   const firstExtracted = extractedItems[0] || {};
-  const firstCalculated = calculationResults.find((r: any) => r?.success) || calculationResults[0] || {};
+  const firstCalculated = calculationResults.find((r: any) => r?.success === true || r?.status === "calculated") || calculationResults[0] || {};
 
   const joinedText = [
     payload?.file?.originalname || "",
@@ -372,7 +373,7 @@ function inferCbamContext(payload: any) {
   const itemName = String(firstExtracted?.item_name || firstCalculated?.item_name || "Invoice Item");
   const unit = String(firstExtracted?.unit || firstCalculated?.converted?.unit || "Invoice item based");
   const quality = getQualityRating(
-    calculationResults.filter((r: any) => r?.success).length,
+    calculationResults.filter((r: any) => r?.success === true || r?.status === "calculated").length,
     extractedItems.length
   );
 
@@ -508,22 +509,22 @@ export function buildCommonData(payload: any) {
     totalTCO2e,
   } = payload;
 
-  const successful = calculationResults.filter((r: any) => r.success);
-  const failed = calculationResults.filter((r: any) => !r.success);
+  const successful = calculationResults.filter((r: any) => r.success === true || r.status === "calculated");
+  const failed = calculationResults.filter((r: any) => r.success === false || r.status === "review" || r.status === "failed");
   const dataQuality = getQualityRating(successful.length, extractedItems.length);
   const documentLabel = getDocumentLabel(file?.originalname);
 
   const scope1 = successful
     .filter((r: any) => getInvoiceScopeInfo(r).scope === "Scope 1")
-    .reduce((sum: number, r: any) => sum + Number(r.result?.total_tco2e || 0), 0);
+    .reduce((sum: number, r: any) => sum + Number(r.result?.total_tco2e || r.total_tco2e || 0), 0);
 
   const scope2 = successful
     .filter((r: any) => getInvoiceScopeInfo(r).scope === "Scope 2")
-    .reduce((sum: number, r: any) => sum + Number(r.result?.total_tco2e || 0), 0);
+    .reduce((sum: number, r: any) => sum + Number(r.result?.total_tco2e || r.total_tco2e || 0), 0);
 
   const scope3 = successful
     .filter((r: any) => getInvoiceScopeInfo(r).scope === "Scope 3")
-    .reduce((sum: number, r: any) => sum + Number(r.result?.total_tco2e || 0), 0);
+    .reduce((sum: number, r: any) => sum + Number(r.result?.total_tco2e || r.total_tco2e || 0), 0);
 
   const scope3ReportLabel = getScope3ReportLabel(successful);
   const scope3Description = getScope3Description(successful);
@@ -556,8 +557,8 @@ export function buildCommonData(payload: any) {
           ? `${activityValue} km × ${passengers} passengers = ${Number(activityValue) * passengers} passenger-km`
           : `${activityValue} ${activityUnit}`;
       const rawEfValue = isElectricity
-        ? item.result?.emission_factor_kwh || item.result?.emission_factor || 0.710
-        : item.result?.emission_factor || "N/A";
+        ? item.result?.emission_factor_kwh || item.result?.emission_factor || item.factor_value || 0.710
+        : item.result?.emission_factor || item.factor_value || "N/A";
 
       const efValue = isElectricity
         ? Number(rawEfValue).toFixed(3)
@@ -565,8 +566,8 @@ export function buildCommonData(payload: any) {
 
       const efUnit = getEmissionFactorUnit(item, isElectricity);
 
-      const kgCO2e = Number(item.result?.co2e || 0);
-      const tCO2e = Number(item.result?.total_tco2e || 0);
+      const kgCO2e = Number(item.result?.co2e || item.co2e || 0);
+      const tCO2e = Number(item.result?.total_tco2e || item.total_tco2e || (kgCO2e / 1000) || 0);
 
       const formula = isElectricity
         ? `${activityValue} kWh × ${efValue} kgCO2e/kWh = ${truncateNumber(kgCO2e, 5)} kgCO2e`
