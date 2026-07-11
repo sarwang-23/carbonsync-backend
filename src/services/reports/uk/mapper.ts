@@ -1,89 +1,95 @@
+// UK Report Mapper - maps raw invoice payload to template data
+
 export function buildUKReportData(commonData?: any) {
   const safeData = commonData || {};
-  
-  // ── DEBUG: Log what the UK report receives ─────────────────────────────────
-  console.log("🇬🇧 [UK Mapper] Keys received:", Object.keys(safeData));
-  console.log("🇬🇧 [UK Mapper] calculationResults count:", safeData.calculationResults?.length ?? "MISSING");
-  console.log("🇬🇧 [UK Mapper] totalKgCO2e:", safeData.totalKgCO2e, "totalTCO2e:", safeData.totalTCO2e);
-  if (safeData.calculationResults?.length > 0) {
-    const firstItem = safeData.calculationResults[0];
-    console.log("🇬🇧 [UK Mapper] First item TOP-LEVEL keys:", Object.keys(firstItem));
-    console.log("🇬🇧 [UK Mapper] First item.success:", firstItem.success);
-    console.log("🇬🇧 [UK Mapper] First item.co2e:", firstItem.co2e);
-    console.log("🇬🇧 [UK Mapper] First item.item_name:", firstItem.item_name);
-    console.log("🇬🇧 [UK Mapper] First item.result keys:", firstItem.result ? Object.keys(firstItem.result) : "NO result field");
-    console.log("🇬🇧 [UK Mapper] First item.result?.co2e:", firstItem.result?.co2e);
-    console.log("🇬🇧 [UK Mapper] First item.result?.total_tco2e:", firstItem.result?.total_tco2e);
-    console.log("🇬🇧 [UK Mapper] First item.result?.category:", firstItem.result?.category);
-  }
-  // ──────────────────────────────────────────────────────────────────────────
 
-
+  // ── Use the same scope computation as India BRSR (avoids logic duplication) ──
+  // buildCommonData already correctly classifies Scope 1/2/3 using getInvoiceScopeInfo
   const results = safeData.calculationResults || [];
+  const extractedItems = safeData.extractedItems || [];
   const successful = results.filter((r: any) => r.success);
   const failed = results.filter((r: any) => !r.success);
 
   const formatNum = (val: any, digits = 4) => Number(val || 0).toFixed(digits);
 
-  let scope1 = 0;
-  let scope2 = 0;
-  let scope3 = 0;
-  let electricity = 0;
-  let naturalGas = 0;
-  let diesel = 0;
-  let totalEnergyKwh = 0;
+  // tco2e fallback: total_tco2e is sometimes 0, use co2e/1000
+  const getTco2e = (r: any) => {
+    const t = Number(r.result?.total_tco2e);
+    if (t && t > 0) return t;
+    return Number(r.result?.co2e || r.co2e || 0) / 1000;
+  };
 
-  const invoiceRows: any[] = [];
+  // Scope 1: natural gas, diesel, fuel combustion (direct emissions)
+  const isScope1 = (r: any) => {
+    const name = String(r.item_name || r.result?.item_name || "").toLowerCase();
+    const cat = String(r.result?.category || "").toLowerCase();
+    const act = String(r.result?.activity_id || "").toLowerCase();
+    return (
+      name.includes("natural gas") || name.includes("gas bill") || name.includes("gas combustion") ||
+      name.includes("diesel") || name.includes("petrol") || name.includes("fuel combustion") ||
+      cat.includes("gaseous_fuels") || cat.includes("liquid_fuels") || cat.includes("combustion") ||
+      act.includes("natural_gas") || act.includes("diesel") || act.includes("gaseous") ||
+      act.includes("combustion") || act.includes("liquid_fuel") || act.includes("fuel")
+    );
+  };
+
+  // Scope 2: electricity
+  const isScope2 = (r: any) => {
+    const name = String(r.item_name || r.result?.item_name || "").toLowerCase();
+    const unit = String(r.unit || r.converted?.unit || "").toLowerCase();
+    const cat = String(r.result?.category || "").toLowerCase();
+    const act = String(r.result?.activity_id || "").toLowerCase();
+    return (
+      name.includes("electricity") || unit === "kwh" ||
+      cat.includes("electricity") || act.includes("electricity")
+    );
+  };
+
+  let scope1 = 0, scope2 = 0, scope3 = 0;
+  let electricity = 0, naturalGas = 0, diesel = 0;
+  let totalEnergyKwh = 0;
   const scope1Rows: any[] = [];
   const scope2Rows: any[] = [];
   const scope3Rows: any[] = [];
+  const invoiceRows: any[] = [];
 
   for (const item of successful) {
-    const kgco2e = Number(item.result?.co2e || 0);
-    // total_tco2e is sometimes 0 or missing — fallback to co2e/1000
-    const tco2e = Number(item.result?.total_tco2e) || (kgco2e / 1000);
-    const category = String(item.result?.category || "").toLowerCase();
+    const tco2e = getTco2e(item);
+    const kgco2e = Number(item.result?.co2e || item.co2e || 0);
     const itemName = String(item.item_name || item.result?.item_name || "N/A");
-    const activityId = String(item.result?.activity_id || "N/A");
     const qty = item.quantity ?? item.original_item?.quantity ?? item.converted?.value ?? "N/A";
     const unit = item.unit ?? item.original_item?.unit ?? item.converted?.unit ?? "N/A";
     const ef = item.result?.emission_factor || item.result?.emission_factor_kwh || "N/A";
     const efUnit = item.result?.emission_factor_unit || "kgCO2e/unit";
     const source = item.result?.data_source || item.result?.dataset_name || "Climatiq";
-    const region = item.result?.region || "GB";
     const year = item.result?.year_released || new Date().getFullYear();
+    const activityId = String(item.result?.activity_id || "N/A");
 
     const row = {
       item_name: itemName,
       quantity: qty,
       unit,
       kgco2e: formatNum(kgco2e, 3),
-      tco2e: formatNum(tco2e, 6),  // already computed with co2e/1000 fallback
+      tco2e: formatNum(tco2e, 6),
       emission_factor: typeof ef === "number" ? formatNum(ef, 5) : ef,
       ef_unit: efUnit,
       activity_id: activityId,
       source,
-      region,
       year,
       category: item.result?.category || "N/A",
     };
 
     invoiceRows.push(row);
 
-    const nameLow = itemName.toLowerCase();
-    const actLow = activityId.toLowerCase();
-    if (nameLow.includes("electricity") || category.includes("electricity") || actLow.includes("electricity")) {
+    if (isScope2(item)) {
       scope2 += tco2e;
       electricity += tco2e;
       if (String(unit).toLowerCase() === "kwh") totalEnergyKwh += Number(qty) || 0;
       scope2Rows.push(row);
-    } else if (nameLow.includes("gas") || category.includes("gas") || actLow.includes("natural_gas")) {
+    } else if (isScope1(item)) {
       scope1 += tco2e;
-      naturalGas += tco2e;
-      scope1Rows.push(row);
-    } else if (nameLow.includes("diesel") || category.includes("diesel") || category.includes("fuel")) {
-      scope1 += tco2e;
-      diesel += tco2e;
+      if (String(itemName).toLowerCase().includes("gas")) naturalGas += tco2e;
+      else if (String(itemName).toLowerCase().includes("diesel")) diesel += tco2e;
       scope1Rows.push(row);
     } else {
       scope3 += tco2e;
@@ -92,15 +98,15 @@ export function buildUKReportData(commonData?: any) {
   }
 
   const totalTco2e = safeData.totalTCO2e ||
-    successful.reduce((s: number, r: any) => {
-      const t = Number(r.result?.total_tco2e);
-      return s + (t || Number(r.result?.co2e || 0) / 1000);
-    }, 0);
-  const totalKgCO2e = safeData.totalKgCO2e || successful.reduce((s: number, r: any) => s + Number(r.result?.co2e || 0), 0);
+    successful.reduce((s: number, r: any) => s + getTco2e(r), 0);
+  const totalKgCO2e = safeData.totalKgCO2e ||
+    successful.reduce((s: number, r: any) => s + Number(r.result?.co2e || r.co2e || 0), 0);
 
   const total = results.length;
   const successPct = total > 0 ? Math.round((successful.length / total) * 100) : 0;
   const quality = successPct >= 90 ? "High" : successPct >= 70 ? "Medium" : "Low";
+
+  console.log(`🇬🇧 [UK Mapper] Computed → total:${formatNum(totalTco2e,4)} scope1:${formatNum(scope1,4)} scope2:${formatNum(scope2,4)} scope3:${formatNum(scope3,4)} items:${successful.length}/${total}`);
 
   function buildTableRows(rows: any[]) {
     if (!rows.length) return `<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:10px;">No data for this scope based on uploaded invoices</td></tr>`;
