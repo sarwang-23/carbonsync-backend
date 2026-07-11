@@ -1356,7 +1356,6 @@ async function generatePdfFromHtml(
 function buildCBAMHtml(payload: any) {
   const {
     file,
-    extractedItems,
     calculationResults,
     totalKgCO2e,
     totalTCO2e,
@@ -1365,7 +1364,7 @@ function buildCBAMHtml(payload: any) {
   // Support both the old extractedItems-based flow and the new flat calculationResults flow
   const extractedItems = (payload?.extractedItems?.length > 0)
     ? payload.extractedItems
-    : calculationResults.map((r: any) => ({
+    : (calculationResults || []).map((r: any) => ({
         item_name: r.item_name || r.result?.item_name || "Invoice Item",
         unit: r.unit || r.converted?.unit || r.result?.unit || "",
         quantity: r.value ?? r.quantity ?? r.result?.quantity ?? "",
