@@ -372,27 +372,27 @@ export function generateUKReport(commonData: any) {
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Data Quality and Audit Trail</h1>
     <h2>Confidence scoring and evidence traceability for uploaded invoices.</h2>
     <p>Data quality is automatically assessed based on extraction confidence and factor mapping precision.</p>
-    <table class="data-table"><tr><th>Metric</th><th>Score</th><th>Impact</th></tr><tr><td>Extraction Confidence</td><td>High (98%)</td><td>Reliable activity data</td></tr><tr><td>Factor Mapping</td><td>Direct (100%)</td><td>Low uncertainty in conversion</td></tr><tr><td>Audit Readiness</td><td>Strong</td><td>Invoices digitally preserved</td></tr></table>
+    <table class="data-table"><tr><th>Metric</th><th>Score</th><th>Impact</th></tr><tr><td>Items Successfully Processed</td><td>${data.items_processed} of ${data.items_total}</td><td>Reliable activity data</td></tr><tr><td>Factor Mapping Coverage</td><td>${data.data_quality_pct}% (${data.data_quality})</td><td>Low uncertainty in conversion</td></tr><tr><td>Items Failed / Unmapped</td><td>${data.items_failed}</td><td>Review manually</td></tr><tr><td>Audit Readiness</td><td>Strong — AI extracted</td><td>Invoices digitally preserved</td></tr></table>
     <div class="note"><h2>Condensed Review Note</h2><p>This reduced version keeps the client-facing UK compliance story compact while preserving the evidence trail, calculation controls, governance notes and action plan required for review.</p></div>
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 8</span></footer>
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Invoice Register and Extraction</h1>
     <h2>Line-item level details of processed documentation.</h2>
-    <p>A consolidated view of all uploaded evidence that forms the basis of this report.</p>
-    <table class="data-table"><tr><th>Invoice #</th><th>Date</th><th>Category</th><th>Amount</th></tr><tr><td>${data.invoice_number}</td><td>${data.invoice_date}</td><td>Electricity</td><td>281.56 kWh</td></tr></table>
-    <div class="note"><h2>Condensed Review Note</h2><p>This reduced version keeps the client-facing UK compliance story compact while preserving the evidence trail, calculation controls, governance notes and action plan required for review.</p></div>
+    <p>A consolidated view of all uploaded evidence that forms the basis of this report. Generated on: ${data.invoice_date}</p>
+    <table class="data-table"><tr><th>#</th><th>Item Name</th><th>Quantity</th><th>Activity ID</th><th>kgCO2e</th><th>tCO2e</th></tr>${data.invoice_register_html}</table>
+    <div class="note"><h2>Condensed Review Note</h2><p>Total of ${data.items_processed} items processed successfully from uploaded invoices.</p></div>
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 9</span></footer>
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Scope 1 and Scope 2 Register</h1>
     <h2>Detailed breakdown of direct operations and purchased energy.</h2>
     <p>Scope 1 and 2 emissions are calculated using strict operational control boundaries.</p>
@@ -404,34 +404,37 @@ export function generateUKReport(commonData: any) {
         <td><div class="metric-label">NATURAL GAS</div><div class="metric-value">${data.natural_gas}</div><div class="metric-detail">tCO2e</div></td>
       </tr>
     </table>
-    <div class="note"><h2>Condensed Review Note</h2><p>This reduced version keeps the client-facing UK compliance story compact while preserving the evidence trail, calculation controls, governance notes and action plan required for review.</p></div>
+    <p style="margin-top:5mm;"><strong>Scope 1 Line Items (Direct Emissions)</strong></p>
+    <table class="data-table"><tr><th>Item</th><th>Quantity</th><th>EF</th><th>kgCO2e</th><th>tCO2e</th><th>Source</th><th>Year</th></tr>${data.scope1_rows_html}</table>
+    <p style="margin-top:5mm;"><strong>Scope 2 Line Items (Purchased Energy)</strong></p>
+    <table class="data-table"><tr><th>Item</th><th>Quantity</th><th>EF</th><th>kgCO2e</th><th>tCO2e</th><th>Source</th><th>Year</th></tr>${data.scope2_rows_html}</table>
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 10</span></footer>
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Scope 3 Screening</h1>
     <h2>Value-chain emissions assessment and hotspots.</h2>
     <p>Scope 3 screening identifies the most significant indirect emission sources across the 15 GHG Protocol categories.</p>
     <table class="metrics">
       <tr>
         <td><div class="metric-label">SCOPE 3</div><div class="metric-value">${data.scope3}</div><div class="metric-detail">Total tCO2e</div></td>
-        <td><div class="metric-label">HOTSPOT</div><div class="metric-value">Pending</div><div class="metric-detail">Primary Category</div></td>
-        <td><div class="metric-label">COVERAGE</div><div class="metric-value">Invoice</div><div class="metric-detail">Data Basis</div></td>
-        <td><div class="metric-label">STATUS</div><div class="metric-value">Screening</div><div class="metric-detail">Maturity</div></td>
+        <td><div class="metric-label">ITEMS</div><div class="metric-value">${data.items_processed}</div><div class="metric-detail">Invoice items</div></td>
+        <td><div class="metric-label">TOTAL</div><div class="metric-value">${data.total_emissions}</div><div class="metric-detail">Gross tCO2e</div></td>
+        <td><div class="metric-label">STATUS</div><div class="metric-value">${data.data_quality}</div><div class="metric-detail">Data Quality</div></td>
       </tr>
     </table>
-    <div class="note"><h2>Condensed Review Note</h2><p>This reduced version keeps the client-facing UK compliance story compact while preserving the evidence trail, calculation controls, governance notes and action plan required for review.</p></div>
+    <table class="data-table"><tr><th>Item</th><th>Quantity</th><th>EF</th><th>kgCO2e</th><th>tCO2e</th><th>Source</th><th>Year</th></tr>${data.scope3_rows_html}</table>
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 11</span></footer>
   </section>
 
   <section class="page">
-    <header class="topbar"><strong>CarbonSynq Earth Enterprise | UK Demo Client</strong><span class="right">UK Energy and Carbon Report</span></header>
+    <header class="topbar"><strong>CarbonSynq Earth Enterprise | ${data.company_name}</strong><span class="right">UK Energy and Carbon Report</span></header>
     <h1>Energy Performance Dashboard</h1>
     <h2>Visualisation of energy consumption trends and efficiency.</h2>
     <p>Performance metrics are tracked to identify reduction opportunities and cost savings.</p>
-    <table class="data-table"><tr><th>Metric</th><th>Current Period</th><th>Previous Period</th><th>Variance</th></tr><tr><td>Energy (kWh)</td><td>281.56</td><td>N/A</td><td>Baseline</td></tr><tr><td>Cost (£)</td><td>Pending</td><td>N/A</td><td>Baseline</td></tr></table>
-    <div class="note"><h2>Condensed Review Note</h2><p>This reduced version keeps the client-facing UK compliance story compact while preserving the evidence trail, calculation controls, governance notes and action plan required for review.</p></div>
+    <table class="data-table"><tr><th>Metric</th><th>Current Period</th><th>Previous Period</th><th>Variance</th></tr><tr><td>Total tCO2e</td><td>${data.total_emissions} tCO2e</td><td>N/A</td><td>Baseline</td></tr><tr><td>Scope 1 (Direct)</td><td>${data.scope1} tCO2e</td><td>N/A</td><td>Baseline</td></tr><tr><td>Scope 2 (Electricity)</td><td>${data.scope2} tCO2e</td><td>N/A</td><td>Baseline</td></tr><tr><td>Scope 3 (Value-chain)</td><td>${data.scope3} tCO2e</td><td>N/A</td><td>Baseline</td></tr><tr><td>Energy Captured (kWh)</td><td>${data.total_energy_kwh} kWh</td><td>N/A</td><td>Baseline</td></tr><tr><td>Natural Gas (tCO2e)</td><td>${data.natural_gas}</td><td>N/A</td><td>Baseline</td></tr><tr><td>Diesel (tCO2e)</td><td>${data.diesel}</td><td>N/A</td><td>Baseline</td></tr></table>
+    <div class="note"><h2>Condensed Review Note</h2><p>Performance metrics based on ${data.items_processed} invoice items. Data quality: ${data.data_quality} (${data.data_quality_pct}% mapping success).</p></div>
     <footer class="footer">Reporting Period: ${data.reporting_period} <span class="right">Page 12</span></footer>
   </section>
 
