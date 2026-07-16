@@ -211,7 +211,15 @@ export function detectCountryFromText(text: string, fileName = ""): DetectedCoun
     lower.includes("great britain") ||
     lower.includes("british gas") ||
     /(^|\W)(gbp|£)(?=\W|$)/.test(lower) ||
-    lower.includes("uk energy")
+    lower.includes("uk energy") ||
+    lower.includes("octopus energy") ||
+    lower.includes("e.on next") ||
+    lower.includes("sse") ||
+    lower.includes("scottishpower") ||
+    lower.includes("scottish power") ||
+    lower.includes("edf energy") ||
+    /(^|\W)uk(?=\W|$)/.test(lower) ||
+    lower.includes("london")
   ) {
     return {
       region: "GB",

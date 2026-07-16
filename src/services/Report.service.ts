@@ -2120,11 +2120,17 @@ export async function generateInvoiceEmissionReports(payload: any) {
 
     const startCbam = Date.now();
     let cbamReport = { reportUrl: "" };
-    try {
-      cbamReport = await generatePdfFromHtml(cbamHtml, "CS-CBAM", browser);
-      console.log(`[Timing] CBAM report generation time: ${Date.now() - startCbam}ms`);
-    } catch (err) {
-      console.error("CBAM report generation failed:", err);
+    
+    // Only generate CBAM report for India
+    if (region.toUpperCase() === "IN" || region.toUpperCase() === "INDIA") {
+      try {
+        cbamReport = await generatePdfFromHtml(cbamHtml, "CS-CBAM", browser);
+        console.log(`[Timing] CBAM report generation time: ${Date.now() - startCbam}ms`);
+      } catch (err) {
+        console.error("CBAM report generation failed:", err);
+      }
+    } else {
+      console.log(`[Timing] Skipping CBAM report for region: ${region}`);
     }
 
     console.log(`[Timing] total report generation time: ${Date.now() - reportsStart}ms`);

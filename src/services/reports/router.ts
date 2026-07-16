@@ -12,6 +12,7 @@ export async function generateLocalReport(region: string, safePayload: any, indi
   switch (normalizedRegion) {
     case 'GB':
     case 'UK': 
+    case 'UNITED KINGDOM':
       return await generateUKReport(safePayload);
     
     // For now, all other countries default to India's BRSR HTML report
