@@ -129,6 +129,31 @@ export function detectCountryFromText(text: string, fileName = ""): DetectedCoun
     };
   }
 
+  // 1.5 Strong India Indicators (Overrides false positives like "UK" for Uttarakhand)
+  if (
+    lower.includes("inr") ||
+    lower.includes("₹") ||
+    lower.includes("rs.") ||
+    /(^|\W)(cgst|sgst|igst)(?=\W|$)/.test(lower) ||
+    lower.includes("uttarakhand") ||
+    lower.includes("tata power") ||
+    lower.includes("bses") ||
+    lower.includes("adani electricity") ||
+    lower.includes("msedcl") ||
+    lower.includes("uppcl") ||
+    lower.includes("bescom") ||
+    lower.includes("irctc") ||
+    lower.includes("indian railways")
+  ) {
+    return {
+      region: "IN",
+      country_name: "India",
+      currency: "INR",
+      confidence: 98,
+      reason: "Strong India keyword (INR, ₹, GST, Utility) found",
+    };
+  }
+
   // 2. Australian Vendors & Keywords
   if (
     lower.includes("origin energy") ||
