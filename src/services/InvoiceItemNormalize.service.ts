@@ -357,11 +357,24 @@ export function normalizeInvoiceItems(
       unit,
     });
 
+    // Resolve final value: prefer extracted > item.quantity
+    // For electricity items with no quantity, keep 0 so the kWh override in
+    // erp.routes.ts (extractElectricityKwhFromText) can inject the correct value.
+    const finalValue = value !== null && value !== undefined ? Number(value) : 0;
+
+    // If category is electricity but unit is missing/wrong, default to kWh
+    const finalUnit = (() => {
+      if (!unit || unit === "" || unit === "each" || unit === "1") {
+        if (category === "electricity") return "kWh";
+      }
+      return unit || "";
+    })();
+
     return {
       item_name: itemName,
       category,
-      value: value ? Number(value) : 0,
-      unit: unit || "",
+      value: finalValue,
+      unit: finalUnit,
       description: item.description,
       amount: item.amount || item.total,
     };

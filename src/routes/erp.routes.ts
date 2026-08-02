@@ -177,31 +177,73 @@ router.post("/upload", uploadSingle, async (req, res) => {
     function extractElectricityKwhFromText(text: string): number | null {
       const normalized = text.replace(/\s+/g, " ");
 
+      // Pattern 1: "Net Billed Unit: 1234 kWh"
       const netBilledMatch = normalized.match(
         /net\s+billed\s+unit\s*[:\-]?\s*([\d,.]+)\s*kwh/i
       );
+      if (netBilledMatch) return Number(netBilledMatch[1].replace(/,/g, ""));
 
-      if (netBilledMatch) {
-        return Number(netBilledMatch[1].replace(/,/g, ""));
-      }
-
+      // Pattern 2: "Assessed Unit: 1234"
       const assessedMatch = normalized.match(
         /assessed\s+unit\s*[:\-]?\s*([\d,.]+)/i
       );
+      if (assessedMatch) return Number(assessedMatch[1].replace(/,/g, ""));
 
-      if (assessedMatch) {
-        return Number(assessedMatch[1].replace(/,/g, ""));
-      }
+      // Pattern 3: "Units Consumed: 1234 kWh" or "Units Used: 1234"
+      const unitsConsumedMatch = normalized.match(
+        /units?\s+(?:consumed|used|supplied|delivered|billed)\s*[:\-]?\s*([\d,.]+)\s*(?:kwh)?/i
+      );
+      if (unitsConsumedMatch) return Number(unitsConsumedMatch[1].replace(/,/g, ""));
+
+      // Pattern 4: "Electricity consumed 1234 kWh" or "1234 kWh electricity"
+      const electricityKwhMatch = normalized.match(
+        /(?:electricity|electric)\s+(?:consumed?|used?|supplied?|charge[sd]?)?\s*[:\-]?\s*([\d,.]+)\s*kwh/i
+      );
+      if (electricityKwhMatch) return Number(electricityKwhMatch[1].replace(/,/g, ""));
+
+      // Pattern 5: standalone "1234 kWh" anywhere (most common on UK bills)
+      const standaloneKwhMatch = normalized.match(/\b([\d,]+(?:\.\d+)?)\s*kwh\b/i);
+      if (standaloneKwhMatch) return Number(standaloneKwhMatch[1].replace(/,/g, ""));
+
+      // Pattern 6: "Quantity: 1234" when unit is kWh nearby
+      const quantityMatch = normalized.match(
+        /(?:quantity|qty|consumption)\s*[:\-]?\s*([\d,.]+)/i
+      );
+      if (quantityMatch) return Number(quantityMatch[1].replace(/,/g, ""));
 
       return null;
     }
 
+    // Try to get kWh from full invoice text
     const electricityUnits = extractElectricityKwhFromText(fullText);
 
+    // Also check raw items for Mistral-extracted kWh quantity
+    const mistralKwh = (() => {
+      for (const rawItem of items) {
+        const ri = rawItem as any;
+        const rawUnit = String(ri.unit || "").toLowerCase();
+        const rawQty = Number(ri.quantity ?? ri.value ?? 0);
+        if ((rawUnit.includes("kwh") || rawUnit.includes("kilowatt")) && rawQty > 0) {
+          return rawQty;
+        }
+      }
+      return null;
+    })();
+
+    // Priority: text-extracted kWh > Mistral raw kWh
+    const resolvedKwh = electricityUnits || mistralKwh;
+
     for (const item of normalizedItems) {
-      if (electricityUnits && item.category === "electricity") {
-        item.value = electricityUnits;
-        item.unit = "kWh";
+      if (item.category === "electricity") {
+        if (resolvedKwh && resolvedKwh > 0) {
+          item.value = resolvedKwh;
+          item.unit = "kWh";
+          console.log(`[kWh Override] Applied ${resolvedKwh} kWh to "${item.item_name}" (source: ${electricityUnits ? "text_regex" : "mistral_raw"})`);
+        } else if (!item.value || item.value <= 0) {
+          // As last resort, try the item amount as a proxy indicator — keep item in pipeline
+          // so GB DEFRA fallback can calculate using spend-based if needed
+          console.log(`[kWh Override] No kWh found for "${item.item_name}" — value remains 0`);
+        }
       }
     }
 

@@ -470,9 +470,53 @@ function convertValueToFactorUnit(value: number, inputUnit: string, factorUnit: 
   };
 }
 
+/**
+ * Hardcoded UK DEFRA 2024 emission factors as last-resort fallback.
+ * Used when official_emission_factors DB has no GB row AND Climatiq also fails.
+ * Source: UK Government GHG Conversion Factors for Company Reporting 2024 (DEFRA).
+ */
+const GB_HARDCODED_FACTORS: Record<string, { factor: number; unit: string; name: string; source: string }> = {
+  electricity:  { factor: 0.23314,  unit: "kgCO2e/kWh",  name: "UK Grid Electricity (DEFRA 2024)",  source: "DEFRA 2024" },
+  natural_gas:  { factor: 0.18293,  unit: "kgCO2e/kWh",  name: "UK Natural Gas (DEFRA 2024)",       source: "DEFRA 2024" },
+  diesel:       { factor: 2.51,     unit: "kgCO2e/litre", name: "UK Diesel (DEFRA 2024)",            source: "DEFRA 2024" },
+  petrol:       { factor: 2.31,     unit: "kgCO2e/litre", name: "UK Petrol (DEFRA 2024)",            source: "DEFRA 2024" },
+  lpg:          { factor: 1.56,     unit: "kgCO2e/litre", name: "UK LPG (DEFRA 2024)",              source: "DEFRA 2024" },
+};
+
+function applyGBHardcodedFactor(category: string, value: number, unit: string) {
+  const normalized = normalizeUnit(unit);
+  const hardcoded = GB_HARDCODED_FACTORS[category.toLowerCase()];
+  if (!hardcoded) return null;
+
+  // Unit must be kWh for energy-based factors, or litre for liquid fuel factors
+  const factorActivityUnit = hardcoded.unit.split("/")[1] || "kwh";
+  const normalizedFactorUnit = normalizeUnit(factorActivityUnit);
+
+  if (normalized !== normalizedFactorUnit) {
+    // Try kWh → litre is invalid; but handle common equivalences
+    // e.g. "l" === "litre" (already normalized to "l")
+    return null;
+  }
+
+  const co2e = Number((value * hardcoded.factor).toFixed(6));
+  return {
+    success: true,
+    co2e,
+    co2e_unit: "kg",
+    factor_name: hardcoded.name,
+    factor_value: hardcoded.factor,
+    factor_unit: hardcoded.unit,
+    source_dataset: hardcoded.source,
+    source_engine: "gb_defra_hardcoded",
+    preferred_source: "DEFRA 2024 (hardcoded fallback)",
+    total_tco2e: Number((co2e / 1000).toFixed(6)),
+  };
+}
+
 function calculateWithLocalFactor(value: number, inputUnit: string, factor: any) {
   const factorValue = Number(factor.factor);
   const factorUnit = factor.unit;
+
 
   if (!Number.isFinite(value) || value <= 0) {
     return {
@@ -686,22 +730,34 @@ export async function processInvoiceEmissions(
       }
 
       if (!value || !Number.isFinite(value)) {
-        reviewCount++;
-        const isSteelOrGoods = category === "steel" || category === "purchased_goods" || itemName.toLowerCase().includes("steel");
-        results.push({
-          line_index: i,
-          item_name: itemName,
-          category,
-          value,
-          unit,
-          status: "review",
-          reason: isSteelOrGoods ? "QUANTITY_NOT_EXTRACTED" : "INVALID_VALUE",
-          message: isSteelOrGoods 
-            ? "Steel invoice detected but quantity/weight could not be extracted from the document."
-            : "This item needs manual review or mapping update",
-        });
-        continue;
+        // For GB electricity: if kWh was not extracted, do NOT abort here.
+        // Let the item fall through to the DEFRA hardcoded factor chain.
+        // The DEFRA fallback will also fail (value=0) and item will land on review,
+        // but at least the full chain is attempted.
+        const isGBElectricity = input.region === "GB" && category === "electricity";
+
+        if (!isGBElectricity) {
+          reviewCount++;
+          const isSteelOrGoods = category === "steel" || category === "purchased_goods" || itemName.toLowerCase().includes("steel");
+          results.push({
+            line_index: i,
+            item_name: itemName,
+            category,
+            value,
+            unit,
+            status: "review",
+            reason: isSteelOrGoods ? "QUANTITY_NOT_EXTRACTED" : "INVALID_VALUE",
+            message: isSteelOrGoods
+              ? "Steel invoice detected but quantity/weight could not be extracted from the document."
+              : "This item needs manual review or mapping update",
+          });
+          continue;
+        }
+
+        // GB electricity with value=0: log warning and continue to factor chain
+        console.warn(`[GB Electricity] value=0 for "${itemName}" — kWh not extracted. DEFRA factor will not produce a result. Check invoice text for kWh.`);
       }
+
 
       if (category === "unknown") {
         // For India: even unknown category items should try India fallback
@@ -1103,6 +1159,35 @@ export async function processInvoiceEmissions(
                 confidence_score: fallback.confidence_score,
                 match_type: fallback.match_type,
                 warning: fallback.warning,
+              });
+              continue;
+            }
+          }
+
+          // ── GB DEFRA hardcoded factor: last resort before review ───────────
+          if (input.region === "GB") {
+            const gbResult = applyGBHardcodedFactor(category, Number(item.value), item.unit);
+            if (gbResult) {
+              calculatedCount++;
+              totalCo2e += gbResult.co2e;
+              results.push({
+                line_index: i,
+                item_name: item.item_name,
+                category,
+                value: item.value,
+                unit: item.unit,
+                status: "calculated",
+                source_engine: gbResult.source_engine,
+                preferred_source: gbResult.preferred_source,
+                region: "GB",
+                country_name: input.country_name,
+                factor_name: gbResult.factor_name,
+                factor_value: gbResult.factor_value,
+                factor_unit: gbResult.factor_unit,
+                source_dataset: gbResult.source_dataset,
+                co2e: gbResult.co2e,
+                co2e_unit: gbResult.co2e_unit,
+                total_tco2e: gbResult.total_tco2e,
               });
               continue;
             }
