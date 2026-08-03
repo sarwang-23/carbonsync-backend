@@ -766,32 +766,37 @@ function convertForClimatiq(input: {
 }
 
 async function getIndiaFallbackMapping(category: string) {
-  const result = await pool.query(
-    `
-    select
-      id,
-      region,
-      country_name,
-      category,
-      keywords,
-      activity_id,
-      preferred_source,
-      preferred_lca_activity,
-      parameter_name,
-      parameter_unit,
-      data_version
-    from emission_factor_mappings
-    where region = 'IN'
-      and category = $1
-      and preferred_source = 'Climatiq'
-      and is_active = true
-    order by id asc
-    limit 1
-    `,
-    [category]
-  );
+  try {
+    const result = await pool.query(
+      `
+      select
+        id,
+        region,
+        country_name,
+        category,
+        keywords,
+        activity_id,
+        preferred_source,
+        preferred_lca_activity,
+        parameter_name,
+        parameter_unit,
+        data_version
+      from emission_factor_mappings
+      where region = 'IN'
+        and category = $1
+        and preferred_source = 'Climatiq'
+        and is_active = true
+      order by id asc
+      limit 1
+      `,
+      [category]
+    );
 
-  return result.rows[0] || null;
+    return result.rows[0] || null;
+  } catch (err: any) {
+    console.warn(`[IndiaClimatiqFallback] DB Error:`, err.message);
+    return null;
+  }
 }
 
 export async function calculateIndiaClimatiqFallback(
