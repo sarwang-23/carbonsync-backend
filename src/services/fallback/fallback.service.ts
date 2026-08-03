@@ -353,7 +353,13 @@ export async function fallbackLookup(input: {
     LIMIT 5;
   `;
 
-  const fuzzyResult = await pool.query(fuzzyQuery, [input.region, resolvedCategory !== "unknown" ? resolvedCategory : normalizedItemName]);
+  let fuzzyResult;
+  try {
+    fuzzyResult = await pool.query(fuzzyQuery, [input.region, resolvedCategory !== "unknown" ? resolvedCategory : normalizedItemName]);
+  } catch (err: any) {
+    console.warn(`[FallbackLookup] DB Error:`, err.message);
+    return null;
+  }
   
   if (fuzzyResult.rows.length > 0) {
     const bestMatch = fuzzyResult.rows[0];

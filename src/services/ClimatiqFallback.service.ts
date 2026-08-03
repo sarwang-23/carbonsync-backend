@@ -222,31 +222,35 @@ function convertForClimatiq(input: {
 }
 
 async function getFallbackMapping(region: string, category: string) {
-  const result = await pool.query(
-    `
-    select
-      region,
-      country_name,
-      category,
-      keywords,
-      activity_id,
-      preferred_source,
-      preferred_lca_activity,
-      parameter_name,
-      parameter_unit,
-      data_version
-    from emission_factor_mappings
-    where region = $1
-      and category = $2
-      and preferred_source = 'Climatiq'
-      and is_active = true
-    order by id asc
-    limit 1
-    `,
-    [region, category]
-  );
-
-  return result.rows[0] || null;
+  try {
+    const result = await pool.query(
+      `
+      select
+        region,
+        country_name,
+        category,
+        keywords,
+        activity_id,
+        preferred_source,
+        preferred_lca_activity,
+        parameter_name,
+        parameter_unit,
+        data_version
+      from emission_factor_mappings
+      where region = $1
+        and category = $2
+        and preferred_source = 'Climatiq'
+        and is_active = true
+      order by id asc
+      limit 1
+      `,
+      [region, category]
+    );
+    return result.rows[0] || null;
+  } catch (err: any) {
+    console.warn(`[ClimatiqFallback] getFallbackMapping DB Error:`, err.message);
+    return null;
+  }
 }
 
 export async function calculateWithClimatiqFallback(input: ClimatiqFallbackInput) {
