@@ -325,7 +325,7 @@ export async function extractInvoiceWithAffinda(
         Authorization: `Bearer ${AFFINDA_API_KEY}`,
         ...form.getHeaders()
       },
-      timeout: 120000,
+      timeout: 15000,
       maxBodyLength: Infinity,
       maxContentLength: Infinity
     }

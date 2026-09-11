@@ -108,7 +108,7 @@ async function extractTextWithMistralOCR(filePath: string): Promise<string> {
           Authorization: `Bearer ${MISTRAL_API_KEY}`,
           "Content-Type": "application/json"
         },
-        timeout: 60000
+        timeout: 15000
       }
     );
 

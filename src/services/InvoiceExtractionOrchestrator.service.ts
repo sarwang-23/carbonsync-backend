@@ -46,65 +46,57 @@ function mergeExtractedLineItems(primaryItems: any[], secondaryItems: any[]) {
 export async function extractInvoiceBestEffort(filePath: string) {
   const attempts: any[] = [];
 
-  let affindaResult: NormalizedInvoice | null = null;
-  let affindaScore = 0;
-  let skipAffinda = false;
+  // Run Affinda and Mistral in parallel for fast response times
+  const [affindaPromise, mistralPromise] = [
+    (async () => {
+      try {
+        const result = await extractInvoiceWithAffinda(filePath);
+        const score = scoreExtractionQuality(result);
+        return { provider: "affinda", status: "completed", score, result };
+      } catch (error: any) {
+        const status = error?.response?.status || error?.status;
+        if (status === 403 || error.message?.includes("403")) {
+          console.warn("[Affinda] 403 Unauthorized — API key expired or plan limit reached.");
+        } else {
+          console.error("[Affinda] Extraction failed:", error.message);
+        }
+        return { provider: "affinda", status: "failed", score: 0, error: error.message };
+      }
+    })(),
+    (async () => {
+      try {
+        const result = await extractInvoiceWithMistral(filePath);
+        const score = scoreExtractionQuality(result);
+        return { provider: "mistral", status: "completed", score, result };
+      } catch (error: any) {
+        console.error("[Mistral] Extraction failed:", error.message);
+        return { provider: "mistral", status: "failed", score: 0, error: error.message };
+      }
+    })(),
+  ];
 
-  try {
-    affindaResult = await extractInvoiceWithAffinda(filePath);
-    affindaScore = scoreExtractionQuality(affindaResult);
+  const [affindaRes, mistralRes] = await Promise.all([affindaPromise, mistralPromise]);
 
-    attempts.push({
-      provider: "affinda",
-      status: "completed",
-      score: affindaScore
-    });
+  attempts.push({
+    provider: "affinda",
+    status: affindaRes.status,
+    score: affindaRes.score,
+    ...(affindaRes.error ? { error: affindaRes.error } : {}),
+  });
 
-    if (affindaScore >= 80) {
-      return {
-        provider: "affinda",
-        status: "completed",
-        score: affindaScore,
-        result: affindaResult,
-        attempts
-      };
-    }
-  } catch (error: any) {
-    // 403 = API key expired / unauthorized — no point retrying Affinda
-    const status = error?.response?.status || error?.status;
-    if (status === 403 || error.message?.includes("403")) {
-      console.warn("[Affinda] 403 Unauthorized — API key expired or plan limit reached. Skipping Affinda and falling back to Mistral.");
-      skipAffinda = true;
-    } else {
-      console.error("[Affinda] Extraction failed:", error.message);
-    }
-    attempts.push({
-      provider: "affinda",
-      status: "failed",
-      error: error.message
-    });
-  }
+  attempts.push({
+    provider: "mistral",
+    status: mistralRes.status,
+    score: mistralRes.score,
+    ...(mistralRes.error ? { error: mistralRes.error } : {}),
+  });
 
-  let mistralResult: NormalizedInvoice | null = null;
-  let mistralScore = 0;
+  const affindaResult = affindaRes.result || null;
+  const affindaScore = affindaRes.score || 0;
+  const mistralResult = mistralRes.result || null;
+  const mistralScore = mistralRes.score || 0;
 
-  try {
-    mistralResult = await extractInvoiceWithMistral(filePath);
-    mistralScore = scoreExtractionQuality(mistralResult);
-
-    attempts.push({
-      provider: "mistral",
-      status: "completed",
-      score: mistralScore
-    });
-  } catch (error: any) {
-    attempts.push({
-      provider: "mistral",
-      status: "failed",
-      error: error.message
-    });
-  }
-
+  // If both succeeded, merge them for best accuracy
   if (affindaResult && mistralResult) {
     const merged: NormalizedInvoice = {
       provider: "affinda+mistral",
@@ -147,7 +139,8 @@ export async function extractInvoiceBestEffort(filePath: string) {
     };
   }
 
-  if (mistralResult && mistralScore >= 50) {
+  // If only Mistral succeeded with good quality
+  if (mistralResult && mistralScore >= 40) {
     return {
       provider: "mistral",
       status: "completed",
@@ -157,7 +150,28 @@ export async function extractInvoiceBestEffort(filePath: string) {
     };
   }
 
+  // If only Affinda succeeded
   if (affindaResult && affindaScore >= 40) {
+    return {
+      provider: "affinda",
+      status: "completed",
+      score: affindaScore,
+      result: affindaResult,
+      attempts
+    };
+  }
+
+  if (mistralResult) {
+    return {
+      provider: "mistral",
+      status: "partial",
+      score: mistralScore,
+      result: mistralResult,
+      attempts
+    };
+  }
+
+  if (affindaResult) {
     return {
       provider: "affinda",
       status: "partial",
