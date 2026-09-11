@@ -1,3 +1,4 @@
+import { extractInvoiceWithGemini } from "./GeminiVisionInvoice.service.js";
 import { extractInvoiceWithAffinda } from "./AffindaInvoice.service.js";
 import { extractInvoiceWithMistral } from "./MistralInvoice.service.js";
 import type { NormalizedInvoice } from "../types/invoice.types.js";
@@ -45,6 +46,38 @@ function mergeExtractedLineItems(primaryItems: any[], secondaryItems: any[]) {
 
 export async function extractInvoiceBestEffort(filePath: string) {
   const attempts: any[] = [];
+
+  // Step 1: Ultra-fast Gemini Vision extraction (takes ~1-2 seconds)
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const geminiResult = await extractInvoiceWithGemini(filePath);
+      const geminiScore = scoreExtractionQuality(geminiResult);
+
+      attempts.push({
+        provider: "gemini",
+        status: "completed",
+        score: geminiScore,
+      });
+
+      if (geminiScore >= 50) {
+        return {
+          provider: "gemini",
+          status: "completed",
+          score: geminiScore,
+          result: geminiResult,
+          attempts,
+        };
+      }
+    } catch (err: any) {
+      console.warn("[Gemini Vision] Fast extraction failed, falling back to Affinda/Mistral:", err.message);
+      attempts.push({
+        provider: "gemini",
+        status: "failed",
+        score: 0,
+        error: err.message,
+      });
+    }
+  }
 
   // Run Affinda and Mistral in parallel for fast response times
   const [affindaPromise, mistralPromise] = [
