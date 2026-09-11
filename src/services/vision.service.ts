@@ -148,7 +148,7 @@ function findElectricityUsageFromRawText(rawText: string): number {
         /"usageKwh"\s*:\s*(\d+(?:\.\d+)?)/i,
         /"meter_difference_kwh"\s*:\s*(\d+(?:\.\d+)?)/i,
         /"meterDifferenceKwh"\s*:\s*(\d+(?:\.\d+)?)/i,
-        /(?:kegunaan|penggunaan|jumlah\s+penggunaan|usage|consumption)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:kwh)?/i,
+        /(?:Consumption\s+Energy|Meter\s+Units|Consumption|kegunaan|penggunaan|jumlah\s+penggunaan|usage|energy\s+consumption)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:kwh)?/i,
         /(\d+(?:\.\d+)?)\s*kwh/i,
     ];
 
@@ -156,7 +156,7 @@ function findElectricityUsageFromRawText(rawText: string): number {
         const match = clean.match(pattern);
         if (match?.[1]) {
             const value = toNumber(match[1]);
-            if (value > 0 && value < 100000) return value;
+            if (value > 0 && value < 100000000) return value;
         }
     }
 

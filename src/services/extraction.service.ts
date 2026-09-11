@@ -306,7 +306,7 @@ export function extractGenericElectricityLineItem(text: string): ExtractedLineIt
         .replace(/\s+/g, " ");
 
     const patterns = [
-        /(?:total\s+consumption|electricity\s+consumption|energy\s+consumption|consumption|usage)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*kwh/i,
+        /(?:Consumption\s+Energy|Meter\s+Units|Consumption|total\s+consumption|electricity\s+consumption|energy\s+consumption|usage)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:kwh)?/i,
         /(\d+(?:\.\d+)?)\s*kwh/i,
     ];
 
@@ -316,7 +316,7 @@ export function extractGenericElectricityLineItem(text: string): ExtractedLineIt
         const match = clean.match(pattern);
         if (match?.[1]) {
             const value = toNumber(match[1]);
-            if (value > 0 && value < 100000) {
+            if (value > 0 && value < 100000000) {
                 kwh = value;
                 break;
             }

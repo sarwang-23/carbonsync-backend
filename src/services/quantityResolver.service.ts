@@ -20,7 +20,7 @@ function validPositive(value: any) {
 
 function pickBestKwhCandidate(candidates: number[]) {
     const filtered = candidates
-        .filter((value) => Number.isFinite(value) && value > 0 && value < 1000000)
+        .filter((value) => Number.isFinite(value) && value > 0 && value < 100000000)
         // Avoid selecting small tariff block rows like 1-200 kWh when a total exists.
         .sort((a, b) => b - a);
 
@@ -40,10 +40,13 @@ export function resolveElectricityKwhFromText(rawText: string, itemText?: string
 
     function add(value: any) {
         const num = toNumber(value);
-        if (num > 0 && num < 1000000) candidates.push(num);
+        if (num > 0 && num < 100000000) candidates.push(num);
     }
 
     const totalPriorityPatterns = [
+        /Consumption\s+Energy\s*[:\-]?\s*([\d,]+(?:\.\d+)?)\s*(?:kwh)?/i,
+        /Meter\s+Units\s*[:\-]?\s*([\d,]+(?:\.\d+)?)\s*(?:kwh)?/i,
+        /Consumption\s*[:\-]?\s*([\d,]+(?:\.\d+)?)\s*kwh/i,
         /jumlah\s+penggunaan\s+anda\s*\(?\s*([\d,]+(?:\.\d+)?)\s*kwh/i,
         /jumlah\s+penggunaan\s*\(?\s*([\d,]+(?:\.\d+)?)\s*kwh/i,
         /penggunaan\s+anda\s*\(?\s*([\d,]+(?:\.\d+)?)\s*kwh/i,

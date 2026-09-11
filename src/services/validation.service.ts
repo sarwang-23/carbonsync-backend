@@ -18,18 +18,16 @@ export function validateElectricityBill(input: {
   if (input.previousReading && input.currentReading) {
     const expected = input.currentReading - input.previousReading;
 
-    if (Math.abs(expected - input.extractedKwh) > 1) {
-      warnings.push(
-        `Meter reading mismatch. Expected ${expected} kWh but extracted ${input.extractedKwh} kWh.`
-      );
+    if (expected > 0) {
+      const ratio = input.extractedKwh / expected;
+      const roundedRatio = Math.round(ratio);
+      const isMfMatch = roundedRatio >= 1 && Math.abs((expected * roundedRatio) - input.extractedKwh) < 100;
 
-      return {
-        valid: false,
-        confidence: 0.4,
-        expected_quantity: expected,
-        extracted_quantity: input.extractedKwh,
-        warnings,
-      };
+      if (Math.abs(expected - input.extractedKwh) > 1 && !isMfMatch) {
+        warnings.push(
+          `Meter reading difference is ${expected.toFixed(2)} kWh, extracted ${input.extractedKwh} kWh (possible MF multiplier ${ratio.toFixed(1)}x).`
+        );
+      }
     }
   }
 

@@ -10,7 +10,7 @@ type IndiaEmissionInput = {
   currency?: string;
 };
 
-const INDIA_FIXED_CATEGORIES = ["electricity", "railway", "flight"];
+const INDIA_FIXED_CATEGORIES = ["electricity", "electricity_bill", "railway", "flight"];
 
 export async function calculateIndiaEmission(input: IndiaEmissionInput) {
   const category = input.category.toLowerCase();

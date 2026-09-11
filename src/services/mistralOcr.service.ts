@@ -94,12 +94,12 @@ function extractTnbKwhFromText(rawText: string): number {
 
     function addCandidate(value: any) {
         const num = toNumber(value);
-        if (num > 0 && num < 100000) candidates.push(num);
+        if (num > 0 && num < 100000000) candidates.push(num);
     }
 
     // Direct common patterns.
     const directPatterns = [
-        /(?:jumlah\s+penggunaan|jumlah\s+kegunaan|total\s+usage|total\s+consumption)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:kwh)?/i,
+        /(?:Consumption\s+Energy|Meter\s+Units|Consumption|jumlah\s+penggunaan|jumlah\s+kegunaan|total\s+usage|total\s+consumption)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:kwh)?/i,
         /(?:kegunaan|penggunaan|usage|consumption)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:kwh)?/i,
         /(\d+(?:\.\d+)?)\s*kwh/i,
     ];

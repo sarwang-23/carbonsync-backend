@@ -119,19 +119,22 @@ export async function calculateIndiaFixedEmission(input: IndiaFixedInput) {
 
   // ── Hardcoded India Fixed EF (fallback when DB table is missing) ─────────
   const INDIA_HARDCODED_FACTORS: Record<string, { factor: number; unit: string; name: string; source: string }> = {
-    electricity:  { factor: 0.7117, unit: "kg/kWh",   name: "India fixed electricity emission factor",     source: "CEA 2023" },
-    natural_gas:  { factor: 2.02,   unit: "kg/scm",   name: "India fixed natural gas emission factor",     source: "MoEFCC 2023" },
-    diesel:       { factor: 2.68,   unit: "kg/litre", name: "India fixed diesel emission factor",          source: "MoEFCC 2023" },
-    petrol:       { factor: 2.31,   unit: "kg/litre", name: "India fixed petrol emission factor",          source: "MoEFCC 2023" },
-    coal:         { factor: 2.42,   unit: "kg/kg",    name: "India fixed coal emission factor",            source: "MoEFCC 2023" },
-    lpg:          { factor: 1.61,   unit: "kg/litre", name: "India fixed LPG emission factor",             source: "MoEFCC 2023" },
-    furnace_oil:  { factor: 3.15,   unit: "kg/litre", name: "India fixed furnace oil emission factor",     source: "MoEFCC 2023" },
-    biomass:      { factor: 0.0,    unit: "kg/kg",    name: "India biomass emission factor",               source: "IPCC 2006" },
-    png:          { factor: 2.02,   unit: "kg/scm",   name: "India fixed PNG emission factor",             source: "MoEFCC 2023" },
-    cng:          { factor: 1.96,   unit: "kg/kg",    name: "India fixed CNG emission factor",             source: "MoEFCC 2023" },
+    electricity:       { factor: 0.7117, unit: "kg/kWh",   name: "India fixed electricity emission factor",     source: "CEA 2023" },
+    electricity_bill:  { factor: 0.7117, unit: "kg/kWh",   name: "India fixed electricity emission factor",     source: "CEA 2023" },
+    natural_gas:       { factor: 2.02,   unit: "kg/scm",   name: "India fixed natural gas emission factor",     source: "MoEFCC 2023" },
+    diesel:            { factor: 2.68,   unit: "kg/litre", name: "India fixed diesel emission factor",          source: "MoEFCC 2023" },
+    petrol:            { factor: 2.31,   unit: "kg/litre", name: "India fixed petrol emission factor",          source: "MoEFCC 2023" },
+    coal:              { factor: 2.42,   unit: "kg/kg",    name: "India fixed coal emission factor",            source: "MoEFCC 2023" },
+    lpg:               { factor: 1.61,   unit: "kg/litre", name: "India fixed LPG emission factor",             source: "MoEFCC 2023" },
+    furnace_oil:       { factor: 3.15,   unit: "kg/litre", name: "India fixed furnace oil emission factor",     source: "MoEFCC 2023" },
+    biomass:           { factor: 0.0,    unit: "kg/kg",    name: "India biomass emission factor",               source: "IPCC 2006" },
+    png:               { factor: 2.02,   unit: "kg/scm",   name: "India fixed PNG emission factor",             source: "MoEFCC 2023" },
+    cng:               { factor: 1.96,   unit: "kg/kg",    name: "India fixed CNG emission factor",             source: "MoEFCC 2023" },
   };
 
   let factorRow: { factor: number; unit: string; factor_name: string; source: string; source_dataset: string; year: number } | null = null;
+
+  const searchCategory = input.category === "electricity_bill" ? "electricity" : input.category;
 
   // Try DB first
   try {
@@ -147,12 +150,12 @@ export async function calculateIndiaFixedEmission(input: IndiaFixedInput) {
         year,
         notes
       from india_fixed_emission_factors
-      where category = $1
+      where (category = $1 or category = $2)
         and is_active = true
       order by year desc nulls last
       limit 1
       `,
-      [input.category]
+      [input.category, searchCategory]
     );
     if (result.rows[0]) {
       const r = result.rows[0];
@@ -164,7 +167,7 @@ export async function calculateIndiaFixedEmission(input: IndiaFixedInput) {
 
   // Fallback to hardcoded factors if DB is missing
   if (!factorRow) {
-    const categoryKey = input.category.toLowerCase();
+    const categoryKey = searchCategory.toLowerCase();
     const hardcoded = INDIA_HARDCODED_FACTORS[categoryKey];
     if (hardcoded) {
       console.log(`[IndiaFixedEF] Using hardcoded factor for category=${input.category}: ${hardcoded.factor} ${hardcoded.unit}`);
