@@ -19,7 +19,7 @@ const ALLOWED_MIME_TYPES = [
     "image/jpg",
 ];
 
-const MAX_FILE_SIZE_MB = 15;
+const MAX_FILE_SIZE_MB = 10;
 
 const fileFilter = (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
     if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
