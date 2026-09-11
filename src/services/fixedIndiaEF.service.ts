@@ -1,6 +1,6 @@
 export function calculateIndiaElectricityEmission(input: any) {
   const quantityKwh = typeof input === "number" ? input : input.quantity || 0;
-  const factor = 0.710;
+  const factor = 0.7117;
   const co2e = quantityKwh * factor;
 
   return {

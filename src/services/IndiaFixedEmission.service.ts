@@ -119,7 +119,7 @@ export async function calculateIndiaFixedEmission(input: IndiaFixedInput) {
 
   // ── Hardcoded India Fixed EF (fallback when DB table is missing) ─────────
   const INDIA_HARDCODED_FACTORS: Record<string, { factor: number; unit: string; name: string; source: string }> = {
-    electricity:  { factor: 0.71,   unit: "kg/kWh",   name: "India fixed electricity emission factor",     source: "CEA 2023" },
+    electricity:  { factor: 0.7117, unit: "kg/kWh",   name: "India fixed electricity emission factor",     source: "CEA 2023" },
     natural_gas:  { factor: 2.02,   unit: "kg/scm",   name: "India fixed natural gas emission factor",     source: "MoEFCC 2023" },
     diesel:       { factor: 2.68,   unit: "kg/litre", name: "India fixed diesel emission factor",          source: "MoEFCC 2023" },
     petrol:       { factor: 2.31,   unit: "kg/litre", name: "India fixed petrol emission factor",          source: "MoEFCC 2023" },
